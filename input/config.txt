@@ -1,0 +1,5 @@
+#REPLICA EXCHANGE MD CONFIGURATION FILE
+ReplicaNum              = 3
+Temperatures            = 275 350 450
+SocketPort              = 20202
+ExchangeRate            = 1000

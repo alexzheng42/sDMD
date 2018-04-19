@@ -1,0 +1,21 @@
+RESIDUE LEU 
+   ATOM N      NZB    14.0  N N
+   ATOM CA     CA1    12.0  N N
+   ATOM C      CRB    12.0  N N
+   ATOM O      OZB    16.0  N N
+   ATOM CB     CA2    12.0  N N
+   ATOM CG     CA1    12.0  N N
+   ATOM CD1    CA3    12.0  N N
+   ATOM CD2    CA3    12.0  N N
+   ATOM H      HB     12.0  N N
+   BOND CB     CG     1.515 0.010 
+   BOND CG     CD1    1.520 0.010 
+   BOND CG     CD2    1.523 0.009 
+  ANGLE CA     CG     2.554 0.014 
+  ANGLE CB     CD1    2.524 0.016 
+  ANGLE CB     CD2    2.502 0.012 
+  ANGLE CD1    CD2    2.383 0.008 
+CONSTR3 N      CG     2.000 2.920 1.200 3.150 -1.200 3.750 1.200 6.500 
+CONSTR3 CA     CD1    2.000 2.950 1.200 3.250 -1.200 3.820 1.200 6.500 
+CONSTR0 C      CG     2.000 6.500 
+CONSTR0 CA     CD2    2.000 6.500

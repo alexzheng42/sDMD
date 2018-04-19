@@ -1,0 +1,18 @@
+RESIDUE VAL 
+   ATOM N      NZB    14.0  N N
+   ATOM CA     CA1    12.0  N N
+   ATOM C      CRB    12.0  N N
+   ATOM O      OZB    16.0  N N
+   ATOM CB     CA1    12.0  N N
+   ATOM CG1    CA3    12.0  N N
+   ATOM CG2    CA3    12.0  N N
+   ATOM H      HB     12.0  N N
+   BOND CB     CG1    1.515 0.010 
+   BOND CB     CG2    1.524 0.010 
+  ANGLE CA     CG1    2.554 0.014 
+  ANGLE CA     CG2    2.520 0.012 
+  ANGLE CG1    CG2    2.500 0.012 
+CONSTR3 N      CG1    2.000 2.890 0.300 3.090 -0.300 3.750 1.200 6.500
+CONSTR0 C      CG1    2.000 6.500 
+CONSTR0 N      CG2    2.000 6.500 
+CONSTR0 C      CG2    2.000 6.500 

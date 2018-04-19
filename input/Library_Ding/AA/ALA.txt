@@ -1,0 +1,29 @@
+RESIDUE ALA
+   ATOM N      NZB    14.0  N N
+   ATOM CA     CA1    12.0  N N
+   ATOM C      CRB    12.0  N N
+   ATOM O      OZB    16.0  N N
+   ATOM CB     CA3    12.0  N N
+   ATOM H      HB     12.0  N N
+   BOND N      H      1.000 0.020
+   BOND N      CA     1.458 0.020
+   BOND CA     C      1.525 0.020
+   BOND C      O      1.231 0.020
+   BOND CA     CB     1.534 0.009
+  ANGLE CA     H      2.152 0.020
+  ANGLE N      CB     2.460 0.012
+  ANGLE N      C      2.461 0.015
+  ANGLE CA     O      2.401 0.020
+  ANGLE C      CB     2.503 0.014
+  INTER CA     +N     2.425 0.014
+  INTER C      +N     1.329 0.020
+  INTER O      +N     2.250 0.014
+  INTER C      +H     2.020 0.020
+  INTER O      +H     3.160 0.015
+  INTER CA     +CA    3.830 0.015
+  INTER C      +CA    2.435 0.014
+  INTER O      +CA    2.694 0.035
+  INTER C      +CB    3.500 0.160
+CONSTR2 C      +C     2.700 2.846 1.500 2.910 0.500 4.000
+CONSTR6 CB     +N     2.650 2.700 0.100 2.750 0.100 2.800 0.100 2.850 0.100 2.900 0.100 2.950 1.000 4.000
+CONSTR4 CB     O      2.000 2.700 0.050 2.750 0.050 2.800 0.050 2.850 0.500 6.500

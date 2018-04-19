@@ -1,0 +1,16 @@
+RESIDUE SER 
+   ATOM N      NZB    14.0  N N
+   ATOM CA     CA1    12.0  N N
+   ATOM C      CRB    12.0  N N
+   ATOM O      OZB    16.0  N N
+   ATOM CB     CA2P   12.0  N N
+   ATOM OG     OZH    16.0  N N
+   ATOM H      HB     12.0  N N
+   ATOM HG     HO     12.0  N N
+   BOND OG     HG     1.000 0.020
+   BOND CB     OG     1.418 0.008 
+  ANGLE CB     HG     1.983 0.020
+  ANGLE CA     OG     2.425 0.014 
+CONSTR3 CA     HG	    2.000 2.455 1.200 2.766 -1.200 3.268 1.200 6.500 
+CONSTR3 N      OG     2.000 2.800 1.200 3.020 -1.200 3.620 1.200 6.500 
+CONSTR0 C      OG     2.000 6.500 

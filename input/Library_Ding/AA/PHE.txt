@@ -1,0 +1,39 @@
+RESIDUE PHE 
+   ATOM N      NZB    14.0  N N
+   ATOM CA     CA1    12.0  N N
+   ATOM C      CRB    12.0  N N
+   ATOM O      OZB    16.0  N N
+   ATOM CB     CA2    12.0  N N     
+   ATOM CG     CA     12.0  N N 
+   ATOM CD1    CM1    13.0  N N
+   ATOM CD2    CM1    13.0  N N
+   ATOM CE1    CM1    13.0  N N
+   ATOM CE2    CM1    13.0  N N
+   ATOM CZ     CM1    13.0  N N
+   ATOM H      HB     12.0  N N
+   BOND CB     CG     1.515 0.010 
+   BOND CG     CD1    1.391 0.009 
+   BOND CG     CD2    1.391 0.006 
+   BOND CD1    CE1    1.393 0.008 
+   BOND CD2    CE2    1.393 0.008 
+   BOND CE1    CZ     1.390 0.008 
+   BOND CE2    CZ     1.390 0.008 
+  ANGLE CA     CG     2.554 0.014 
+  ANGLE CB     CD1    2.518 0.007 
+  ANGLE CB     CD2    2.515 0.006
+  ANGLE CG     CE1    2.420 0.007 
+  ANGLE CG     CE2    2.420 0.007 
+  ANGLE CD1    CZ     2.403 0.020 
+  ANGLE CD2    CZ     2.408 0.020
+  ANGLE CD1    CD2    2.396 0.006 
+  ANGLE CE1    CE2    2.406 0.008 
+CONSTR4 CA     CD1    2.000 3.100 -0.300 3.300 0.900 3.500 -0.900 3.70 0.300 6.500 
+CONSTR4 CA     CD2    2.000 3.100 -0.300 3.300 0.900 3.500 -0.900 3.70 0.300 6.500
+CONSTR3 N      CG     2.000 2.870 1.200 3.200 -1.200 3.750 1.200 6.500 
+CONSTR0 C      CG     2.000 6.500 
+CONSTR0 CB     CE1    3.800 6.500
+CONSTR0 CB     CE2    3.800 6.500
+CONSTR0 CG     CZ     2.780 6.500
+CONSTR0 CD1    CE2    2.000 6.500
+CONSTR0 CD2    CE1    2.000 6.500
+CONSTR0	CB     CZ 	  4.300 6.500

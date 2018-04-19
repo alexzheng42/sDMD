@@ -1,0 +1,42 @@
+RESIDUE HIS 
+   ATOM N      NZB    14.0  N N
+   ATOM CA     CA1    12.0  N N
+   ATOM C      CRB    12.0  N N
+   ATOM O      OZB    16.0  N N
+   ATOM CB     CA2    12.0  N N       
+   ATOM CG     CA     12.0  N N
+   ATOM ND1    NR     14.0  N N
+   ATOM CD2    CM1    13.0  N N
+   ATOM CE1    CM1    13.0  N N
+   ATOM NE2    NR     14.0  + N
+   ATOM H      HB     12.0  N N
+   ATOM HD1    HN     12.0  N N
+   ATOM HE2    HN     12.0  N N
+   BOND HD1    ND1    1.000 0.020
+   BOND CB     CG     1.515 0.010 
+   BOND CG     ND1    1.377 0.010 
+   BOND CG     CD2    1.357 0.007 
+   BOND ND1    CE1    1.324 0.008 
+   BOND CD2    NE2    1.371 0.013 
+   BOND CE1    NE2    1.322 0.008
+   BOND	NE2    HE2    1.000 0.020
+  ANGLE CG     HD1    2.120 0.020
+  ANGLE CE1    HD1    2.070 0.020
+  ANGLE CA     CG     2.554 0.014 
+  ANGLE CB     ND1    2.527 0.008 
+  ANGLE CB     CD2    2.594 0.007 
+  ANGLE CG     CE1    2.198 0.009 
+  ANGLE CG     NE2    2.194 0.009 
+  ANGLE ND1    NE2    2.149 0.010 
+  ANGLE CD2    CE1    2.192 0.008 
+  ANGLE ND1    CD2    2.180 0.010
+  ANGLE	CD2    HE2    2.115 0.014
+  ANGLE	CE1    HE2    2.070 0.014
+CONSTR3 N      CG     2.000 2.870 1.200 3.200 -1.200 3.750 1.200 6.500 
+CONSTR3 CA     ND1    2.000 3.040 1.200 3.450 -1.200 3.720 1.200 6.500 
+CONSTR3 CA     CD2    2.000 2.900 1.200 3.150 -1.200 3.320 1.200 6.500 
+CONSTR0 C      CG     2.000 6.500 
+CONSTR0 CB     CE1    3.600 6.500
+CONSTR0 CB     NE2    3.600 6.500
+CONSTR0 CD2    HD1    3.150 6.500
+CONSTR0	CG     HE2    3.150 6.500

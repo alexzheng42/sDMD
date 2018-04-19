@@ -1,0 +1,16 @@
+RESIDUE CYS 
+   ATOM N      NZB    14.0  N N
+   ATOM CA     CA1    12.0  N N
+   ATOM C      CRB    12.0  N N
+   ATOM O      OZB    16.0  N N
+   ATOM CB     CA2P   12.0  N N        
+   ATOM SG     SG     32.0  N N
+   ATOM H      HB     12.0  N N
+   ATOM HG1    HS     12.0  N N
+   BOND HG1    SG     1.340 0.020
+   BOND CB     SG     1.811 0.011
+  ANGLE CB     HG1    2.363 0.020 
+  ANGLE CA     SG     2.803 0.016 
+CONSTR3 CA     HG1    2.000 2.732 1.200 3.112 -1.200 3.722 1.200 6.500
+CONSTR3 N      SG     2.000 3.060 1.200 3.340 -1.200 4.020 1.200 6.500 
+CONSTR0 C      SG     2.000 6.500

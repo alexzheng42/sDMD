@@ -1,0 +1,20 @@
+RESIDUE MET 
+   ATOM N      NZB    14.0  N N
+   ATOM CA     CA1    12.0  N N
+   ATOM C      CRB    12.0  N N
+   ATOM O      OZB    16.0  N N
+   ATOM CB     CA2    12.0  N N
+   ATOM CG     CA2    12.0  N N
+   ATOM SD     SGNP   32.0  N N
+   ATOM CE     CA3    12.0  N N    
+   ATOM H      HB     12.0  N N         
+   BOND CB     CG     1.515 0.010 
+   BOND CG     SD     1.808 0.013 
+   BOND SD     CE     1.787 0.024  
+  ANGLE CA     CG     2.554 0.014 
+  ANGLE CB     SD     2.768 0.019 
+  ANGLE CG     CE     2.767 0.021 
+CONSTR3 N      CG     2.000 2.920 1.200 3.150 -1.200 3.750 1.200 6.500 
+CONSTR3 CA     SD     2.000 3.120 1.200 3.500 -1.200 4.030 1.200 6.500 
+CONSTR3 CB     CE     2.000 3.130 1.200 3.460 -1.200 4.020 1.200 6.500 
+CONSTR0 C      CG     2.000 6.500 

@@ -1,0 +1,36 @@
+RESIDUE PRO 
+   ATOM N      NZB    14.0  N N
+   ATOM CA     CA1    12.0  N N
+   ATOM C      CRB    12.0  N N
+   ATOM O      OZB    16.0  N N
+   ATOM CB     CA2    12.0  N N   
+   ATOM CG     CA2    12.0  N N
+   ATOM CD     CA2P   12.0  N N
+   BOND N      CA     1.458 0.020 
+   BOND CA     C      1.525 0.020 
+   BOND C      O      1.231 0.020 
+   BOND CA     CB     1.520 0.010 
+   BOND CB     CG     1.501 0.013 
+   BOND CG     CD     1.512 0.011 
+   BOND N      CD     1.475 0.020 
+  ANGLE N      C      2.461 0.015 
+  ANGLE N      CB     2.351 0.023 
+  ANGLE N      CG     2.332 0.012 
+  ANGLE CA     O      2.401 0.020 
+  ANGLE CA     CG     2.383 0.032 
+  ANGLE CA     CD     2.426 0.008 
+  ANGLE C      CB     2.523 0.012 
+  ANGLE CB     CD     2.375 0.018 
+  INTER CA     +N     2.425 0.014
+  INTER C      +N     1.329 0.020
+  INTER O      +N     2.250 0.014
+  INTER CB     +N     3.500 0.157
+  INTER C      +H     2.020 0.020
+  INTER O      +H     3.160 0.015
+  INTER CA     +CA    3.830 0.015
+  INTER C      +CA    2.435 0.014
+  INTER O      +CA    2.694 0.035
+  INTER C      +CB    3.500 0.160
+CONSTR4 CB     O      2.000 2.700 0.050 2.750 0.050 2.800 0.050 2.850 0.500 6.500
+CONSTR2 C      +C     2.700 2.846 1.500 2.910 0.500 4.000
+CONSTR3 C      CG     2.000 2.970 1.200 3.510 -1.200 3.580 1.200 6.500 
