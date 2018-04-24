@@ -1,9 +1,10 @@
-<img src="img/Icon.png" alt="sDMD Icon" style="height: 200px;" align="right"/>
+<img src="img/Icon.png" alt="sDMD Icon" height="200" align="right"/>
 
 **sDMD** - *Version 0.93*
 =====================================
 
 ## Discontinuous Molecular Dynamics (DMD) Simulation Package
+## <br><br>
 
 **Table of Contents**
 =====================
@@ -124,7 +125,7 @@ chains. Nowadays it was adopted for simulations of protein-like
 polymers. It is extremely fast and suitable for the simulations of large
 systems on long time scales.
 
-<img src="img/CGPotential.png" alt="CGPotential" style="height: 500px;"/>
+<img src="img/CGPotential.png" alt="CGPotential" height="400"/>
 
 *Figure 1-1 DMD potential (a) hard sphere collision (b) attractive
 square well interaction (c) repulsive soft sphere interaction (d)
@@ -274,7 +275,7 @@ the model. Solvent molecules are not explicitly included in the model.
 The effect of solvent is factored into the energy function as a
 potential of mean force.
 
-<img src="img/CGModel.png" alt="CGModel" style="height: 250px;"/>
+<img src="img/CGModel.png" alt="CGModel" height="200"/>
 
 *Figure 3-1 The four-bead model of the protein backbone. Bold lines show
 covalent bond, dashed lies show auxiliary bonds which helps maintain
@@ -329,19 +330,19 @@ attraction between hydrophobic side chains, and (5) repulsion between
 the neighborhood beads of hydrogen bond (soft-sphere collision). All
 these forces can be represented by the following step-functions,
 
-<img src="img/eqn31.png" alt="eqn31" style="height: 75px;"/>
+<img src="img/eqn31.png" alt="eqn31" height="75"/>
 
 This is for a hard-sphere potential. *r* is the distance between beads
 *i* and *j*; *sigma<sub>ij</sub>* is the sum of bead radius.
 
-<img src="img/eqn32.png" alt="eqn32" style="height: 85px;"/>
+<img src="img/eqn32.png" alt="eqn32" height="85"/>
 
 This is for a square-well or shoulder potential depending on the sign of
 *epsilon* (positive for well depth, attractive; negative for
 shoulder height, repulsive). *lammda_sigma<sub>ij</sub>* is the
 well/shoulder diameter.
 
-<img src="img/eqn33.png" alt="eqn33" style="height: 85px;"/>
+<img src="img/eqn33.png" alt="eqn33" height="85"/>
 
 This is for a bond interaction. *l* is the bond length and *delta* is
 the bond vibration tolerance.
@@ -411,7 +412,7 @@ way we check in HB formation, and decide if the HB will break so that
 N<sub>i</sub>' and C<sub>j</sub>' will change back to their original types, N<sub>i</sub> and C<sub>j</sub>,
 respectively.
 
-<img src="img/CGHB.png" alt="CGHB" style="height: 350px;"/>
+<img src="img/CGHB.png" alt="CGHB" height="350"/>
 
 *Figure 3-2 Hydrogen bond structure of coarse grained model. Thick
 dashed lines indicate hydrogen bond; thin dashed lines indicate
@@ -470,16 +471,16 @@ only has either one of them. It also adds a new type of force, the
 dihedral constraint. Although it is maintained by an auxiliary bond, it
 has more complex profile than a regular bond, see Figure 3-4(b).
 
-<img src="img/Molecule.jpg" alt="Molecule" style="height: 400px;"/>
+<img src="img/Molecule.jpg" alt="Molecule" height="400"/>
 
 *Figure 3-3 Schematic diagram for the all-atom protein model. The solid
 lines represent the covalent bonds and the dashed lines represent the
 auxiliary bonds.*
 <br><br>
 
-<img src="img/Potential.jpg" alt="Potential" style="height: 300px;"/>
+<img src="img/Potential.jpg" alt="Potential" height="300"/>
 <br>(a)<br>
-<img src="img/Dihedral.png" alt="Dihedral" style="height: 300px;"/>
+<img src="img/Dihedral.png" alt="Dihedral" height="300"/>
 <br>(b)<br>
 
 *Figure 3-4 (a) Non-bonded interactions in all-atom DMD. The continuous
@@ -492,7 +493,7 @@ Since the all-atom model represents the oxygen and hydrogen atoms
 explicitly, the structure of hydrogen bond is also optimized. The new
 hydrogen bond structure is shown in Figure 3-5.
 
-<img src="img/HB.jpg" alt="HB" style="height: 250px;"/>
+<img src="img/HB.jpg" alt="HB" height="250"/>
 
 *Figure 3-5 Hydrogen bond structure of all-atom model. H<sub>i</sub> is the
 hydrogen atom; A<sub>j</sub> is the acceptor and could be different types of atom;
@@ -544,7 +545,7 @@ and they have velocity vector *vector_v<sub>i</sub>* and
 be determined by using the relative position and relative velocity,
 *vector_r<sub>ij</sub>* and *vector_v<sub>ij</sub>*.
 
-<img src="img/Interaction.png" alt="Interaction" style="height: 350px;"/>
+<img src="img/Interaction.png" alt="Interaction" height="350"/>
 
 *Figure 3-6 Sample System (2D)*
 <br><br>
@@ -556,7 +557,7 @@ in the future. Using superscript "o" to represent an initial condition,
 the relative position vector at any time in the future is found by the
 following equation,
 
-<img src="img/eqn34.png" alt="eqn34" style="height: 50px;"/>
+<img src="img/eqn34.png" alt="eqn34" height="50"/>
 
 So if *vector_r<sub>ij</sub>* and
 *vector_v<sub>ij</sub>* have opposite sense, the particles
@@ -566,11 +567,11 @@ the dot product
 becomes equal to sigma<sub>ij</sub><sup>2</sup> in the future at some time
 increment *(t - t<sup>o</sup>)*,
 
-<img src="img/eqn35-7.png" alt="eqn35-7" style="height: 150px;"/>
+<img src="img/eqn35-7.png" alt="eqn35-7" height="150"/>
 
 Here we define a variable *b<sub>ij</sub>* as a dot product,
 
-<img src="img/eqn38.png" alt="eqn38" style="height: 50px;"/>
+<img src="img/eqn38.png" alt="eqn38" height="50"/>
 
 If *b<sub>ij</sub>* > *0*, the relative position
 |*vector_r<sub>ij</sub>*| will be increasing
@@ -582,15 +583,15 @@ collision. So after removing the superscript "o" on
 *vector_r<sub>ij</sub>* and
 *vector_v<sub>ij</sub>*, E can be rewritten as follows,
 
-<img src="img/eqn39.png" alt="eqn39" style="height: 50px;"/>
+<img src="img/eqn39.png" alt="eqn39" height="50"/>
 
 or
 
-<img src="img/eqn310.png" alt="eqn310" style="height: 50px;"/>
+<img src="img/eqn310.png" alt="eqn310" height="50"/>
 
 Solving for time increment by using the quadratic formula, we can have,
 
-<img src="img/eqn311.png" alt="eqn311" style="height: 100px;"/>
+<img src="img/eqn311.png" alt="eqn311" height="100"/>
 
 where *s_<sub>time</sub> = +/- 1*. The discriminant,
 *b<sub>ij</sub><sup>2</sup> - v<sub>ij</sub><sup>2</sup>(r<sub>ij</sub><sup>2</sup> - sigma<sub>ij</sub><sup>2</sup>)*,
@@ -602,7 +603,7 @@ particles collide at *vector_r<sub>j</sub><sup>s-</sup>*. The location
 labeled *vector_r<sub>j</sub><sup>s+</sup>* is the root that will not occur
 physically.
 
-<img src="img/Collide.png" alt="collide" style="height: 200px;"/>
+<img src="img/Collide.png" alt="collide" height="200"/>
 
 *Figure 3-7 Only the smaller real root,*
 *s<sub>time</sub> = - 1 is used.*
@@ -611,11 +612,11 @@ physically.
 If the particle has a potential shell (See Figure), the equation for the
 event time can be modified to,
 
-<img src="img/eqn312.png" alt="eqn312" style="height: 100px;"/>
+<img src="img/eqn312.png" alt="eqn312" height="100"/>
 
 where *d<sub>ij</sub>* is the actual distance of centers for the event.
 
-<img src="img/CollideSituation.png" alt="CollideSituation" style="height: 200px;"/>
+<img src="img/CollideSituation.png" alt="CollideSituation" height="200"/>
 
 *Figure 3-8 (a) Approaching particles that will enter the potential
 shell; (b) particles in the shell that will have a hard sphere
@@ -634,42 +635,42 @@ collision, or particles enter or escape from a potential shell.
 
 Total energy is conserved upon an event between particles *i* and *j*,
 
-<img src="img/eqn313.png" alt="eqn313" style="height: 60px;"/>
+<img src="img/eqn313.png" alt="eqn313" height="60"/>
 
 which can be rearranged,
 
-<img src="img/eqn314.png" alt="eqn314" style="height: 50px;"/>
+<img src="img/eqn314.png" alt="eqn314" height="50"/>
 
 When the two particles contact, the relative position will be,
 
-<img src="img/eqn315.png" alt="eqn315" style="height: 50px;"/>
+<img src="img/eqn315.png" alt="eqn315" height="50"/>
 
 The change in momentum for an event is proportional to the collision
 vector *vector_r<sub>ij</sub><sup>c</sup>*,
 
-<img src="img/eqn316.png" alt="eqn316" style="height: 50px;"/>
+<img src="img/eqn316.png" alt="eqn316" height="50"/>
 
 or
 
-<img src="img/eqn317.png" alt="eqn317" style="height: 60px;"/>
+<img src="img/eqn317.png" alt="eqn317" height="60"/>
 
 *phi* is the parameter we will try to determine. Insert *Eqn 5-14* into
 *Eqn 5-11*,
 
-<img src="img/eqn318.png" alt="eqn318" style="height: 60px;"/>
+<img src="img/eqn318.png" alt="eqn318" height="60"/>
 
 Rearrange *Eqn 5-14* also leads to,
 
-<img src="img/eqn319.png" alt="eqn319" style="height: 50px;"/>
+<img src="img/eqn319.png" alt="eqn319" height="50"/>
 
 and
 
-<img src="img/eqn320.png" alt="eqn320" style="height: 50px;"/>
+<img src="img/eqn320.png" alt="eqn320" height="50"/>
 
 Plugging *Eqn 5-16* and *Eqn 5-17* into *Eqn 5-15* to eliminate the
 primed variables,
 
-<img src="img/eqn321.png" alt="eqn321" style="height: 75px;"/>
+<img src="img/eqn321.png" alt="eqn321" height="75"/>
 
 Define
 *d<sub>ij</sub><sup>2</sup> = vector_r<sub>ij</sub><sup>c</sup>* ∙ vector_r<sub>ij</sub>*<sup>c</sup>*,
@@ -678,17 +679,17 @@ and
 *b<sub>ij</sub>*<sup>c</sup> = vector_r<sub>ij</sub>*<sup>c</sup> ∙ vector_v<sub>ij</sub>*,
 and rearrange *Eqn 5-18*,
 
-<img src="img/eqn322.png" alt="eqn322" style="height: 75px;"/>
+<img src="img/eqn322.png" alt="eqn322" height="75"/>
 
 Applying the quadratic formula,
 
-<img src="img/eqn323.png" alt="eqn323" style="height: 100px;"/>
+<img src="img/eqn323.png" alt="eqn323" height="100"/>
 
-Define the reduced mass, <img src="img/otherEqn.png" alt="otherEqn" style="height: 50px;"/>
+Define the reduced mass, <img src="img/otherEqn.png" alt="otherEqn" height="50"/>
 ,
 then,
 
-<img src="img/eqn324.png" alt="eqn324" style="height: 100px;"/>
+<img src="img/eqn324.png" alt="eqn324" height="100"/>
 
 where the sign of *s<sub>vel</sub>* depends on the context of
 the event (See *Figure 3-9*). For an event where
@@ -697,12 +698,12 @@ only reasonable solution. For a hard sphere collision event, the
 distance is the inter-particle radius,
 *d<sub>ij</sub>* = *sigma<sub>ij</sub>* and the relation becomes,
 
-<img src="img/eqn325.png" alt="eqn325" style="height: 80px;"/>
+<img src="img/eqn325.png" alt="eqn325" height="80"/>
 
 Based on the context of the event, the DMD calculation will follow the
 flowsheet below,
 
-<img src="img/FlowSheet.png" alt="FlowSheet" style="height: 500px;"/>
+<img src="img/FlowSheet.png" alt="FlowSheet" height="500"/>
 
 *Figure 3-9 Flowsheet for DMD with wells.<sup id="c39">[9](#c39)</sup>*
 <br><br>
@@ -771,7 +772,7 @@ collision event will become a well-bounce, etc. Thus, the sDMD could use
 the same algorithm to compute the interaction between a pair of atoms
 and between atom and wall.
 
-<img src="img/Wall.jpg" alt="Wall" style="height: 300px;"/>
+<img src="img/Wall.jpg" alt="Wall" height="300"/>
 
 *Figure 3-10 Schematic diagram of wall interaction in a cylindrical tube
 or a spherical cavity. The big solid circle is the wall boundary, which
@@ -792,7 +793,7 @@ confined environments, and tunnel and reservoirs (combined with tunnel
 function), see Figure 3-11, or divide the system box into different
 regions.
 
-<img src="img/Flow.png" alt="Flow" style="height: 300px;"/>
+<img src="img/Flow.png" alt="Flow" height="300"/>
 
 *Figure 3-11 Combination of obstruction walls and cylindrical tube
 confinement can create a tube between two reservoirs, which can be used
@@ -825,7 +826,7 @@ between two replicas, *i* and *j*, maintained at temperatures T<sub>i</sub>
 and T<sub>j</sub> and
 with energies E<sub>i</sub> and E<sub>j</sub>, according to the canonical Metropolis criterion
 with the exchange probability *P*$, where *P* = *1* if
-<img src="img/otherEqn2.png" alt="otherEqn2" style="height: 50px;"/>,
+<img src="img/otherEqn2.png" alt="otherEqn2" height="50"/>,
 and *P* = *e<sup>-Δ</sup>*, if *Δ* > *0*. To achieve
 this, the sDMD uses a Socket server to send and receive the temperature
 and energy data between pairs of replicas at the preset time intervals.
@@ -925,7 +926,7 @@ calculation by its own. Thus, the data in the sDMD have two layers, one
 is the raw data and the other is the data copy in each thread. *Figure4-1* 
 shows a diagram of a single-core simulation.
 
-<img src="img/process.jpg" alt="process" style="height: 300px;"/>
+<img src="img/process.jpg" alt="process" height="300"/>
 
 *Figure 4-1 Single-core simulation process*
 <br><br>
