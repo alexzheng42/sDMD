@@ -346,7 +346,7 @@ This is for a square-well or shoulder potential depending on the sign of
 shoulder height, repulsive). *lammda_sigma<sub>ij</sub>* is the
 well/shoulder diameter.
 
-<img src="img/eqn33.png" alt="eqn33" height="85"/>
+<img src="img/eqn33.png" alt="eqn33" height="95"/>
 
 This is for a bond interaction. *l* is the bond length and *delta* is
 the bond vibration tolerance.
@@ -484,11 +484,9 @@ auxiliary bonds.*
 <br><br>
 
 <img src="img/Potential.jpg" alt="Potential" height="300"/>
-
 (a)
 
 <img src="img/Dihedral.png" alt="Dihedral" height="300"/>
-
 (b)
 
 *Figure 3-4 (a) Non-bonded interactions in all-atom DMD. The continuous
@@ -565,7 +563,7 @@ in the future. Using superscript "o" to represent an initial condition,
 the relative position vector at any time in the future is found by the
 following equation,
 
-<img src="img/eqn34.png" alt="eqn34" height="50"/>
+<img src="img/eqn34.png" alt="eqn34" height="40"/>
 
 So if *vector_r<sub>ij</sub>* and
 *vector_v<sub>ij</sub>* have opposite sense, the particles
@@ -647,7 +645,7 @@ Total energy is conserved upon an event between particles *i* and *j*,
 
 which can be rearranged,
 
-<img src="img/eqn314.png" alt="eqn314" height="70"/>
+<img src="img/eqn314.png" alt="eqn314" height="60"/>
 
 When the two particles contact, the relative position will be,
 
@@ -1027,6 +1025,7 @@ Obstruct? 2,         60.0 0.0 0.0, 120.0 0.0 0.0
 Tunnel?              60 120 25
 ```
 
+| | |
 --------------- | ----------------
 continue?       | If users would like to perform a new simulation, use "new"; if users would like to restart a previous run, which may have not finished yet, or would like to extend the current simulation, use "continue". Both process will back up the old files. The backup files will have a suffix representing the backing up time and date.
 Time            | Simulation time.
@@ -1053,6 +1052,7 @@ $ ./sDMD [FLAGS]
 
 Use the flag *-h* or *-help* to show the supported *FLAG*s,
 
+| | |
 ------- | --------
 -i                                | directory of the parameter folder
 -o                                | directory of the output folder
@@ -1095,6 +1095,7 @@ SocketPort = 20202
 ExchangeRate = 50
 ```
 
+| | |
 ----------   | ----------
 ReplicaNum   | The number of replicas.
 Temperatures | The temperature of each replica.
@@ -1110,6 +1111,7 @@ $ ./REMD [distribute T or not] -f [configuration file]
          -args [args of executable without flag -REMD]
 ```
 
+| | |
 ------------ | ---------
 -nodist      | [yes] Default is yes, if absent. Otherwise, the program will NOT distribute the preset temperature to each replica. Use this flag if users would like to extend/restart the simulation.
 Temperatures | The temperature of each replica.
@@ -1130,6 +1132,7 @@ $ ./analysis [FLAGS]
 
 Use the flag *-h* or *-help* to show the supported *FLAG*s,
 
+| | |
 ----------- | -----------
 -path       | exact path of data folder
 -trj        | trajectory input file
