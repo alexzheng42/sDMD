@@ -9,108 +9,105 @@
 **Table of Contents**
 =====================
 
-[1. Introduction 1](#introduction)
++ [Introduction](#introduction)
 
-[2. Units 4](#units)
++ [Units](#units)
 
-[3. Models and Interactions 5](#models-and-interactions)
++ [Models and Interactions](#models-and-interactions)
 
-[3.1 Models 5](#models)
+  + [Models](#models)
 
-[3.1.1 Intermediate-resolution Coarse Grained Model
-5](#intermediate-resolution-coarse-grained-model)
+    + [Intermediate-resolution Coarse Grained Model](#intermediate-resolution-coarse-grained-model)
 
-[3.1.2 High-resolution All-atom Model
-10](#high-resolution-all-atom-model)
+    + [High-resolution All-atom Model](#high-resolution-all-atom-model)
 
-[3.2 Interactions 13](#interactions)
+  + [Interactions](#interactions)
 
-[3.2.1 Algorithms 13](#algorithms)
+    + [Algorithms](#algorithms)
 
-[3.2.2 Energy Minimization 17](#energy-minimization)
+    + [Energy Minimization](#energy-minimization)
 
-[3.2.3 Confined Walls 18](#confined-walls)
+    + [Confined Walls](#confined-walls)
 
-[3.2.4 Replica Exchange Molecular Dynamics Simulation (REMD)
-20](#replica-exchange-molecular-dynamics-simulation-remd)
+    + [Replica Exchange Molecular Dynamics Simulation (REMD)](#replica-exchange-molecular-dynamics-simulation-remd)
 
-[4. Program Structure 23](#program-structure)
++ [Program Structure](#program-structure)
 
-[5. Program Usage 25](#program-usage)
++ [Program Usage](#program-usage)
 
-[5.1 Installation 25](#installation)
+  + [Installation](#installation)
 
-[5.2 Run Parameters 25](#run-parameters)
+  + [Run Parameters](#run-parameters)
 
-[5.2.1 Non-REMD simulation 26](#non-remd-simulation)
+    + [Non-REMD simulation](#non-remd-simulation)
 
-[5.2.2 REMD Simulation 28](#remd-simulation)
+    + [REMD Simulation](#remd-simulation)
 
-[5.2.3 Analysis 30](#analysis)
+    + [Analysis](#analysis)
 
-[6. Format 32](#format)
++ [Format](#format)
 
-[6.1 Coordinate File 32](#coordinate-file)
+  + [Coordinate File](#coordinate-file)
 
-[6.1.1 GRO File 32](#gro-file)
+    + [GRO File](#gro-file)
 
-[6.1.2 PDB File 34](#pdb-file)
+    + [PDB File](#pdb-file)
 
-[6.2 Force Field File 35](#force-field-file)
+  + [Force Field File](#force-field-file)
 
-[6.2.1 Parameters of amino acid 35](#parameters-of-amino-acid)
+    + [Parameters of amino acid](#parameters-of-amino-acid)
 
-[6.2.2 Potential Table 37](#potential-table)
+    + [Potential Table](#potential-table)
 
-[7. Functions 38](#functions)
++ [Functions](#functions)
 
-[7.1 Simulation Source Code 38](#simulation-source-code)
+  + [Simulation Source Code](#simulation-source-code)
 
-  + [DMD.c 38](#dmd.c)
+  + [DMD.c](#dmd.c)
 
-  + [DataSave.c 38](#datasave.c)
+  + [DataSave.c](#datasave.c)
 
-  + [Event.c 38](#event.c)
+  + [Event.c](#event.c)
 
-  + [Initialization.c 39](#initialization.c)
+  + [Initialization.c](#initialization.c)
 
-  + [List.c 39](#list.c)
+  + [List.c](#list.c)
 
-  + [Models.c 39](#models.c)
+  + [Models.c](#models.c)
 
-  + [REMD.c 39](#remd.c)
+  + [REMD.c](#remd.c)
 
-  + [SGThread.c 39](#sgthread.c)
+  + [SGThread.c](#sgthread.c)
 
-  + [ThreadProcess.c 39](#threadprocess.c)
+  + [ThreadProcess.c](#threadprocess.c)
 
-  + [TimePrediction.c 40](#timeprediction.c)
+  + [TimePrediction.c](#timeprediction.c)
 
-  + [ToolFunctions.c 40](#toolfunctions.c)
+  + [ToolFunctions.c](#toolfunctions.c)
 
-  + [sREMD.c 40](#sremd.c)
+  + [sREMD.c](#sremd.c)
 
-  + [sServer.c 40](#sserver.c)
+  + [sServer.c](#sserver.c)
 
-[7.2 Analysis Source Code 40](#analysis-source-code)
++ [Analysis Source Code](#analysis-source-code)
 
-  + [Analysis.c 40](#analysis.c)
+  + [Analysis.c](#analysis.c)
 
-  + [FileManage.c 41](#filemanage.c)
+  + [FileManage.c](#filemanage.c)
 
-  + [SystemInformation.c 41](#systeminformation.c)
+  + [SystemInformation.c](#systeminformation.c)
 
-  + [Cluster.c 41](#cluster.c)
+  + [Cluster.c](#cluster.c)
 
-  + [Energy.c 41](#energy.c)
+  + [Energy.c](#energy.c)
 
-  + [HBRamach.c 41](#hbramach.c)
+  + [HBRamach.c](#hbramach.c)
 
-  + [PBCAdjust.c 41](#pbcadjust.c)
+  + [PBCAdjust.c](#pbcadjust.c)
 
-  + [REMD.c 41](#remd.c-1)
+  + [REMD.c](#remd.c-1)
 
-  + [Tools.c 41](#tools.c)
+  + [Tools.c](#tools.c)
 
 **Introduction**
 ================
