@@ -704,7 +704,7 @@ only reasonable solution. For a hard sphere collision event, the
 distance is the inter-particle radius,
 *d<sub>ij</sub>* = *sigma<sub>ij</sub>* and the relation becomes,
 
-<img src="img/eqn325.png" alt="eqn325" height="80"/>
+<img src="img/eqn325.png" alt="eqn325" height="70"/>
 
 Based on the context of the event, the DMD calculation will follow the
 flowsheet below,
@@ -1025,7 +1025,7 @@ Obstruct? 2,         60.0 0.0 0.0, 120.0 0.0 0.0
 Tunnel?              60 120 25
 ```
 
-| | |
+**Item**        | **Description**
 --------------- | ----------------
 continue?       | If users would like to perform a new simulation, use "new"; if users would like to restart a previous run, which may have not finished yet, or would like to extend the current simulation, use "continue". Both process will back up the old files. The backup files will have a suffix representing the backing up time and date.
 Time            | Simulation time.
@@ -1052,7 +1052,7 @@ $ ./sDMD [FLAGS]
 
 Use the flag *-h* or *-help* to show the supported *FLAG*s,
 
-| | |
+**Flag**        | **Description**
 ------- | --------
 -i                                | directory of the parameter folder
 -o                                | directory of the output folder
@@ -1095,12 +1095,12 @@ SocketPort = 20202
 ExchangeRate = 50
 ```
 
-| | |
+**Item**        | **Description**
 ----------   | ----------
 ReplicaNum   | The number of replicas.
 Temperatures | The temperature of each replica.
 SocketPort   | The port number of the socket server.
-ExchangeRate | How often the temperature will be exchanged. Unit is the time unit.
+ExchangeRate | How often the temperature will be exchanged. Unit is the time unit. Suggest to be 1000.
 <br>
 
 
@@ -1111,12 +1111,11 @@ $ ./REMD [distribute T or not] -f [configuration file]
          -args [args of executable without flag -REMD]
 ```
 
-| | |
+**Flag**        | **Description**
 ------------ | ---------
 -nodist      | [yes] Default is yes, if absent. Otherwise, the program will NOT distribute the preset temperature to each replica. Use this flag if users would like to extend/restart the simulation.
-Temperatures | The temperature of each replica.
-SocketPort   | The port number of the socket server.
-ExchangeRate | How often the temperature will be exchanged. Unit is the time unit. Suggest to be 1000.
+-f           | follow the file name of the REMD configuration file
+-args        | flags used in each individual replica
 <br>
 
 The flags of executable server and the *-REMD* flag of executable *sDMD*
@@ -1132,7 +1131,7 @@ $ ./analysis [FLAGS]
 
 Use the flag *-h* or *-help* to show the supported *FLAG*s,
 
-| | |
+**Flag**        | **Description**
 ----------- | -----------
 -path       | exact path of data folder
 -trj        | trajectory input file
