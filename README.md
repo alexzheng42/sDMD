@@ -215,28 +215,31 @@ Physics* **1980,** *34* (2), 184-201.[↩](#c12)
 =========
 
 *Table 2-1 Basic units*
-*Quantity* | *Symbol* | *Unit*
+
+**Quantity** | **Symbol** | **Unit**
 ---------- | -------- | ------
 length     | L        | Å = 10<sup>-10</sup> m
 mass       | m        | u (atomic mass unit) <br/>= 1.6605402(10) x 10<sup>-27</sup> kg <br/>(1/12 the mass of a <sup>12</sup>C atom)
 energy     | E        | kcal mol<sup>-1</sup> <br/>= 4.184 kJ mol<sup>-1</sup> <br/>= 4184 m<sup>2</sup> kg s<sup>-1</sup> mol<sup>-1</sup>
-| <br>
+<br>
 
 *Table 2-2 Derived units*
-*Quantity* | *Symbol* | *Unit*
+
+**Quantity** | **Symbol** | **Unit**
 ---------- | -------- | ------
 time       | T        | 50 fs = 50 x 10<sup>-15</sup> s
 velocity   | V        | Å (50 fs)<sup>-1</sup> = 2 x 10<sup>3</sup> m s<sup>-1</sup>
 temperature| T        | 503 K
 force      | F        | u Å (50 fs)<sup>-2</sup> = 66.4 pN
-|<br>
+<br>
 
 *Table 2-3 Constants*
-*Symbol* | *Name* | *Unit*
+
+**Symbol** | **Name** | **Unit**
 -------- | ------ | ------
 *N<sub>A</sub>* | Avogadro's number | 6.0221367(36) x 10<sup>23</sup> mol<sup>-1</sup>
 *k<sub>B</sub>* | Boltzmann's constant | 1.987204118 x 10<sup>-3</sup> kcal mol<sup>-1</sup> K<sup>-1</sup>
-|<br>
+<br>
 
 **Models and Interactions**
 ===========================
@@ -286,13 +289,14 @@ bonds.<sup id="c35">[5](#c35)</sup>*
 
 *Table 3-1 Parameter values for the proteins used in the DMD
 simulations*
+
 **Beads** | **Diameter (Å)**
 --------- | ----------------
 N         | 3.300
 C<sub>α</sub> | 3.700
 C         | 4.000
 R         | 4.408
-|<br>
+<br>
                      
 **Bonds** | **Length (Å)**
 --------- | --------------
@@ -300,7 +304,7 @@ N<sub>i</sub>-C<sub>α,i</sub> | 1.460
 C<sub>α,i</sub>-N<sub>i+1</sub> | 1.510
 C<sub>i</sub>-N<sub>i+1</sub> | 1.330
 C<sub>α,i</sub>-R<sub>i</sub> | 1.531
-|<br>
+<br>
                           
 **Auxiliary Bonds** | **Length (Å)**
 ------------------- | --------------
@@ -310,7 +314,7 @@ C<sub>i</sub>-C<sub>α,i+1</sub> | 2.450
 C<sub>α,i</sub>-C<sub>α,i+1</sub> | 3.800
 N<sub>i</sub>-R<sub>i</sub> | 2.440
 C<sub>i</sub>-R<sub>i</sub> | 2.490
-|<br>
+<br>
                           
 **Bond Angles** | **Angle (deg)**
 --------------- | ---------------
@@ -319,7 +323,7 @@ C<sub>i</sub>-R<sub>i</sub> | 2.490
 ∠C<sub>i</sub>-N<sub>i+1</sub>-C<sub>α,i+1</sub> | 122.0
 ∠R<sub>i</sub>-C<sub>α,i</sub>-C<sub>i</sub> | 109.6
 ∠R<sub>i</sub>-C<sub>α,i</sub>-N<sub>i</sub> | 110.1
-|<br>
+<br>
 
 Beads in the protein are subject to five different types of forces
 during events: (1) infinite repulsion due to excluded volume effect
@@ -427,7 +431,7 @@ N<sub>i</sub>-C<sub>α,j</sub> | 5.00
 N<sub>i</sub>-N<sub>j+1</sub> | 4.74
 C<sub>j</sub>-C<sub>α,i</sub> | 4.86
 C<sub>j</sub>-C<sub>i-1</sub> | 4.83
-|<br>
+<br>
 
 To maintain the temperature around the target value in NVT ensemble, we
 implement Andersen thermostat.<sup id="c37">[7](#c37)</sup> With this procedure, all beads in the
@@ -1036,7 +1040,7 @@ WallDyn         | If the confined walls are fixed, use "no". If the confined wal
 Flow(x,y,z)     | If there will be constant velocities applied on the atoms. Each on *x-*, *y-*, and *z-* axis.
 Obstruct?       | If there exists any obstruction walls in the system. If no, use "no". Otherwise, the first number represents how many of the obstruction walls will be inserted into the system, following the position set of each obstruction wall on *x-*, *y-*, and *z-* axis, separating by commas.
 Tunnel?         | If there will be a tunnel in the system. This is only used for the translocation simulation. If no, use "no". Otherwise, the three numbers represent, respectively, the start coordinate, the end coordinate and the diameter of the tunnel. These coordinates are all on x-axis and the unit is A.
-|<br>
+<br>
 
 To run the executable sDMD, use the following command,
 
@@ -1067,7 +1071,7 @@ Use the flag *-h* or *-help* to show the supported *FLAG*s,
 -Wsz                              | (required only if WallDyn is assigned) follow the maximum changing size of the wall, default 5 A
 -Wrt                              | (required only if WallDyn is assigned) follow the total time needed for the size change, default 200                       |
 -REMD                             | only use during REMD, follow the server name, the port number, the temperature, the exchange rate, <br>and the suffix name of saving files <br>(this flag will be set automatically by REMD executable)
-|<br>
+<br>
 
 ### **REMD Simulation**
 
