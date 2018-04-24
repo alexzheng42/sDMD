@@ -425,6 +425,7 @@ lines show the covalent bonds of the backbone.*
 <br><br>
 
 *Table 3-2 Parameter values for hydrogen bond*
+
 **Pairs** | ***d<sub>ij</sub>(Å)***
 --------- | -------------
 N<sub>i</sub>-C<sub>α,j</sub> | 5.00
@@ -483,9 +484,12 @@ auxiliary bonds.*
 <br><br>
 
 <img src="img/Potential.jpg" alt="Potential" height="300"/>
-<br>(a)<br>
+
+(a)
+
 <img src="img/Dihedral.png" alt="Dihedral" height="300"/>
-<br>(b)<br>
+
+(b)
 
 *Figure 3-4 (a) Non-bonded interactions in all-atom DMD. The continuous
 dashed line corresponds to the VDW and solvation interaction between two
@@ -575,7 +579,7 @@ increment *(t - t<sup>o</sup>)*,
 
 Here we define a variable *b<sub>ij</sub>* as a dot product,
 
-<img src="img/eqn38.png" alt="eqn38" height="50"/>
+<img src="img/eqn38.png" alt="eqn38" height="40"/>
 
 If *b<sub>ij</sub>* > *0*, the relative position
 |*vector_r<sub>ij</sub>*| will be increasing
@@ -639,11 +643,11 @@ collision, or particles enter or escape from a potential shell.
 
 Total energy is conserved upon an event between particles *i* and *j*,
 
-<img src="img/eqn313.png" alt="eqn313" height="60"/>
+<img src="img/eqn313.png" alt="eqn313" height="70"/>
 
 which can be rearranged,
 
-<img src="img/eqn314.png" alt="eqn314" height="50"/>
+<img src="img/eqn314.png" alt="eqn314" height="70"/>
 
 When the two particles contact, the relative position will be,
 
@@ -776,7 +780,7 @@ collision event will become a well-bounce, etc. Thus, the sDMD could use
 the same algorithm to compute the interaction between a pair of atoms
 and between atom and wall.
 
-<img src="img/Wall.jpg" alt="Wall" height="300"/>
+<img src="img/wall.jpg" alt="Wall" height="300"/>
 
 *Figure 3-10 Schematic diagram of wall interaction in a cylindrical tube
 or a spherical cavity. The big solid circle is the wall boundary, which
@@ -930,7 +934,7 @@ calculation by its own. Thus, the data in the sDMD have two layers, one
 is the raw data and the other is the data copy in each thread. *Figure4-1* 
 shows a diagram of a single-core simulation.
 
-<img src="img/process.jpg" alt="process" height="300"/>
+<img src="img/Process.jpg" alt="process" height="300"/>
 
 *Figure 4-1 Single-core simulation process*
 <br><br>
@@ -1023,7 +1027,6 @@ Obstruct? 2,         60.0 0.0 0.0, 120.0 0.0 0.0
 Tunnel?              60 120 25
 ```
 
-| | |
 --------------- | ----------------
 continue?       | If users would like to perform a new simulation, use "new"; if users would like to restart a previous run, which may have not finished yet, or would like to extend the current simulation, use "continue". Both process will back up the old files. The backup files will have a suffix representing the backing up time and date.
 Time            | Simulation time.
@@ -1050,7 +1053,6 @@ $ ./sDMD [FLAGS]
 
 Use the flag *-h* or *-help* to show the supported *FLAG*s,
 
-| | |
 ------- | --------
 -i                                | directory of the parameter folder
 -o                                | directory of the output folder
@@ -1093,13 +1095,12 @@ SocketPort = 20202
 ExchangeRate = 50
 ```
 
-| | |
 ----------   | ----------
 ReplicaNum   | The number of replicas.
 Temperatures | The temperature of each replica.
 SocketPort   | The port number of the socket server.
 ExchangeRate | How often the temperature will be exchanged. Unit is the time unit.
-|<br>
+<br>
 
 
 To run the executable *REMD*, use the following command,
@@ -1109,13 +1110,12 @@ $ ./REMD [distribute T or not] -f [configuration file]
          -args [args of executable without flag -REMD]
 ```
 
-| | |
 ------------ | ---------
 -nodist      | [yes] Default is yes, if absent. Otherwise, the program will NOT distribute the preset temperature to each replica. Use this flag if users would like to extend/restart the simulation.
 Temperatures | The temperature of each replica.
 SocketPort   | The port number of the socket server.
 ExchangeRate | How often the temperature will be exchanged. Unit is the time unit. Suggest to be 1000.
-|<br>
+<br>
 
 The flags of executable server and the *-REMD* flag of executable *sDMD*
 will be set by *REMD* automatically.
@@ -1130,7 +1130,6 @@ $ ./analysis [FLAGS]
 
 Use the flag *-h* or *-help* to show the supported *FLAG*s,
 
-| | |
 ----------- | -----------
 -path       | exact path of data folder
 -trj        | trajectory input file
@@ -1157,7 +1156,7 @@ Use the flag *-h* or *-help* to show the supported *FLAG*s,
 -temp       | (optional) target temperature. default 300
 -st         | (optional) start frame of analyzing. default 0
 -et         | (optional) end frame of analyzing. default -1 (the final frame)
-|<br>
+<br>
 
 The analysis program is also highly modularized and optimized. It will
 be easy to add more analysis functions onto it.
