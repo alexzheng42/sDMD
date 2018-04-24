@@ -1100,7 +1100,7 @@ ExchangeRate = 50
 ReplicaNum   | The number of replicas.
 Temperatures | The temperature of each replica.
 SocketPort   | The port number of the socket server.
-ExchangeRate | How often the temperature will be exchanged. Unit is the time unit. Suggest to be 1000.
+ExchangeRate | How often the temperature will be exchanged. Unit is the time unit.
 <br>
 
 
@@ -1113,7 +1113,7 @@ $ ./REMD [distribute T or not] -f [configuration file]
 
 **Flag**        | **Description**
 ------------ | ---------
--nodist      | [yes] Default is yes, if absent. Otherwise, the program will NOT distribute the preset temperature to each replica. Use this flag if users would like to extend/restart the simulation.
+-nodist      | [yes] Default is yes, if absent. Otherwise, the program will NOT distribute the preset <br>temperature to each replica. Use this flag if users would like to extend/restart the simulation.
 -f           | follow the file name of the REMD configuration file
 -args        | flags used in each individual replica
 <br>
