@@ -21,7 +21,7 @@
 //#define DEBUG_RANDOM
 //#define DEBUG_PRINTF
 //#define DETAILS
-#define GEL
+//#define GEL
 #define HYDROGEN_BOND
 
 #define TIME_GAP      0.5

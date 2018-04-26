@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -I. -Os -std=c99
+CFLAGS = -I. -O2 -std=c99
 DEPS = List.h DMD.h
 OBJ = DataSave.o \
       DMD.o \
@@ -17,10 +17,10 @@ OBJ = DataSave.o \
 
 all: sDMD sServer sREMD
 
-sServer: server.o
+sServer: Server.o
 	$(CC) -o $@ $^ -lm
 
-sREMD: exe.o
+sREMD: REMDExec.o
 	$(CC) -o $@ $^
 
 sDMD: $(OBJ)
