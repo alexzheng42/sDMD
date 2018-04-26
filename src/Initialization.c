@@ -560,12 +560,7 @@ void ReadParameter() {
             //PBC on charge source
             //create a pseudo charge source outside the box
             //in order to keep the atoms moving even after passing the last charge source
-            if (flow.charge.PBCMark) { //right now only support PBC on x axis
-                TRANSFER_VECTOR(flow.charge.position[chargeNum], flow.charge.position[0]);
-                flow.charge.position[chargeNum][1] += boxDimension[1];
-                flow.charge.potGrad[chargeNum] = flow.charge.potGrad[0];
-                flow.charge.gap[chargeNum] = flow.charge.gap[0];
-            }
+            //will do this in InitializeCharge(), since right now boxDimension is not known
             
             /*
              --unit--
@@ -1959,6 +1954,18 @@ void InitializeCharge(void) {
                 atom[n].property->charge = netC;
             }
         }
+    }
+    
+    //PBC on charge source
+    //create a pseudo charge source outside the box
+    //in order to keep the atoms moving even after passing the last charge source
+    //do this here instead of in ReadParameter() is due to at this time boxDimension is assigned
+    if (flow.charge.PBCMark) { //right now only support PBC on x axis
+        int chargeNum = flow.charge.num - 1;
+        TRANSFER_VECTOR(flow.charge.position[chargeNum], flow.charge.position[0]);
+        flow.charge.position[chargeNum][1] += boxDimension[1];
+        flow.charge.potGrad[chargeNum] = flow.charge.potGrad[0];
+        flow.charge.gap[chargeNum] = flow.charge.gap[0];
     }
     
     return;

@@ -92,10 +92,7 @@ void FirstRun(struct ThreadStr *thisThread) {
         BondTime(thisThread->newTarget, thisThread);
         CollisionTime(thisThread->newTarget, thisThread);
         PBCandCrossCellTime(thisThread->newTarget);
-
-#ifndef GEL
         ThermostatTime(thisThread->newTarget);
-#endif
         
 #ifdef HYDROGEN_BOND
         HBTime(thisThread->newTarget, thisThread);
@@ -292,10 +289,7 @@ void Predict(int *renewList, struct ThreadStr *thisThread) {
         BondTime(targetAtom, thisThread);
         CollisionTime(targetAtom, thisThread);
         PBCandCrossCellTime(targetAtom);
-        
-#ifndef GEL
         ThermostatTime(targetAtom);
-#endif
         
 #ifdef HYDROGEN_BOND
         HBTime(targetAtom, thisThread);

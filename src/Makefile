@@ -17,10 +17,10 @@ OBJ = DataSave.o \
 
 all: sDMD sServer sREMD
 
-sServer: Server.o
+sServer: server.o
 	$(CC) -o $@ $^ -lm
 
-sREMD: REMDExec.o
+sREMD: exe.o
 	$(CC) -o $@ $^
 
 sDMD: $(OBJ)

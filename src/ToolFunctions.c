@@ -1214,18 +1214,18 @@ void CreateGELCoordinate(int numOnAxis)
     outputFile = fopen(buffer, "w");
     
     fprintf(outputFile, "Model\n");
-    fprintf(outputFile, "   %i\n", numOnAxis * numOnAxis * numOnAxis);
+    fprintf(outputFile, "%5i\n", numOnAxis * numOnAxis * numOnAxis);
     
     for (int i = 0; i < numOnAxis; ++i) {
         for (int n = 0; n < numOnAxis; ++n) {
             for (int m = 0; m < numOnAxis; ++m) {
-                fprintf(outputFile, "%5iGEL%7s%8i%14.8f%14.8f%14.8f\n", totalNum, "CA", totalNum, (m + 0.5) * 0.8, (n + 0.5) * 0.8, (i + 0.5) * 0.8);
+                fprintf(outputFile, "%5iGEL%5s%5i%8.3f%8.3f%8.3f\n", totalNum, "CA", totalNum, (m + 0.5) * 0.8, (n + 0.5) * 0.8, (i + 0.5) * 0.8);
                 totalNum ++;
             }
         }
     }
     
-    fprintf(outputFile, "%11.5f%11.5f%11.5f\n", numOnAxis * 0.8, numOnAxis * 0.8, numOnAxis * 0.8);
+    fprintf(outputFile, "%10.5f%10.5f%10.5f\n", numOnAxis * 0.8, numOnAxis * 0.8, numOnAxis * 0.8);
     fclose(outputFile);
 }
 

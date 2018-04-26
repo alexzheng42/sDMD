@@ -886,6 +886,7 @@ void TunnelTime(struct AtomStr *targetAtom) {
 void ChargeTime(struct AtomStr *targetAtom) {
     int flag = 0;
     int gapNum;
+    int totalCNum = (flow.charge.PBCMark) ? flow.charge.num : flow.charge.num - 1;
     double charge;
     double distance2, gap2;
     struct ParameterStr parameters;
@@ -896,7 +897,7 @@ void ChargeTime(struct AtomStr *targetAtom) {
     }
     charge = targetAtom->property->charge;
     
-    for (int chargeNum = 0; chargeNum < flow.charge.num && flag == 0; chargeNum ++) {
+    for (int chargeNum = 0; chargeNum <= totalCNum && flag == 0; chargeNum ++) {
         if (targetAtom->dynamic->coordinate[1] < flow.charge.position[chargeNum][1] - flow.charge.gap[chargeNum] - ZERO) {
             flag = 1;
         } else {
