@@ -470,10 +470,6 @@ int SchedulingNextEvent(struct ThreadStr* thisThread) {
         nexteventnode = nexteventnode->left;
     }
     
-    if (*nexteventnode->time == *nexteventnode->pre->time) {
-        nexteventnode = nexteventnode->pre;
-    }
-    
     return *nexteventnode->atomNum;
 }
 

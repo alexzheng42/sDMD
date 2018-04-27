@@ -1960,7 +1960,7 @@ void InitializeCharge(void) {
     //create a pseudo charge source outside the box
     //in order to keep the atoms moving even after passing the last charge source
     //do this here instead of in ReadParameter() is due to at this time boxDimension is assigned
-    if (flow.charge.PBCMark) { //right now only support PBC on x axis
+    if (flow.mark == 3 && flow.charge.PBCMark) { //right now only support PBC on x axis
         int chargeNum = flow.charge.num - 1;
         TRANSFER_VECTOR(flow.charge.position[chargeNum], flow.charge.position[0]);
         flow.charge.position[chargeNum][1] += boxDimension[1];
