@@ -47,6 +47,12 @@ void AssignName(char *oldName, char *newName, char *extra) {
 
 void AssignFileList(int id) {
     
+    if (strlen(files[inLog][id].name) < 5 ||
+        files[inLog][id].name[strlen(files[inLog][id].name) - 4] != '.') {
+        printf("!!ERROR!!: log file name %s is invalid. please check the input name! %s:%i\n", files[inLog][id].name, __FILE__, __LINE__);
+        exit(EXIT_FAILURE);
+    }
+    
     if (freshStart) {
         long len;
         DIR *dir;

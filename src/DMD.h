@@ -17,8 +17,7 @@
 #include <pthread.h>
 #include "List.h"
 
-#define DEBUG_IT
-//#define DEBUG_RANDOM
+#define DEBUG_RANDOM
 //#define DEBUG_PRINTF
 //#define DETAILS
 //#define GEL
@@ -49,6 +48,10 @@
         Time: 1 time unit is approximately 48.88 fs
  */
 //------------------
+
+
+#define likely(x)       __builtin_expect(!!(x), 1)
+#define unlikely(x)     __builtin_expect(!!(x), 0)
 
 
 //connection map bit
@@ -362,17 +365,15 @@ struct DynamicStr {
 };
 
 struct EventListStr {
-    int *atomNum;
-    double *time;
-    struct EventListStr *pre;
-    struct EventListStr *right;
-    struct EventListStr *left;
+    int count;
+    int *node;
+    int *leaf;
+    double **time;
 };
 
 struct AtomStr {
     struct PropertyStr *property;   //static properties of the atom, such as mass, atom # ...
     struct DynamicStr *dynamic;    //dynamic properties of the atom, such as coordinate, velocity ...
-    struct EventListStr *eventList;  //binary tree
 };
 
 struct AAStr {
@@ -517,6 +518,7 @@ extern int atomnum;
 extern int **connectionMap;
 extern int chargeAA[9];
 extern long int frame;
+extern unsigned int seed;
 extern double timestep, currenttime;
 extern double oldcurrenttime;
 extern double cutoffr;
@@ -567,6 +569,7 @@ extern double cellsize[4];
 
 //-----------------
 //binary tree
+extern struct EventListStr CBT;
 extern int nthCheck, nthNode;
 //-----------------
 
@@ -635,17 +638,13 @@ extern struct FileStr *fileList;
 //-----------------
 //To maximum speed, open and close files as less as possible.
 
-#ifdef DEBUG_IT
+
 //-----------------
-//time benchmark / debug
-extern clock_t begin[10], end[10];
-extern unsigned seed;
-extern double timeSpend;
-extern double tmpDouble;
-extern double *energy;
+//other
 extern int tmpInt;
+extern double tmpDouble;
 //-----------------
-#endif
+
 
 
 
@@ -706,7 +705,6 @@ struct ThreadStr* InitializeThread(int tid, struct AtomStr *atomList);
 //---------------------------------------------
 //Simulation Method
 //---------------------------------------------
-void FAThread(void);
 void MSThread(void);
 void SingleThread(void);
 void REMD(void);
@@ -721,6 +719,16 @@ void PBC(char *type, struct AtomStr *targetAtom, struct ThreadStr *thisThread);
 //---------------------------------------------
 
 
+//---------------------------------------------
+//CBT
+//---------------------------------------------
+void CreateCBT(void);
+void UpdateCBT(int *renewList);
+void InsertCBT(int *renewList);
+void DeleteCBT(int *renewList);
+//---------------------------------------------
+
+
 //--------------------------------------------
 //Tool functions
 //--------------------------------------------
@@ -728,8 +736,7 @@ void SurroundingCheck(int, int);
 void Rotation(double *, double *, double, char);
 void TimeBenchmark(char *, char *, int);
 void PrintCellList(struct ThreadStr *thisThread);
-void PrintEventList(list *atomList);
-void DebugPause(int);
+void PrintList(list *atomList);
 double TotalPotentialEnergy(int collision_i, double * direction, struct ThreadStr *thisThread);
 void SDEnergyMin(long int stepNum, struct ThreadStr *thisThread);
 void AtomDataCpy(struct AtomStr * dest, struct AtomStr * sour, int flag);
@@ -738,11 +745,8 @@ void ListRefresh(int, int *, int, int);
 void CreateGELCoordinate(int);
 void ResetTarget(int *renewList, struct ThreadStr *thisThread);
 void MakeNeighborList(int *neighborList, int targetAtom, int threadID);
-void TimeForward(double time, char *type, struct ThreadStr *thisThread);
+void TimeForward(double time, struct ThreadStr *thisThread);
 void UpdateData(double time, char *type, struct ThreadStr *thisThread);
-void SchedulingRefresh(struct ThreadStr *thisThread);
-void SchedulingAdd(int *atomList, struct ThreadStr* thisThread);
-void SchedulingDelete(int *atomList, struct ThreadStr* thisThread);
 void PBCShift(struct AtomStr *atom_i, struct AtomStr *atom_j, double *shift);
 void PrintPreCalList(void);
 void PrintBonds(int atomNum);
@@ -751,17 +755,13 @@ void PrintStep(struct StepPotenStr *thisStep);
 void PrintCollisionPotentialTable(void);
 void PrintHBPotentialTable(int HBTypeNum);
 void CalAccumulatedPoten(struct StepPotenStr *startPoint);
-void FindNode(int num);
-void PrintSeq(int num);
 void FreeConstr(struct ConstraintStr *thisConstr);
 void PrintData(int *list);
 void CalCOMV(int proteinNum, double *netV);
-int SchedulingNextEvent(struct ThreadStr* thisThread);
 int AtomTypeChange(int originalType, int direct);
 int FindPair(struct AtomStr *atom1, struct AtomStr *atom2, char *interactionType, double direction, double distance2, double *lowerLimit, double *upperLimit, double *lowerPotential, double *upperPotential, double *accumPotential, struct AtomStr *HBPartner, int typeChange);
 //HBPartner is only used during finding pair between HB target atom and its neighbor. HBPartner is the partner atom of the target atom.
 //typeChange is only used during calculating the energy change before and after HB forming or breaking
-int SeqList(struct EventListStr *targetNode, int length, int * seqList);
 int EnterTunnel(double time, struct AtomStr *targetAtom);
 double RandomValue(int, int);
 double Maxwell_Boltzmann_Distribution(double, double);

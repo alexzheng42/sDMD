@@ -250,6 +250,14 @@ void InputData(int argc, const char * argv[]) {
         printf("==========================\n");
         printf("\n");
         
+        //use seed to create a random number
+#ifndef DEBUG_RANDOM
+        seed = (unsigned) time(NULL);
+#else
+        seed = RANDOM_SEED;
+#endif
+        srand(seed); // generate a random seed
+        
         //remove the extra atoms in the coordinate file
         ModifyCoordinateFile(coordinateFileName);
         
@@ -259,7 +267,7 @@ void InputData(int argc, const char * argv[]) {
         //create cells
         CreateCell();
         
-        printf("\nInitializing protein models...\n");
+        printf("\nInitializing protein models...");
         //assgin bonds, constraints and atom type data
         ReadModel();
         printf("Done!\n");
@@ -324,7 +332,6 @@ void InputData(int argc, const char * argv[]) {
 
 
 void ReadBreakPoint(FILE *input_file) {
-	unsigned oldSeed;
     double oldtimestep;
     double oldoutputrate;
     char oldMethodtype[20];
@@ -367,17 +374,12 @@ void ReadBreakPoint(FILE *input_file) {
     for (int i = 0; i <= atomnum; i++) {
         struct PropertyStr *property = calloc(1, sizeof(struct PropertyStr));
         struct DynamicStr *dynamic = calloc(1, sizeof(struct DynamicStr));
-        struct EventListStr *eventList = calloc(1, sizeof(struct EventListStr));
         
         fread(property, sizeof(struct PropertyStr), 1, input_file);
         fread(dynamic, sizeof(struct DynamicStr), 1, input_file);
         
         atom[i].property = property;
         atom[i].dynamic = dynamic;
-        atom[i].eventList = eventList;
-        
-        atom[i].eventList->atomNum = &atom[i].property->num;
-        atom[i].eventList->time = &atom[i].dynamic->event.time;
         
         atom[i].property->bond = NULL;
         atom[i].property->constr = NULL;
@@ -438,13 +440,8 @@ void ReadBreakPoint(FILE *input_file) {
     fread(&HBnumformed, sizeof (int), 1, input_file);
     fread(&alphaHBformed, sizeof (int), 1, input_file);
 	
-#ifdef DEBUG_IT
-	fread(&oldSeed, sizeof(unsigned), 1, input_file); //old seed
 	fread(&seed, sizeof(unsigned), 1, input_file); //new seed
-#ifndef DEBUG_RANDOM
 	srand(seed);
-#endif
-#endif
     
     if (targetTemperature != oldTemperature) {
         printf("\n!WARNING!: the new temperature is different from the previous!\n");
@@ -459,7 +456,7 @@ void ReadBreakPoint(FILE *input_file) {
         exit(EXIT_FAILURE);
     }
     
-    if (timestep > currenttime) {
+    if (timestep > currenttime + outputrate) {
         if (timestep < oldtimestep) {
             printf("\n!WARNING!: the new simulation time is shorter than the previous!\n");
         }
@@ -897,19 +894,14 @@ void ReadCoordinate() {
     for (int i = 0; i <= atomnum; i++) {
         struct PropertyStr *property = calloc(1, sizeof(struct PropertyStr));
         struct DynamicStr *dynamic = calloc(1, sizeof(struct DynamicStr));
-        struct EventListStr *eventList = calloc(1, sizeof(struct EventListStr));
         
         atom[i].property = property;
         atom[i].dynamic = dynamic;
-        atom[i].eventList = eventList;
         
         atom[i].property->num = i;
         atom[i].dynamic->event.counter = 0;
         atom[i].dynamic->event.partner = INVALID;
         atom[i].dynamic->event.time = INFINIT;
-        
-        atom[i].eventList->atomNum = &atom[i].property->num;
-        atom[i].eventList->time = &atom[i].dynamic->event.time;
     }
     
     fgets(buffer, sizeof(buffer), input_file);

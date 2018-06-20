@@ -137,11 +137,9 @@ void CollisionTime(struct AtomStr *collision_i, struct ThreadStr *thisThread) {
                 
                 event.time = CalculateTime(&parameters);
                 
-#ifdef DEBUG_IT
-                if (event.time < 0 && (codeNum == 2 && thisThread->finishWork == 1)) {
+                if (unlikely(event.time < 0 && (codeNum == 2 && thisThread->finishWork == 1))) {
                     printf("!!ERROR!!: collision time is less than zero! %i  %i\n", targetAtom_i, targetAtom_j); //for debug and error check
                 }
-#endif
                 
                 JobAssign(collision_i, collision_j, &event, Coli_Event);
                 
@@ -156,7 +154,6 @@ void BondTime(struct AtomStr *bond_i, struct ThreadStr *thisThread) {
     int targetAtom_i, targetAtom_j;
     int connect[16] = {0}; //4+10 real bonds and pseudo bonds, 15 -> safe num
     double dmin[16] = {0}, dmax[16] = {0};
-    double check;
     struct AtomStr *bond_j;
     struct InteractionEventStr event;
     struct ParameterStr parameters;
@@ -207,17 +204,13 @@ void BondTime(struct AtomStr *bond_i, struct ThreadStr *thisThread) {
         TRANSFER_VECTOR(parameters.speed_j,    bond_j->dynamic->velocity);
         CalculateParameters(bond_i, bond_j, &parameters);
         
-#ifdef DEBUG_IT
-        //--------------
-        //debug: if bonds were too long or too short
-        check = parameters.r_2;
-        if (check - parameters.longlimit2 > ZERO && (codeNum == 1 || (codeNum == 2 && thisThread->tid == 0))) {
-            printf("!!ERROR!!: long-error  %4i:%4i   (%lf) %s:%i\n", targetAtom_i, targetAtom_j, check - parameters.longlimit2, __FILE__, __LINE__);
-        } else if (parameters.shortlimit2 - check > ZERO && (codeNum == 1 || (codeNum == 2 && thisThread->tid == 0))) {
-            printf("!!ERROR!!: short-error %4i:%4i   (%lf) %s:%i\n", targetAtom_i, targetAtom_j, parameters.shortlimit2 - check, __FILE__, __LINE__);
+        if (unlikely(parameters.r_2 - parameters.longlimit2 > ZERO && (codeNum == 1 || (codeNum == 2 && thisThread->tid == 0)))) {
+            printf("!!ERROR!!: long-error  %4i:%4i   (%lf) %s:%i\n", targetAtom_i, targetAtom_j,
+                   parameters.r_2 - parameters.longlimit2, __FILE__, __LINE__);
+        } else if (unlikely(parameters.shortlimit2 - parameters.r_2 > ZERO && (codeNum == 1 || (codeNum == 2 && thisThread->tid == 0)))) {
+            printf("!!ERROR!!: short-error %4i:%4i   (%lf) %s:%i\n", targetAtom_i, targetAtom_j,
+                   parameters.shortlimit2 - parameters.r_2, __FILE__, __LINE__);
         }
-        //--------------
-#endif
         
         if (parameters.b_ij < 0 && CalculateDisc(&parameters) > 0) {
             
@@ -235,11 +228,9 @@ void BondTime(struct AtomStr *bond_i, struct ThreadStr *thisThread) {
         
         event.time = CalculateTime(&parameters);
 
-#ifdef DEBUG_IT
-        if (event.time < 0 && (codeNum == 1 || (codeNum == 2 && thisThread->tid == 0))) {
+        if (unlikely(event.time < 0 && (codeNum == 1 || (codeNum == 2 && thisThread->tid == 0)))) {
             printf("!!ERROR!!: bond time is less than zero! %i %i %s:%i\n", targetAtom_i, targetAtom_j, __FILE__, __LINE__);
         }
-#endif
         
         JobAssign(bond_i, bond_j, &event, Bond_Event);
         n++;
@@ -326,11 +317,9 @@ void HBTime(struct AtomStr *HB_i, struct ThreadStr *thisThread) {
         
         event.time = CalculateTime(&parameters);
         
-#ifdef DEBUG_IT
-        if (event.time < 0 && (thisThread->finishWork == 1 || (codeNum == 2 && thisThread->getWork == 0))) {
+        if (unlikely(event.time < 0 && (thisThread->finishWork == 1 || (codeNum == 2 && thisThread->getWork == 0)))) {
             printf("!!ERROR!!: HB time is less than zero!\n");
         }
-#endif
         
         JobAssign(HB_i, HB_j, &event, HB_Event);
         
@@ -400,11 +389,9 @@ void HBTime(struct AtomStr *HB_i, struct ThreadStr *thisThread) {
                     
                     event.time = CalculateTime(&parameters);
                     
-#ifdef DEBUG_IT
-                    if (event.time < 0) {
+                    if (unlikely(event.time < 0)) {
                         printf("!!ERROR!!: HB time is less than zero!\n");
                     }
-#endif
                     
                     JobAssign(HB_i, HB_j, &event, HB_Event);
                 } //if (absvalue_vector(r_HB_ij[0])<=calibratedcutoffr)
@@ -496,12 +483,9 @@ void HBNeighborTime(struct AtomStr *neighbor_i, struct ThreadStr *thisThread) {
         }
         
         event.time = CalculateTime(&parameters);
-        
-#ifdef DEBUG_IT
-        if (event.time < 0) {
+        if (unlikely(event.time < 0)) {
             printf("!!ERROR!!: HB neighbor time is less than zero! %s:%i\n", __FILE__, __LINE__);
         }
-#endif
         
         if (JobAssign(neighbor_i, neighbor_j, &event, HBNe_Event)) {
             neighbor_i->dynamic->HBNeighbor.partnerNum = n;
@@ -598,12 +582,6 @@ ReCal:
         parameters.v_2  = DOT_PROD(parameters.v_ij, parameters.v_ij);
         distance2 = boxSize[2] * boxSize[2] * 0.25 + parameters.r_2 - boxSize[2] * sqrt(parameters.r_2);
         
-#ifdef DEBUG_IT
-        if (frame == 427315) {
-            printf("");
-        }
-#endif
-        
         parameters.coreorShell = FindPair(targetAtom, thisWall, "collision",
                                           -1 * parameters.b_ij, distance2,
                                           &parameters.shortlimit2, &parameters.longlimit2,
@@ -663,12 +641,9 @@ ReCal:
         }
         
         event.time = CalculateTime(&parameters);
-        
-#ifdef DEBUG_IT
-        if (event.time < 0) {
+        if (unlikely(event.time < 0)) {
             printf("!!ERROR!!: wall time is less than zero, atom #%i! %s:%i\n", atomNum, __FILE__, __LINE__);
         }
-#endif
         
         JobAssign(targetAtom, NULL, &event, Wall_Event);
     }
@@ -684,12 +659,6 @@ void ObstTime(struct AtomStr *targetAtom) {
     struct InteractionEventStr event;
     
     TRANSFER_VECTOR(boxSize, boxDimension);
-    
-#ifdef DEBUG_IT
-    if (atomNum == 114) {
-        printf("");
-    }
-#endif
     
     for (int n = 0; n < obstObj.num; n ++) {
         InitializeEvent(&event);
@@ -760,13 +729,10 @@ void ObstTime(struct AtomStr *targetAtom) {
             }
             
             event.time = CalculateTime(&parameters);
-            
-#ifdef DEBUG_IT
-            if (event.time < 0) {
+            if (unlikely(event.time < 0)) {
                 printf("!!ERROR!!: wall time is less than zero, atom #%i! %s:%i\n", atomNum, __FILE__, __LINE__);
                 exit(EXIT_FAILURE);
             }
-#endif
             
             //at the next collision, the target atom would have been in the holes,
             //then the current prediction should be invalid
@@ -815,12 +781,6 @@ void TunnelTime(struct AtomStr *targetAtom) {
     parameters.b_ij = DOT_PROD(parameters.r_ij, parameters.v_ij);
     parameters.v_2  = DOT_PROD(parameters.v_ij, parameters.v_ij);
     
-#ifdef DEBUG_IT
-    if (frame == 331699) {
-        printf("");
-    }
-#endif
-    
     if (parameters.r_2 > radius2 + distanceShift2 - 2 * sqrt(radius2 * distanceShift2) + ZERO) {
         return; //currently outside of the tunnel
     }
@@ -832,8 +792,8 @@ void TunnelTime(struct AtomStr *targetAtom) {
                                       &parameters.lowerPotential, &parameters.upperPotential,
                                       &tmpDouble, NULL, 0);
     
-    if (parameters.lowerPotential == 0 &&
-        parameters.upperPotential == 0) {
+    if (unlikely(parameters.lowerPotential == 0 &&
+                 parameters.upperPotential == 0)) {
         printf("!!ERROR!!: atom #%i is outside of the wall! %s:%i\n", atomNum, __FILE__, __LINE__);
         exit(EXIT_FAILURE);
     }
@@ -871,11 +831,9 @@ void TunnelTime(struct AtomStr *targetAtom) {
         return;
     }
     
-#ifdef DEBUG_IT
-    if (event.time < 0) {
+    if (unlikely(event.time < 0)) {
         printf("!!ERROR!!: wall time is less than zero, atom #%i! %s:%i\n", atomNum, __FILE__, __LINE__);
     }
-#endif
     
     JobAssign(targetAtom, NULL, &event, Tunl_Event);
     
@@ -918,12 +876,6 @@ void ChargeTime(struct AtomStr *targetAtom) {
         parameters.b_ij = DOT_PROD(parameters.r_ij, parameters.v_ij);
         parameters.v_2  = DOT_PROD(parameters.v_ij, parameters.v_ij);
         
-#ifdef DEBUG_IT
-        if (frame == 24076) {
-            printf("");
-        }
-#endif
-        
         gapNum = sqrt(parameters.r_2) / flow.charge.gap[chargeNum];
         gap2 = flow.charge.gap[chargeNum] * flow.charge.gap[chargeNum];
         distance2 = gapNum * gapNum * gap2;
@@ -957,12 +909,9 @@ void ChargeTime(struct AtomStr *targetAtom) {
         }
         
         event.time = CalculateTime(&parameters);
-        
-#ifdef DEBUG_IT
-        if (event.time < 0) {
+        if (unlikely(event.time < 0)) {
             printf("!!ERROR!!: charge interaction time is less than zero! %i  %i\n", targetAtom->property->num, chargeNum); //for debug and error check
         }
-#endif
         
         if (JobAssign(targetAtom, NULL, &event, Chrg_Event))
             targetAtom->dynamic->event.partner = -100 * chargeNum;

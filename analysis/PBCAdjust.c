@@ -14,6 +14,7 @@ void SaveGRO(FILE *saveFile);
 void AdjustPBC(int id)
 {
     int dim = 3, step = 1;
+    long frameCount, totalFrame;
     double gap[4];
     char directory[1024], buffer[1024];
     FILE *positionInput;
@@ -45,7 +46,8 @@ void AdjustPBC(int id)
                 dim = 1;
         }
         
-        for (int frameCount = 0; frameCount < sectInfo[sectNum].frameCount; frameCount ++) {
+        totalFrame = (sectInfo[sectNum].oldTime + sectInfo[sectNum].frameCount) / sectInfo[sectNum].outputRate;
+        for (frameCount = sectInfo[sectNum].oldTime / sectInfo[sectNum].outputRate; frameCount < totalFrame; frameCount ++) {
             if (ReadGro(positionInput)) break;
             
             PrintProcess(frameCount);

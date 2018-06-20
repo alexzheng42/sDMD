@@ -9,26 +9,11 @@
 #include "DMD.h"
 
 void RemovePBC(double **coor);
-void NodePick(struct EventListStr *targetNode, int *nth);
-void NodeCheck(struct EventListStr *targetNode, int *num);
 
 
-void TimeForward(double time, char *type, struct ThreadStr *thisThread) {
-    
-    if (strncmp(type, "atom", 1) == 0) {
-        for (int i = 1; i <= atomnum; ++i) {
-            thisThread->raw[i]->dynamic->event.time -= time;
-        }
-    } else if (strncmp(type, "partial", 2) == 0) {
-        list *atomList = &thisThread->atomList;
-        listElem *elem = listFirst(atomList);
-        for (int n = 1; n <= atomList->num_members; n ++) {
-            ((struct AtomStr *)elem->obj)->dynamic->event.time -= time;
-            elem = listNext(atomList, elem);
-        }
-    } else {
-        printf("TimeForward argument is not available!\n");
-        exit(EXIT_FAILURE);
+void TimeForward(double time, struct ThreadStr *thisThread) {
+    for (int i = 1; i <= atomnum; ++i) {
+        thisThread->raw[i]->dynamic->event.time -= time;
     }
 }
 
@@ -91,11 +76,9 @@ int FindPair (struct AtomStr *atom1, struct AtomStr *atom2, char *interactionTyp
         while (thisConstr->connection != atom2->property->num) {
             thisConstr = thisConstr->next;
             
-#ifdef DEBUG_IT
-            if (thisConstr == NULL) {
+            if (unlikely(thisConstr == NULL)) {
                 printf("!!ERROR!!: cannot find the atom of constraint connection atom #%i for atom #%i! %s:%i\n", atom1->property->num, atom2->property->num, __FILE__, __LINE__);
             }
-#endif
         }
         
     } else if (strncmp(interactionType, "HB", 1)==0) { //don't need to assign potential here
@@ -126,12 +109,10 @@ int FindPair (struct AtomStr *atom1, struct AtomStr *atom2, char *interactionTyp
     int flag = (thisConstr->step == NULL);
     struct StepPotenStr *thisStep = thisConstr->step;
     
-#ifdef DEBUG_IT
-    if (thisConstr->dmin == 0) {
+    if (unlikely(thisConstr->dmin == 0)) {
         printf("!!ERROR!!: the potential pair is invalid! %s:%i\n", __FILE__, __LINE__);
         exit(EXIT_FAILURE);
     }
-#endif
     
     if (distance2 < thisConstr->dmin - ZERO) {
         
@@ -141,19 +122,17 @@ int FindPair (struct AtomStr *atom1, struct AtomStr *atom2, char *interactionTyp
         *lowerPotential = 0;
         *upperPotential = 0;
         
-#ifdef DEBUG_IT
-        if (!(strcmp(interactionType, "neighbor") == 0 && atom2->dynamic->HB.bondConnection == 0) &&
-            !(strcmp(interactionType, "HB") == 0 && atom1->dynamic->HB.bondConnection == 0) &&
-            !(strcmp(wallDyn.mark, "no")) &&
-            !tunlObj.mark &&
-            !(codeNum > 1)) {
+        if (unlikely(!(strcmp(interactionType, "neighbor") == 0 && atom2->dynamic->HB.bondConnection == 0) &&
+                     !(strcmp(interactionType, "HB") == 0 && atom1->dynamic->HB.bondConnection == 0) &&
+                     !(strcmp(wallDyn.mark, "no")) &&
+                     !tunlObj.mark &&
+                     !(codeNum > 1))) {
             printf("!WARNING!: the distance between atom %2i(%2i%2s) and %2i(%2i%2s) is too small! %.4lf\n",
                    atom1->property->num, atom1->property->sequence.aminoacidNum, atom1->property->name,
                    atom2->property->num, atom2->property->sequence.aminoacidNum, atom2->property->name,
                    distance2 - thisConstr->dmin);
             printf("!WARNING!: pair type: %s: %s:%i\n", interactionType, __FILE__, __LINE__);
         }
-#endif
         return coreorShell;
     }
     
@@ -187,15 +166,13 @@ int FindPair (struct AtomStr *atom1, struct AtomStr *atom2, char *interactionTyp
         thisStep = thisStep->next;
     }
     
-#ifdef DEBUG_IT
-    if (strcmp(interactionType, "HB") == 0 && atom1->dynamic->HB.bondConnection > 0) {
+    if (unlikely(strcmp(interactionType, "HB") == 0 && atom1->dynamic->HB.bondConnection > 0)) {
         printf("!WARNING!: HB length between atom %i and %i is too large, %lf! %s:%i\n",
                atom1->property->sequence.atomNum,
                atom2->property->sequence.atomNum,
                sqrt(distance2 - *upperLimit),
                __FILE__, __LINE__);
     }
-#endif
     
     if (thisConstr->dmax > 0) {
         if (distance2 < thisConstr->dmax + ZERO) {
@@ -219,16 +196,14 @@ int FindPair (struct AtomStr *atom1, struct AtomStr *atom2, char *interactionTyp
             *lowerPotential=0;
             *upperPotential=0;
             
-#ifdef DEBUG_IT
-            if (!(strcmp(interactionType, "neighbor") == 0 && atom2->dynamic->HB.bondConnection == 0) &&
-                !(strcmp(interactionType, "HB") == 0 && atom1->dynamic->HB.bondConnection == 0)) {
+            if (unlikely(!(strcmp(interactionType, "neighbor") == 0 && atom2->dynamic->HB.bondConnection == 0) &&
+                         !(strcmp(interactionType, "HB") == 0 && atom1->dynamic->HB.bondConnection == 0))) {
                 printf("!WARNING!: the distance between atom %2i(%2i%2s) and %2i(%2i%2s) is too large! %.4lf\n",
                        atom1->property->num, atom1->property->sequence.aminoacidNum, atom1->property->name,
                        atom2->property->num, atom2->property->sequence.aminoacidNum, atom2->property->name,
                        distance2 - thisConstr->dmax);
                 printf("!WARNING!: pair type: %s: %s:%i\n", interactionType, __FILE__, __LINE__);
             }
-#endif
         }
     } else {
         
@@ -313,222 +288,6 @@ struct ConstraintStr *RightPair(int type1, int type2, int flag) {
 }
 
 
-void SchedulingRefresh(struct ThreadStr *thisThread) {
-    int i, done;
-    struct EventListStr *tmp;
-    
-    thisThread->raw[0]->dynamic->event.time = 0;
-    thisThread->raw[0]->eventList->pre = NULL;
-    thisThread->raw[0]->eventList->right = thisThread->raw[1]->eventList;
-    thisThread->raw[0]->eventList->left = NULL;
-    
-    thisThread->raw[1]->eventList->pre = thisThread->raw[0]->eventList;
-    thisThread->raw[1]->eventList->right = NULL;
-    thisThread->raw[1]->eventList->left = NULL;
-    
-    for (i = 2; i <= atomnum; i++) {
-        tmp = thisThread->raw[1]->eventList;
-        done = 0;
-        while (done == 0) {
-            if (*thisThread->raw[i]->eventList->time - *tmp->time < 0) {
-                if (tmp->left == NULL) {
-                    tmp->left = thisThread->raw[i]->eventList;
-                    done = 1;
-                } else {
-                    tmp = tmp->left;
-                    done = 0;
-                }
-            } else {
-                if (tmp->right == NULL) {
-                    tmp->right = thisThread->raw[i]->eventList;
-                    done = 1;
-                } else {
-                    tmp = tmp->right;
-                    done = 0;
-                }
-            }
-        }
-        thisThread->raw[i]->eventList->left = NULL;
-        thisThread->raw[i]->eventList->right = NULL;
-        thisThread->raw[i]->eventList->pre = tmp;
-    }
-}
-
-void SchedulingAdd(int *atomList, struct ThreadStr* thisThread) { //atomList is the list of atoms that need to be re-scheduled
-    int done, num;
-    struct EventListStr *targetAtom = NULL;
-    struct EventListStr *tmp = NULL;
-    
-    num = 1;
-    while (atomList[num] != 0) {
-        
-        targetAtom = thisThread->raw[atomList[num]]->eventList;
-        tmp = thisThread->raw[0]->eventList;
-        
-        if (tmp->right == NULL) {
-            tmp->right = targetAtom;
-        } else {
-            tmp = tmp->right;
-            done = 0;
-            while (done == 0) {
-                if (*targetAtom->time - *tmp->time < 0) {
-                    if (tmp->left == NULL) {
-                        tmp->left = targetAtom;
-                        done = 1;
-                    } else {
-                        tmp = tmp->left;
-                        done = 0;
-                    }
-                } else {
-                    if (tmp->right == NULL) {
-                        tmp->right = targetAtom;
-                        done = 1;
-                    } else {
-                        tmp = tmp->right;
-                        done = 0;
-                    }
-                }
-            }
-            targetAtom->left = NULL;
-            targetAtom->right = NULL;
-            targetAtom->pre = tmp;
-        }
-        
-        num++;
-    }
-}
-
-
-void SchedulingDelete(int *atomList, struct ThreadStr* thisThread) {
-    int num;
-    struct EventListStr *switchnode = NULL;
-    struct EventListStr *previousnode = NULL;
-    struct EventListStr *targetAtom = NULL;
-    
-    num = 1;
-    while (atomList[num] != 0) {
-        
-        targetAtom = thisThread->raw[atomList[num]]->eventList;
-        
-        if (targetAtom->pre == NULL && thisThread->raw[0]->eventList->right != targetAtom) {
-            num++;
-            continue;
-        }
-        
-        if (targetAtom->right == NULL) {
-            switchnode = targetAtom->left; //case(i)
-        } else {
-            if (targetAtom->left == NULL) {
-                switchnode = targetAtom->right; //case(ii)
-            } else {
-                if (targetAtom->right->left == NULL) {
-                    switchnode = targetAtom->right; //case(iii)
-                } else {
-                    switchnode = targetAtom->right->left; //case(iv)
-                    while (switchnode->left) {
-                        switchnode = switchnode->left;
-                    }
-                    
-                    if (switchnode->right) {
-                        switchnode->right->pre = switchnode->pre;   //relink
-                    }
-                    switchnode->pre->left = switchnode->right;
-                    if (targetAtom->right) {
-                        targetAtom->right->pre = switchnode;
-                    }
-                    switchnode->right = targetAtom->right;
-                }
-                targetAtom->left->pre = switchnode;
-                switchnode->left = targetAtom->left;
-            }
-        }
-        
-        previousnode = targetAtom->pre;
-        if (switchnode) {
-            switchnode->pre = previousnode;
-        }
-        
-        if (previousnode->left == targetAtom) {
-            previousnode->left = switchnode;
-        } else {
-            previousnode->right = switchnode;
-        }
-        
-        targetAtom->pre = NULL;
-        targetAtom->right = NULL;
-        targetAtom->left = NULL;
-        
-        num++;
-    }
-}
-
-
-int SchedulingNextEvent(struct ThreadStr* thisThread) {
-    struct EventListStr *nexteventnode = thisThread->raw[0]->eventList->right;
-    
-    while (nexteventnode->left != NULL) {
-        nexteventnode = nexteventnode->left;
-    }
-    
-    return *nexteventnode->atomNum;
-}
-
-
-void FindNode(int num) {
-    nthCheck = 0;
-    NodePick(atom[0].eventList->right, &num);
-}
-
-void NodePick(struct EventListStr *targetNode, int *nth) {
-    int flag = 0;
-    
-    if (targetNode == NULL) {
-        return;
-    }
-    
-    NodePick(targetNode->left, nth);
-    if (*nth == 0) {
-        return;
-    }
-    
-    if (*targetNode->pre->time != *targetNode->time) {
-        if (codeNum == 2) {
-            if (preCalList[*targetNode->atomNum].eventStatus == 1 ||
-                preCalList[*targetNode->atomNum].eventStatus == 2) {
-                flag = 1;
-            }
-        } else if (codeNum == 3) {
-            for (int i = 0; i < threadNum; i ++) {
-                if (thrInfo[i].threadRenewList[1] == *targetNode->atomNum ||
-                    thrInfo[i].threadRenewList[2] == *targetNode->atomNum) {
-                    flag = 1;
-                    break;
-                }
-            }
-        }
-        
-        nthCheck ++;
-    } else {
-        flag = 1;
-    }
-    
-    if (flag == 0) {
-        *nth = *nth - 1;
-        if (*nth == 0) {
-            nthNode = *targetNode->atomNum;
-            return;
-        }
-    }
-    
-    NodePick(targetNode->right, nth);
-    if (*nth == 0) {
-        return;
-    }
-    
-    return;
-}
-
-
 void PrintCellList(struct ThreadStr *thisThread) {
     int num;
     
@@ -545,32 +304,6 @@ void PrintCellList(struct ThreadStr *thisThread) {
             printf("\n");
         }
     }
-}
-
-
-void PrintSeq(int num) {
-    NodeCheck(atom[0].eventList->right, &num);
-}
-
-
-//in debugger: p NodeCheck(atom[0].eventList->right, 5)
-void NodeCheck(struct EventListStr *targetNode, int *num) {
-    if (targetNode == NULL) {
-        return;
-    }
-    
-    NodeCheck(targetNode->left, num);
-    if (*num == 0)
-        return;
-    
-    printf("node %4i, pre: %4i, left: %4i, right: %4i, time: %.4lf\n", *targetNode->atomNum, *targetNode->pre->atomNum, ((targetNode->left == NULL) ? 0 : *targetNode->left->atomNum), ((targetNode->right == NULL) ? 0 : *targetNode->right->atomNum), *targetNode->time);
-    *num = *num - 1;
-    
-    NodeCheck(targetNode->right, num);
-    if (*num == 0)
-        return;
-    
-    return;
 }
 
 
@@ -715,10 +448,10 @@ void SDEnergyMin(long int stepNum, struct ThreadStr *thisThread) {
     double direction[4];
     double length2;
     char directory[100];
-    FILE *outputFile;
+    struct FileStr outputFile;
     
     sprintf(directory, "%s/MiniEnergy%s.gro", datadir, REMDInfo.REMD_ExtraName);
-    outputFile = fopen(directory, "w");
+    outputFile.file = fopen(directory, "w");
     
     printf("\nMinimizing the potential energy:\n");
     while (totalE > INFINIT) {
@@ -821,21 +554,7 @@ void SDEnergyMin(long int stepNum, struct ThreadStr *thisThread) {
         }
         
         if (step % 100 == 0) {
-            fprintf(outputFile, "model\n");
-            fprintf(outputFile, "%5i\n", atomnum);
-            
-            for (int i = 1; i <= atomnum; i++) {
-                fprintf(outputFile, "%5i%-5s%5s%5i%8.3f%8.3f%8.3f\n",
-                        thisThread->raw[i]->property->sequence.aminoacidNum,
-                        thisThread->raw[i]->property->nameOfAA,
-                        thisThread->raw[i]->property->name,
-                        i,
-                        thisThread->raw[i]->dynamic->coordinate[1] / 10,
-                        thisThread->raw[i]->dynamic->coordinate[2] / 10,
-                        thisThread->raw[i]->dynamic->coordinate[3] / 10);
-            }
-            
-            fprintf(outputFile, "%10.5f%10.5f%10.5f\n", boxDimension[1] / 10, boxDimension[2] / 10, boxDimension[3] / 10);
+            SaveGRO(&outputFile);
         }
         
         if (step > stepNum) {
@@ -843,22 +562,9 @@ void SDEnergyMin(long int stepNum, struct ThreadStr *thisThread) {
         }
     }
     
+    SaveGRO(&outputFile);
+    fclose(outputFile.file);
     printf("Done!\n\n");
-    fclose(outputFile);
-}
-
-
-void TimeBenchmark(char * type, char * functionName, int num) {
-    if (strcmp(type, "begin") == 0) {
-        begin[num] = clock();
-    } else if (strcmp(type, "end") == 0) {
-        end[num] = clock();
-        timeSpend = (double) (end[num] - begin[num]) / CLOCKS_PER_SEC;
-        printf("Time cost for \"%s\": %10.8lf s\n", functionName, timeSpend);
-    } else {
-        printf("!ERROR!: Type does not match!\n");
-        exit(EXIT_FAILURE);
-    }
 }
 
 
@@ -868,9 +574,7 @@ void AtomDataCpy(struct AtomStr * dest, struct AtomStr * sour, int flag) {
         dest->property = sour->property;
     }
     
-    if (flag > 1) {
-        memcpy(dest->eventList, sour->eventList, sizeof(struct EventListStr));
-    }
+    return;
 }
 
 
@@ -904,20 +608,17 @@ void RenewCellList(struct AtomStr *newTargetAtom, struct AtomStr *oldTargetAtom)
     
     nextAtom = oldCellIndex + atomnum;
     
-#ifdef DEBUG_IT
-    if (sourCellList[nextAtom] == 0) {
+    if (unlikely(sourCellList[nextAtom] == 0)) {
         printf("!!ERROR!!: link list has errors!\n");
     }
-#endif
     
     //remove the target atom at the old position
     while (sourCellList[nextAtom] != targetNum) {
         nextAtom = sourCellList[nextAtom];
-#ifdef DEBUG_IT
-        if (nextAtom == 0) {
+        
+        if (unlikely(nextAtom == 0)) {
             printf("!!ERROR!!: link list has errors!\n");
         }
-#endif
     }
     sourCellList[nextAtom] = sourCellList[targetNum];
     
@@ -1016,13 +717,6 @@ void ListRefresh(int targetatom, int * targetlist, int start, int end) {
 }
 
 
-void DebugPause(int frameNum) {
-    if (frame == frameNum) {
-        printf("There may be something wrong here! Frame = %li\n", frame);
-    }
-}
-
-
 double RandomVelocity(double mass) {
     double speed;
     double variance, mean;
@@ -1073,11 +767,10 @@ double CalKinetE(struct ThreadStr *thisThread) {
             }
         }
     }
-#ifdef DEBUG_IT
-    if (isnan(TKE)) {
+
+    if (unlikely(isnan(TKE))) {
         printf("!!ERROR!!: temperature value is not valid!\n");
     }
-#endif
     
     return TKE;
 }
@@ -1245,7 +938,7 @@ void PBCShift (struct AtomStr *atom_i, struct AtomStr *atom_j, double *shift) {
 }
 
 //print the atom list in the surrounding cells
-void PrintEventList(list *atomList) {
+void PrintList(list *atomList) {
     listElem *elem = listFirst(atomList);
     struct AtomStr *obj = NULL;
     
@@ -1371,12 +1064,6 @@ int EnterTunnel(double time, struct AtomStr *targetAtom) {
     
     distance2 = radius2 + distanceShift2 - 2 * sqrt(radius2 * distanceShift2);
     if (r_2 <= distance2) {
-#ifdef DEBUG_IT
-        if (targetAtom->property->num == 114 && currenttime > 20) {
-            printf("");
-        }
-#endif
-        
         return 1;
     }
     

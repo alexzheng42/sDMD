@@ -1,7 +1,8 @@
 CC = gcc
 CFLAGS = -I. -O2 -std=c99
 DEPS = List.h DMD.h
-OBJ = DataSave.o \
+OBJ = CBT.o \
+      DataSave.o \
       DMD.o \
       Events.o \
       Initialization.o \
@@ -10,7 +11,6 @@ OBJ = DataSave.o \
       TimePrediction.o \
       ToolFunctions.o \
       List.o \
-      FAThread.o \
       MSThread.o \
       SGThread.o \
       REMD.o

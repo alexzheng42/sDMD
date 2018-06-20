@@ -20,7 +20,7 @@ struct ConstraintStr *RightPair(int type1, int type2, int flag);
 
 void EnergyInfo(int id) {
     double TKE = 0, TPE = 0, TWE = 0, Temp;
-    long step = 0;
+    long step = 0, totalFrame;
     char directory[1024], buffer[1024];
     struct SectionStr *sect;
     FILE *TrjInputFile, *CntInputFile;
@@ -77,7 +77,8 @@ void EnergyInfo(int id) {
             exit(EXIT_FAILURE);
         }
         
-        for (step = 0; step < sectInfo[sectNum].frameCount; step ++) {
+        totalFrame = (sectInfo[sectNum].oldTime + sectInfo[sectNum].frameCount) / sectInfo[sectNum].outputRate;
+        for (step = sectInfo[sectNum].oldTime / sectInfo[sectNum].outputRate; step < totalFrame; step ++) {
             if (ReadGro(TrjInputFile) || ReadConnectionMap(CntInputFile)) break;
             
             PrintProcess(step);
@@ -91,11 +92,11 @@ void EnergyInfo(int id) {
             }
             Temp = CalTemp(TKE);
             
-            fprintf(KEOutputFile,   "%8.2lf%10.4lf\n", step * sect->outputRate + sect->oldTime, TKE);
-            fprintf(PEOutputFile,   "%8.2lf%10.4lf\n", step * sect->outputRate + sect->oldTime, TPE + TWE);
-            fprintf(WEOutputFile,   "%8.2lf%10.4lf\n", step * sect->outputRate + sect->oldTime, TWE);
-            fprintf(TolEOutputFile, "%8.2lf%10.4lf\n", step * sect->outputRate + sect->oldTime, TKE + TPE + TWE);
-            fprintf(TempOutputFile, "%8.2lf%10.4lf\n", step * sect->outputRate + sect->oldTime, Temp);
+            fprintf(KEOutputFile,   "%15.2lf %15.4lf\n", step * sect->outputRate, TKE);
+            fprintf(PEOutputFile,   "%15.2lf %15.4lf\n", step * sect->outputRate, TPE + TWE);
+            fprintf(WEOutputFile,   "%15.2lf %15.4lf\n", step * sect->outputRate, TWE);
+            fprintf(TolEOutputFile, "%15.2lf %15.4lf\n", step * sect->outputRate, TKE + TPE + TWE);
+            fprintf(TempOutputFile, "%15.2lf %15.4lf\n", step * sect->outputRate, Temp);
         }
         fclose(TrjInputFile);
         fclose(CntInputFile);

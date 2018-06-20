@@ -74,9 +74,7 @@ int DoEvent(struct ThreadStr *thisThread) {
         case Invd_Event:
         case Cacl_Event:
         case  TBD_Event:
-#ifdef DEBUG_IT
             printf("!!ERROR!!: do_event switch number has something wrong! %s:%i\n", __FILE__, __LINE__);
-#endif
             exit(EXIT_FAILURE);
             
         default:
@@ -96,7 +94,7 @@ void LinkList(char * type, struct AtomStr *targetAtom, struct ThreadStr *thisThr
     
     POINT_TO_STRUCT(boxsize, boxDimension);
     
-    if (strncmp(type, "full", 1) == 0 && targetAtom == NULL) {
+    if (unlikely(strncmp(type, "full", 1) == 0 && targetAtom == NULL)) {
         
         //-------------------------------------------
         //assign a group of memory to store the link list
@@ -135,13 +133,13 @@ void LinkList(char * type, struct AtomStr *targetAtom, struct ThreadStr *thisThr
         }
         //-------------------------------------------
         
-    } else if (strncmp(type, "part", 1) == 0 && targetAtom != NULL) {
+    } else if (likely(strncmp(type, "part", 1) == 0 && targetAtom != NULL)) {
         
         POINT_TO_STRUCT(position, targetAtom->dynamic->coordinate);
         for (n = 1; n <= 3; n++) {
             targetAtom->dynamic->cellIndex[n] = position[n] / cellsize[n];
             
-            if (targetAtom->dynamic->cellIndex[n] == cellnum[n]) {
+            if (unlikely(targetAtom->dynamic->cellIndex[n] == cellnum[n])) {
                 targetAtom->dynamic->cellIndex[n]--;
             }
         }
@@ -163,7 +161,7 @@ void PBC(char * type, struct AtomStr *targetAtom, struct ThreadStr *thisThread) 
             dim = 1;
     }
     
-    if (strncmp(type, "full", 1) == 0 && targetAtom == NULL) {
+    if (unlikely(strncmp(type, "full", 1) == 0 && targetAtom == NULL)) {
         
         for (int i = 1; i <= atomnum; i++) {
             for (int n = 1; n <= dim; n += step) {
@@ -175,12 +173,12 @@ void PBC(char * type, struct AtomStr *targetAtom, struct ThreadStr *thisThread) 
             }
         }
         
-    } else if (strncmp(type, "part", 1) == 0 && targetAtom != NULL) {
+    } else if (likely(strncmp(type, "part", 1) == 0 && targetAtom != NULL)) {
         
         for (int n = 1; n <= dim; n += step) {            
-            if (targetAtom->dynamic->coordinate[n] >= boxDimension[n]) { //coordinate range [0,box size)
+            if (unlikely(targetAtom->dynamic->coordinate[n] >= boxDimension[n])) { //coordinate range [0,box size)
                 targetAtom->dynamic->coordinate[n] -= boxDimension[n];
-            } else if (targetAtom->dynamic->coordinate[n] < 0) {
+            } else if (unlikely(targetAtom->dynamic->coordinate[n] < 0)) {
                 targetAtom->dynamic->coordinate[n] += boxDimension[n];
             }
         }
@@ -194,20 +192,15 @@ void PBC(char * type, struct AtomStr *targetAtom, struct ThreadStr *thisThread) 
 
 
 void PBCandCrossCellEvent(struct AtomStr *targetAtom, struct ThreadStr *thisThread) {
-    int n;
-#ifdef DEBUG_IT
-    int check[4];
-    int flag = 0;
-#endif
+    int n, original[4];
     
-#ifdef DEBUG_IT
-    for (n = 1; n <= 3; n++) {
-        check[n] = targetAtom->dynamic->cellIndex[n];
-    }
-#endif
+    original[1] = targetAtom->dynamic->cellIndex[1];
+    original[2] = targetAtom->dynamic->cellIndex[2];
+    original[3] = targetAtom->dynamic->cellIndex[3];
     
     for (n = 1; n <= 3; n++) {
-        if (targetAtom->dynamic->cellIndex[n] == 0 || targetAtom->dynamic->cellIndex[n] == cellnum[n] - 1) {
+        if (unlikely(targetAtom->dynamic->cellIndex[n] == 0 ||
+            targetAtom->dynamic->cellIndex[n] == cellnum[n] - 1)) {
             PBC("part", targetAtom, thisThread);
             break;
         }
@@ -215,16 +208,14 @@ void PBCandCrossCellEvent(struct AtomStr *targetAtom, struct ThreadStr *thisThre
     
     LinkList("part", targetAtom, thisThread);
     
-#ifdef DEBUG_IT
-    for (n = 1; n <= 3; n++) {
-        if (check[n] == targetAtom->dynamic->cellIndex[n]) {
-            flag++;
-        }
-    }
-    if (flag == 3 && targetAtom->dynamic->event.time >= ZERO * 100) {
+    if (unlikely(original[1] == targetAtom->dynamic->cellIndex[1] &&
+                 original[2] == targetAtom->dynamic->cellIndex[2] &&
+                 original[3] == targetAtom->dynamic->cellIndex[3] &&
+                 targetAtom->dynamic->event.time >= ZERO * 100)) {
         printf("check PCC calculation! atom: %i time: %lf\n", targetAtom->property->sequence.atomNum, targetAtom->dynamic->event.time);
     }
-#endif
+    
+    return;
 }
 
 
@@ -247,39 +238,15 @@ int HBEvent(struct AtomStr **atomLibrary, struct AtomStr *HB_i, struct AtomStr *
         temp = ++HB_i->dynamic->HBNeighbor.neighborStatus;
         HB_i->dynamic->HBNeighbor.neighborPartner[temp] = HB_j->dynamic->HB.neighbor;
         
-#ifdef DEBUG_IT
-        if (temp > 4) {
-            printf("!!ERROR!!: neighbor status has something worng!\n");
-        }
-#endif
-        
         temp = ++HB_j->dynamic->HBNeighbor.neighborStatus;
         HB_j->dynamic->HBNeighbor.neighborPartner[temp] = HB_i->dynamic->HB.neighbor;
-        
-#ifdef DEBUG_IT
-        if (temp > 4) {
-            printf("!!ERROR!!: neighbor status has something worng!\n");
-        }
-#endif
         
         //for neighbors
         temp = ++neighbor_i->dynamic->HBNeighbor.neighborStatus;
         neighbor_i->dynamic->HBNeighbor.neighborPartner[temp] = targetAtom_j;
-        
-#ifdef DEBUG_IT
-        if (temp > 4) {
-            printf("!!ERROR!!: neighbor status has something worng!\n");
-        }
-#endif
-        
+    
         temp = ++neighbor_j->dynamic->HBNeighbor.neighborStatus;
         neighbor_j->dynamic->HBNeighbor.neighborPartner[temp] = targetAtom_i;
-        
-#ifdef DEBUG_IT
-        if (temp > 4) {
-            printf("!!ERROR!!: neighbor status has something worng!\n");
-        }
-#endif
         
     } else if (HB_i->dynamic->HB.interactionType == HBBreak) {
         
@@ -325,7 +292,7 @@ void ThermostatEvent(struct AtomStr *targetAtom, int threadID) {
                         flow.force.a[targetAtom->property->num][n] *
                         (currenttime - flow.force.timeRec[targetAtom->property->num]);
             
-            if (speed[n] == 0) {
+            if (unlikely(speed[n] == 0)) {
                 goto regenerate;
             }
         }
@@ -341,7 +308,6 @@ void WallEvent(struct AtomStr *targetAtom) {
     double v_ij[4];
     double b_ij, d_ij2, r_ij[4], term[4];
     double phi, potential, reducedMass;
-    double checkspeed[4];
     double *speed_i = NULL, *speed_j = NULL;
     double position_i[4] = {0}, position_j[4] = {0};
     struct AtomStr *thisWall = NULL;
@@ -402,17 +368,15 @@ void WallEvent(struct AtomStr *targetAtom) {
     
     phi = (-1 * b_ij + s_vel * sqrt(b_ij * b_ij - 2 * d_ij2 * potential / targetAtom->property->mass)) / d_ij2;
     
+    if (unlikely(isnan(phi))) {
+        printf("!!ERROR!!: phi is NaN! %s:%i\n", __FILE__, __LINE__);
+        exit(EXIT_FAILURE);
+    }
+    
     FACTOR_PROD(phi, r_ij, term);
     DOT_PLUS(speed_i, term, targetAtom->dynamic->velocity);
-    
-#ifdef DEBUG_IT
-    for (int n = 1; n <= 3; n++) {
-        checkspeed[n] = targetAtom->dynamic->velocity[n];
-        if (isnan(checkspeed[n])) {
-            printf("Speed calculation has something wrong! %s:%i\n", __FILE__, __LINE__);
-        }
-    }
-#endif
+
+    return;
 }
 
 
@@ -462,7 +426,6 @@ void ObstEvent(struct AtomStr *targetAtom) {
     double v_ij[4];
     double b_ij, d_ij2, r_ij[4], term[4];
     double phi, potential, reducedMass;
-    double checkspeed[4];
     double *speed_i = NULL, *speed_j = NULL;
     double position_i[4] = {0}, position_j[4] = {0};
     struct AtomStr *thisWall = &obstObj.obst[targetAtom->dynamic->event.partner / -10];
@@ -523,17 +486,15 @@ void ObstEvent(struct AtomStr *targetAtom) {
     
     phi = (-1 * b_ij + s_vel * sqrt(b_ij * b_ij - 2 * d_ij2 * potential / targetAtom->property->mass)) / d_ij2;
     
+    if (unlikely(isnan(phi))) {
+        printf("!!ERROR!!: phi is NaN! %s:%i\n", __FILE__, __LINE__);
+        exit(EXIT_FAILURE);
+    }
+    
     FACTOR_PROD(phi, r_ij, term);
     DOT_PLUS(speed_i, term, targetAtom->dynamic->velocity);
     
-#ifdef DEBUG_IT
-    for (int n = 1; n <= 3; n++) {
-        checkspeed[n] = targetAtom->dynamic->velocity[n];
-        if (isnan(checkspeed[n])) {
-            printf("Speed calculation has something wrong! %s:%i\n", __FILE__, __LINE__);
-        }
-    }
-#endif
+    return;
 }
 
 
@@ -542,7 +503,6 @@ void TunnelEvent(struct AtomStr *targetAtom) {
     double v_ij[4];
     double b_ij, d_ij2, r_ij[4], term[4];
     double phi, potential, reducedMass;
-    double checkspeed[4];
     double *speed_i = NULL, *speed_j = NULL;
     double position_i[4] = {0}, position_j[4] = {0};
     struct AtomStr *thisWall = &tunlObj.tunnel;
@@ -594,17 +554,15 @@ void TunnelEvent(struct AtomStr *targetAtom) {
     
     phi = (-1 * b_ij + s_vel * sqrt(b_ij * b_ij - 2 * d_ij2 * potential / targetAtom->property->mass)) / d_ij2;
     
+    if (unlikely(isnan(phi))) {
+        printf("!!ERROR!!: phi is NaN! %s:%i\n", __FILE__, __LINE__);
+        exit(EXIT_FAILURE);
+    }
+    
     FACTOR_PROD(phi, r_ij, term);
     DOT_PLUS(speed_i, term, targetAtom->dynamic->velocity);
     
-#ifdef DEBUG_IT
-    for (int n = 1; n <= 3; n++) {
-        checkspeed[n] = targetAtom->dynamic->velocity[n];
-        if (isnan(checkspeed[n])) {
-            printf("Speed calculation has something wrong! %s:%i\n", __FILE__, __LINE__);
-        }
-    }
-#endif
+    return;
 }
 
 
@@ -614,7 +572,6 @@ void ChargeEvent(struct AtomStr *targetAtom) {
     double v_ij[4];
     double b_ij, d_ij2, r_ij[4], term[4];
     double phi, potential, reducedMass;
-    double checkspeed[4];
     double *speed_i = NULL, *speed_j = NULL;
     double position_i[4] = {0}, position_j[4] = {0};
     
@@ -658,17 +615,15 @@ void ChargeEvent(struct AtomStr *targetAtom) {
     
     phi = (-1 * b_ij + s_vel * sqrt(b_ij * b_ij - 2 * d_ij2 * potential / targetAtom->property->mass)) / d_ij2;
     
+    if (unlikely(isnan(phi))) {
+        printf("!!ERROR!!: phi is NaN! %s:%i\n", __FILE__, __LINE__);
+        exit(EXIT_FAILURE);
+    }
+    
     FACTOR_PROD(phi, r_ij, term);
     DOT_PLUS(speed_i, term, targetAtom->dynamic->velocity);
     
-#ifdef DEBUG_IT
-    for (int n = 1; n <= 3; n++) {
-        checkspeed[n] = targetAtom->dynamic->velocity[n];
-        if (isnan(checkspeed[n])) {
-            printf("Speed calculation has something wrong! %s:%i\n", __FILE__, __LINE__);
-        }
-    }
-#endif
+    return;
 }
 
 void InteractionEvent (struct AtomStr *targetAtom, struct AtomStr *partner, struct AtomStr *HBNeighbor_i, struct AtomStr *HBNeighbor_j, struct ThreadStr* thisThread, list *atomList)
@@ -679,7 +634,6 @@ void InteractionEvent (struct AtomStr *targetAtom, struct AtomStr *partner, stru
     double term[4], temp;
     double phi, potential, reducedMass;
     double d_ij2;
-    double checkspeed[4];
     double *speed_i, *speed_j;
     double position_i[4], position_j[4];
     double neighborLowerPotential, neighborUpperPotential;
@@ -706,8 +660,8 @@ void InteractionEvent (struct AtomStr *targetAtom, struct AtomStr *partner, stru
     reducedMass = targetAtom->property->mass * partner->property->mass / (targetAtom->property->mass + partner->property->mass);
     potential = targetAtom->dynamic->event.potential;
     
-    if (targetAtom->dynamic->event.eventType == HB_Event && // HB event only
-        (targetAtom->dynamic->event.subEventType == TBDHBForm || targetAtom->dynamic->event.subEventType == TBDHBBrik)) { //may form or break HB
+    if (unlikely(targetAtom->dynamic->event.eventType    == HB_Event && // HB event only
+                (targetAtom->dynamic->event.subEventType == TBDHBForm || targetAtom->dynamic->event.subEventType == TBDHBBrik))) { //may form or break HB
         
         double position_neighbor_i[4];
         double position_neighbor_j[4];
@@ -874,27 +828,17 @@ void InteractionEvent (struct AtomStr *targetAtom, struct AtomStr *partner, stru
     phi = (-1 * b_ij + s_vel * sqrt((b_ij * b_ij - 2 * d_ij2 * potential / reducedMass))) /
     ((targetAtom->property->mass + partner->property->mass) * d_ij2);
     
+    if (unlikely(isnan(phi))) {
+        printf("!!ERROR!!: phi is NaN! %s:%i\n", __FILE__, __LINE__);
+        exit(EXIT_FAILURE);
+    }
+    
     FACTOR_PROD((partner->property->mass * phi), r_ij, term);
     DOT_PLUS(speed_i, term, targetAtom->dynamic->velocity);
     FACTOR_PROD((targetAtom->property->mass * phi), r_ij, term);
     DOT_MINUS(speed_j, term, partner->dynamic->velocity);
     
-#ifdef DEBUG_IT
-#ifdef DEBUGPRINTF
-    tmpDouble = potential;
-#endif
-    for (int n = 1; n <= 3; n++) {
-        checkspeed[n] = targetAtom->dynamic->velocity[n];
-        if (isnan(checkspeed[n])) {
-            printf("Speed calculation has something wrong! %s:%i\n", __FILE__, __LINE__);
-        }
-        checkspeed[n] = partner->dynamic->velocity[n];
-        if (isnan(checkspeed[n])) {
-            printf("Speed calculation has something wrong! %s:%i\n", __FILE__, __LINE__);
-        }
-    }
-#endif
-    
+    return;
 }
 
 

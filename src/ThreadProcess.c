@@ -27,8 +27,6 @@ int ThreadProcess(void) {
         SingleThread();
     } else if (codeNum == 2 && threadNum > 1) { //multiple threads - one master, one or more slaves
         MSThread();
-    } else if (codeNum == 3) { //multiple threads - two or more masters
-        FAThread();
     } else {
         printf("!!ERROR!!: the combination of sDMD method and thread number is invalid! %s:%i\n", __FILE__, __LINE__);
     }
@@ -46,10 +44,7 @@ struct ThreadStr* InitializeThread(int tid, struct AtomStr *atomLib) {
     struct ThreadStr *thisThread = (struct ThreadStr *)calloc(1, sizeof(struct ThreadStr));
 
     thisThread->oldTarget.dynamic = (struct DynamicStr *)calloc(1, sizeof(struct DynamicStr));
-    thisThread->oldTarget.eventList = (struct EventListStr *)calloc(1, sizeof(struct EventListStr));
-    
     thisThread->oldPartner.dynamic = (struct DynamicStr *)calloc(1, sizeof(struct DynamicStr));
-    thisThread->oldPartner.eventList = (struct EventListStr *)calloc(1, sizeof(struct EventListStr));
     
     thisThread->raw = (struct AtomStr **)calloc(atomnum + 1, sizeof(struct AtomStr *));
     thisThread->listPtr = (struct AtomStr **)calloc(atomnum + 1, sizeof(struct AtomStr *));
@@ -119,7 +114,7 @@ void FirstRun(struct ThreadStr *thisThread) {
     }
     //=================================================
     
-    SchedulingRefresh(thisThread); //generate a single-event binary tree for the coming events
+    CreateCBT(); //generate a single-event binary tree for the coming events
 }
 
 
@@ -137,12 +132,11 @@ int ProcessEvent(int *threadRenewList, struct ThreadStr *thisThread) {
     //if newPartner = NULL, it means in this event there is no partner associate with the target atom
     //then all the pointers related to "partner" will be NULL
     //we can also by checking if threadRenewList[2] > 0 to find if there would be a partner in this event
-#ifdef DEBUG_IT
-    if (!(newPartner == NULL && threadRenewList[2] == 0) &&
-        !(newPartner != NULL && threadRenewList[2] > 0)) {
+    if (unlikely(!(newPartner == NULL && threadRenewList[2] == 0) &&
+                 !(newPartner != NULL && threadRenewList[2] > 0))) {
         printf("!!ERROR!!: partner state is invalid! %s:%i\n", __FILE__, __LINE__);
     }
-#endif
+    
     hazardType = HazardCheck(oldTarget, (newPartner != NULL ? oldPartner : NULL),
                              thisThread->listPtr[oldTarget->dynamic->HB.neighbor],
                              (newPartner != NULL ? thisThread->listPtr[oldPartner->dynamic->HB.neighbor] : NULL),
@@ -151,7 +145,6 @@ int ProcessEvent(int *threadRenewList, struct ThreadStr *thisThread) {
     if (hazardType == 0) {
         timeIncr = thisThread->newTarget->dynamic->event.time;
         UpdateData(timeIncr, "partial", thisThread);
-        TimeForward(timeIncr, "partial", thisThread);
         
         oldTarget->dynamic->HB.interactionType = DoEvent(thisThread); //calculate the after-event velocities
         
@@ -198,17 +191,15 @@ void CommitEvent(struct AtomStr **destLibrary, struct AtomStr *newTargetAtom, st
                 if (CheckAlphaHB(HB_i, HB_j))
                     alphaHBformed ++;
                 
-#ifdef DEBUG_IT
-                if (connectionMap[atom_i][atom_j] & HB_CONNECT ||
-                    connectionMap[atom_j][atom_i] & HB_CONNECT ||
-                    connectionMap[atom_i][HB_j->dynamic->HB.neighbor] & NEIGHBOR_CONNECT ||
-                    connectionMap[HB_j->dynamic->HB.neighbor][atom_i] & NEIGHBOR_CONNECT ||
-                    connectionMap[atom_j][HB_i->dynamic->HB.neighbor] & NEIGHBOR_CONNECT ||
-                    connectionMap[HB_i->dynamic->HB.neighbor][atom_j] & NEIGHBOR_CONNECT) {
+                if (unlikely(connectionMap[atom_i][atom_j] & HB_CONNECT ||
+                             connectionMap[atom_j][atom_i] & HB_CONNECT ||
+                             connectionMap[atom_i][HB_j->dynamic->HB.neighbor] & NEIGHBOR_CONNECT ||
+                             connectionMap[HB_j->dynamic->HB.neighbor][atom_i] & NEIGHBOR_CONNECT ||
+                             connectionMap[atom_j][HB_i->dynamic->HB.neighbor] & NEIGHBOR_CONNECT ||
+                             connectionMap[HB_i->dynamic->HB.neighbor][atom_j] & NEIGHBOR_CONNECT)) {
                     printf("!!ERROR!!: HB connection map has something wrong! %s:%i\n", __FILE__, __LINE__);
                     exit(EXIT_FAILURE);
                 }
-#endif
                 
                 //adjust the connection map
                 connectionMap[atom_i][atom_j] ^= HB_CONNECT;
@@ -223,17 +214,15 @@ void CommitEvent(struct AtomStr **destLibrary, struct AtomStr *newTargetAtom, st
                 if (CheckAlphaHB(HB_i, HB_j))
                     alphaHBformed --;
                 
-#ifdef DEBUG_IT
-                if (!(connectionMap[atom_i][atom_j] & HB_CONNECT) ||
-                    !(connectionMap[atom_j][atom_i] & HB_CONNECT) ||
-                    !(connectionMap[atom_i][HB_j->dynamic->HB.neighbor] & NEIGHBOR_CONNECT) ||
-                    !(connectionMap[HB_j->dynamic->HB.neighbor][atom_i] & NEIGHBOR_CONNECT) ||
-                    !(connectionMap[atom_j][HB_i->dynamic->HB.neighbor] & NEIGHBOR_CONNECT) ||
-                    !(connectionMap[HB_i->dynamic->HB.neighbor][atom_j] & NEIGHBOR_CONNECT)) {
+                if (unlikely(!(connectionMap[atom_i][atom_j] & HB_CONNECT) ||
+                             !(connectionMap[atom_j][atom_i] & HB_CONNECT) ||
+                             !(connectionMap[atom_i][HB_j->dynamic->HB.neighbor] & NEIGHBOR_CONNECT) ||
+                             !(connectionMap[HB_j->dynamic->HB.neighbor][atom_i] & NEIGHBOR_CONNECT) ||
+                             !(connectionMap[atom_j][HB_i->dynamic->HB.neighbor] & NEIGHBOR_CONNECT) ||
+                             !(connectionMap[HB_i->dynamic->HB.neighbor][atom_j] & NEIGHBOR_CONNECT))) {
                     printf("!!ERROR!!: HB connection map has something wrong! %s:%i\n", __FILE__, __LINE__);
                     exit(EXIT_FAILURE);
                 }
-#endif
                 
                 //adjuct the connection map
                 connectionMap[atom_i][atom_j] ^= HB_CONNECT;
@@ -245,11 +234,9 @@ void CommitEvent(struct AtomStr **destLibrary, struct AtomStr *newTargetAtom, st
                 
                 HBnumformed --;
                 
-#ifdef DEBUG_IT
-                if (HBnumformed < alphaHBformed) {
+                if (unlikely(HBnumformed < alphaHBformed)) {
                     printf("!WARNING!: total HB number is smaller than the alpha HB number! %s:%i\n", __FILE__, __LINE__);
                 }
-#endif
             }
             HBeventsum ++;
             break;
@@ -337,10 +324,11 @@ int HazardCheck(struct AtomStr *oldTargetAtom, struct AtomStr *oldPartner, struc
     
 #ifdef HYDROGEN_BOND
     //for HB event, the exact interaction types (HB formation or breaking) will be determined during DoEvent, before which if the neighbor atoms changed,
-    //the further determination would be invalid.
+    //the determination of DoEvent would be invalid.
     //also, the neighbor atoms changes may effect the prediction
-    //So this situation would be included in partner changes case.
-    if (oldTargetAtom->dynamic->event.eventType == HB_Event &&
+    //so this situation would be included in partner changes case.
+    //THIS WILL HAPPEN ONLY DURING PARALLEL COMPUTING
+    if (codeNum > 1 && oldTargetAtom->dynamic->event.eventType == HB_Event &&
         (thisThread->raw[oldTargetAtom->dynamic->HB.neighbor]->dynamic->event.counter > oldTargetNeighbor->dynamic->event.counter
          || thisThread->raw[oldPartner->dynamic->HB.neighbor]->dynamic->event.counter > oldPartnerNeighbor->dynamic->event.counter))
         return -1;

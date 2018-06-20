@@ -40,7 +40,7 @@ void MSThread(void) {
         FirstRun(thread[0]);
     } else if (strncmp("continue", neworcontinue, 1) == 0) {
         outputrecord = currenttime + outputrate;
-        SchedulingRefresh(thread[0]);
+        CreateCBT();
     }
     
     pthread_mutex_init(&mstThrLock, NULL);
@@ -78,7 +78,7 @@ void MasterThreadRun(struct ThreadInfoStr *threadInfo) {
     
     while (currenttime <= timestep) {
         
-        eventToCommit = SchedulingNextEvent(thread[0]); //find the nearest event
+        eventToCommit = CBT.node[1]; //find the nearest event
         pthread_mutex_lock(&mstThrLock);
         {
             while (preCalList[eventToCommit].eventStatus != 1) { //if the target atom has not been processed yet, wait
@@ -129,23 +129,12 @@ void MasterThreadRun(struct ThreadInfoStr *threadInfo) {
         fflush(stdout);
 #endif
         
-#ifdef DEBUG_IT
-        if (frame == 425)
-            printf("");
-#endif
-        
         hazardType = HazardCheck(oldTarget, (oldPartner != NULL ? oldPartner : NULL), neighbor_i, neighbor_j, thisThread);
         
         if (hazardType < 0) {
 #ifdef DETAILS
             printf("%012.3lfms, frame #%li, atom #%i, hazard code 2, recalculating\n", FindTime(), frame, eventToCommit);
             fflush(stdout);
-#endif
-            
-#ifdef DEBUG_IT
-            if (hazardType == -1) {
-                printf("");
-            }
 #endif
             
             threadRenewList[0] = 1;
@@ -157,10 +146,7 @@ void MasterThreadRun(struct ThreadInfoStr *threadInfo) {
             pthread_mutex_lock(&slvThrLock);
             {
                 AtomDataCpy(thisThread->raw[targetNum], thisThread->listPtr[targetNum], 0);
-                
-                SchedulingDelete(threadRenewList, thisThread);
-                SchedulingAdd(threadRenewList, thisThread);
-                
+                UpdateCBT(threadRenewList);
                 ResetPreCalList(targetNum, thisCalObj);
                 
 #ifdef DETAILS
@@ -183,24 +169,19 @@ void MasterThreadRun(struct ThreadInfoStr *threadInfo) {
 #endif
             
             timeIncr = thisThread->raw[targetNum]->dynamic->event.time;
-#ifdef DEBUG_IT
-            if (timeIncr < 0) {
+            if (unlikely(timeIncr < 0)) {
                 printf("!!ERROR!!: time calculation is not correct! %s:%i\n", __FILE__, __LINE__);
             }
-#endif
             
             pthread_mutex_lock(&slvThrLock);
             {
-                TimeForward(timeIncr, "atom", thisThread); //update the node time
+                TimeForward(timeIncr, thisThread); //update the node time
                 UpdateData(timeIncr, "atom", thisThread); //update the coordinates
                 currenttime += timeIncr;
                 frame++;
                 
                 CommitEvent(thisThread->raw, newTarget, (threadRenewList[2] > 0 ? newPartner : NULL), oldTarget, (threadRenewList[2] > 0 ? oldPartner : NULL), neighbor_i, neighbor_j);
-                
-                SchedulingDelete(threadRenewList, thisThread);
-                SchedulingAdd(threadRenewList, thisThread);
-                
+                UpdateCBT(threadRenewList);
                 ResetPreCalList(targetNum, thisCalObj);
                 
 #ifdef DETAILS
@@ -240,10 +221,10 @@ void MasterThreadRun(struct ThreadInfoStr *threadInfo) {
     
     pthread_mutex_lock(&slvThrLock);
     masterOut = -1;
-#ifdef DEBUG_IT
+
     printf("miss count = %li\n", missCount);
     printf("!WARNING!: master thread out!\n");
-#endif
+    
     pthread_cond_broadcast(&slvThrQ);
     pthread_mutex_unlock(&slvThrLock);
 
@@ -281,15 +262,9 @@ void SlaveThreadRun(struct ThreadInfoStr *threadInfo) {
         }
         pthread_mutex_unlock(&slvThrLock);
         
-        if (masterOut == -1) {
+        if (unlikely(masterOut == -1)) {
             goto finish;
         }
-        
-#ifdef DEBUG_IT
-        if (frame == 718) {
-            printf("");
-        }
-#endif
         
         thisThread          = thisList->data;
         threadRenewList     = thisList->renewList;
@@ -297,7 +272,6 @@ void SlaveThreadRun(struct ThreadInfoStr *threadInfo) {
         
         timeIncr = thisThread->newTarget->dynamic->event.time;
         UpdateData(timeIncr, "partial", thisThread);
-        TimeForward(timeIncr, "partial", thisThread);
         
         targetAtom = thisThread->newTarget;
         partner    = thisThread->newPartner;
@@ -327,9 +301,9 @@ void SlaveThreadRun(struct ThreadInfoStr *threadInfo) {
     
 finish:
     pthread_mutex_lock(&slvThrLock);
-#ifdef DEBUG_IT
+    
     printf("!WARNING!: slave thread #%i out!\n", tid);
-#endif
+    
     pthread_cond_broadcast(&slvThrQ);
     pthread_mutex_unlock(&slvThrLock);
     
@@ -343,8 +317,7 @@ void MSAssignJob(int *renewList) {
     renewList[1] = 0;
     renewList[2] = 0;
     
-    FindNode(1);
-    renewList[1] = nthNode;
+    renewList[1] = CBT.node[1]; //need to modify
     
     if (atom[renewList[1]].dynamic->event.partner > 0) {
         renewList[++renewList[0]] = atom[renewList[1]].dynamic->event.partner;
@@ -397,9 +370,9 @@ int CheckConflictAndAssign(struct PreCalObjStr **thisList) {
             cell_neighbor[1] = targetAtom->dynamic->cellIndex[1] + x[i];
             
             for (int j = 1; j <= 3; j++) {
-                if (cell_neighbor[j] < 0) {
+                if (unlikely(cell_neighbor[j] < 0)) {
                     cell_neighbor[j] = cellnum[j] - 1;
-                } else if (cell_neighbor[j] >= cellnum[j]) {
+                } else if (unlikely(cell_neighbor[j] >= cellnum[j])) {
                     cell_neighbor[j] = 0;
                 }
             }
@@ -439,7 +412,7 @@ int CheckConflictAndAssign(struct PreCalObjStr **thisList) {
         neighborAtom = sourCellList[atomnum + checkedCell[i]];
         while (neighborAtom != 0) {
             count ++;
-            if (count > atomList->num_members && elem == NULL) {
+            if (unlikely(count > atomList->num_members && elem == NULL)) {
                 struct AtomStr *newAtom = calloc(1, sizeof(struct AtomStr));
                 newAtom->dynamic = (struct DynamicStr *)calloc(1, sizeof(struct DynamicStr));
                 
@@ -490,7 +463,6 @@ void InitializePreCalList(struct PreCalObjStr *thisList) {
 void CreateAtomStr(struct AtomStr *thisAtom) {
     thisAtom->property = (struct PropertyStr *)calloc(1, sizeof(struct PropertyStr));
     thisAtom->dynamic = (struct DynamicStr *)calloc(1, sizeof(struct DynamicStr));
-    thisAtom->eventList = (struct EventListStr *)calloc(1, sizeof(struct EventListStr));
 }
 
 

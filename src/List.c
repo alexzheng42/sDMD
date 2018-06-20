@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include "DMD.h"
 #include "List.h"
 
 int listLength(list* list) {
@@ -7,7 +8,7 @@ int listLength(list* list) {
 }
 
 int listEmpty(list* list) {
-    if (list->num_members)
+    if (likely(list->num_members))
         return FALSE;
     if (list->anchor.next == &list->anchor &&
         list->anchor.prev == &list->anchor)
@@ -32,7 +33,7 @@ int listInit(list* list) {
 int listAppend(list* list, void* obj) {
     listElem* newElem = (listElem*)malloc(sizeof(listElem));
     
-    if (newElem == NULL) {
+    if (unlikely(newElem == NULL)) {
         fprintf(stderr, "Unable to allocate memory for the new element: ListAppend!\n");
         return FALSE;
     }
@@ -58,7 +59,7 @@ int listAppend(list* list, void* obj) {
 int listPrepend(list* list, void* obj) {
     listElem* newElem = (listElem*)malloc(sizeof(listElem));
     
-    if (newElem == NULL) {
+    if (unlikely(newElem == NULL)) {
         fprintf(stderr, "Unable to allocate memory for the new element: ListPrepend!\n");
         return FALSE;
     }
@@ -106,7 +107,7 @@ int listInsertAfter(list* list, void* obj, listElem* elem) {
     } else {
         listElem* newElem = (listElem*)malloc(sizeof(listElem));
         
-        if (newElem == NULL) {
+        if (unlikely(newElem == NULL)) {
             fprintf(stderr, "Unable to allocate memory for the new element: ListInsertAfter!\n");
             return FALSE;
         }
@@ -130,7 +131,7 @@ int listInsertBefore(list* list, void* obj, listElem* elem) {
     } else {
         listElem* newElem = (listElem*)malloc(sizeof(listElem));
         
-        if (newElem == NULL) {
+        if (unlikely(newElem == NULL)) {
             fprintf(stderr, "Unable to allocate memory for the new element: ListInsertBefore!\n");
             return FALSE;
         }

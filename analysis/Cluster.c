@@ -62,7 +62,7 @@ static void FreeVar() {
 }
 
 void CalCluster(int id) {
-    long step = 0;
+    long step = 0, totalFrame;
     char directory[1024], buffer[1024];
     struct SectionStr *sect;
     FILE *inputTrjFile, *inputCntFile;
@@ -91,7 +91,8 @@ void CalCluster(int id) {
             exit(EXIT_FAILURE);
         }
         
-        for (step = 0; step < sectInfo[sectNum].frameCount; step ++) {
+        totalFrame = (sectInfo[sectNum].frameCount + sectInfo[sectNum].oldTime) / sectInfo[sectNum].outputRate;
+        for (step = sectInfo[sectNum].oldTime / sectInfo[sectNum].outputRate; step < totalFrame; step ++) {
             if (ReadGro(inputTrjFile) || ReadConnectionMap(inputCntFile)) break;
             
             PrintProcess(step);
@@ -138,7 +139,7 @@ void CalCluster(int id) {
                     }
                 }
                 
-                fprintf(outputAggNumFile, "%10.2lf%20i\n", (double)(step * sect->outputRate + sect->oldTime), cluster[0][0]);
+                fprintf(outputAggNumFile, "%10.2lf%20i\n", (double)(step * sect->outputRate), cluster[0][0]);
             }
         }
         fclose(inputCntFile);

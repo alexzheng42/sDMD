@@ -12,7 +12,7 @@ int **connectionMap;
 char AAName[21][4] = {"ALA", "ARG", "ASN", "ASP", "CYS", "GEL", "GLN", "GLU", "GLY", "HIS", "ILE", "LEU", "LYS", "MET", "PHE", "PRO", "SER", "THR", "TRP", "TYR", "VAL"};
 struct HBType HBSum;
 
-long step;
+static long step;
 
 void RamachandranPlot(int atom_N, double *phi, double *psi);
 void ResetHBNum(void);
@@ -25,13 +25,13 @@ int FindAANum(char * name);
 void HBInfo(int id) {
     int connectAtom = 0;
     int alphaRecord = 0, betaRecord = 0;
-    long **markAA = NULL;
+    long **markAA = NULL, totalFrame;
     double phi = 0, psi = 0;
     double prePhi = 0, prePsi = 0;
     char directory[1024], buffer[1024];
     struct SectionStr *sect;
-    FILE **RamachFile = NULL, *HBOutputFile, *AAMarkOutputFile = NULL;
-    FILE *ContactMapFile = NULL, *ContactMapAAFile = NULL;
+    FILE ***RamachFile = NULL, *HBOutputFile, *AAMarkOutputFile = NULL;
+    FILE **ContactMapFile = NULL, **ContactMapAAFile = NULL;
     FILE *TrjInputFile, *CntInputFile;
     
     printf("Analyzing HB information... ");
@@ -71,30 +71,38 @@ void HBInfo(int id) {
     }
     
     if (analysisList[AnalyzeRamach]) {
-        RamachFile = (FILE **)calloc(21, sizeof(FILE *));
-        for (int i = 0; i < 21; i ++) {
-            sprintf(directory, "%sRamachFile_%s.txt", path, AAName[i]);
-            RamachFile[i] = fopen(directory, "w");
-            fprintf(RamachFile[i], "%s\n", "@    view 0.150000, 0.150000, 0.850000, 0.850000");
-            fprintf(RamachFile[i], "%s\n", "@    xaxis  label \"\\xF\"");
-            fprintf(RamachFile[i], "%s\n", "@    yaxis  label \"\\xY\"");
-            fprintf(RamachFile[i], "%s\n", "@    s0 type xy");
-            fprintf(RamachFile[i], "%s\n", "@    s0 symbol 1");
-            fprintf(RamachFile[i], "%s\n", "@    s0 symbol size 0.100000");
-            fprintf(RamachFile[i], "%s\n", "@    s0 symbol color 1");
-            fprintf(RamachFile[i], "%s\n", "@    s0 symbol pattern 1");
-            fprintf(RamachFile[i], "%s\n", "@    s0 symbol fill color 1");
-            fprintf(RamachFile[i], "%s\n", "@    s0 symbol fill pattern 1");
-            fprintf(RamachFile[i], "%s\n", "@    s0 line type 0");
+        RamachFile = (FILE ***)calloc(numofprotein, sizeof(FILE **));
+        for (int n = 0; n < numofprotein; n ++) {
+            RamachFile[n] = (FILE **)calloc(21, sizeof(FILE *));
+            for (int i = 0; i < 21; i ++) {
+                sprintf(directory, "%sRamachFile_%i_%s.txt", path, n + 1, AAName[i]);
+                RamachFile[n][i] = fopen(directory, "w");
+                fprintf(RamachFile[n][i], "%s\n", "@    view 0.150000, 0.150000, 0.850000, 0.850000");
+                fprintf(RamachFile[n][i], "%s\n", "@    xaxis  label \"\\xF\"");
+                fprintf(RamachFile[n][i], "%s\n", "@    yaxis  label \"\\xY\"");
+                fprintf(RamachFile[n][i], "%s\n", "@    s0 type xy");
+                fprintf(RamachFile[n][i], "%s\n", "@    s0 symbol 1");
+                fprintf(RamachFile[n][i], "%s\n", "@    s0 symbol size 0.100000");
+                fprintf(RamachFile[n][i], "%s\n", "@    s0 symbol color 1");
+                fprintf(RamachFile[n][i], "%s\n", "@    s0 symbol pattern 1");
+                fprintf(RamachFile[n][i], "%s\n", "@    s0 symbol fill color 1");
+                fprintf(RamachFile[n][i], "%s\n", "@    s0 symbol fill pattern 1");
+                fprintf(RamachFile[n][i], "%s\n", "@    s0 line type 0");
+            }
         }
     }
     
     if (analysisList[AnalyzeConMap]) {
-        sprintf(directory, "%sContactInfo.txt", path);
-        ContactMapFile = fopen(directory, "w");
+        ContactMapFile = (FILE **)calloc(numofprotein, sizeof(FILE *));
+        ContactMapAAFile = (FILE **)calloc(numofprotein, sizeof(FILE *));
         
-        sprintf(directory, "%sContactAAInfo.txt", path);
-        ContactMapAAFile = fopen(directory, "w");
+        for (int i = 0; i < numofprotein; i ++) {
+            sprintf(directory, "%sContactInfo_%i.txt", path, i + 1);
+            ContactMapFile[i] = fopen(directory, "w");
+            
+            sprintf(directory, "%sContactAAInfo_%i.txt", path, i + 1);
+            ContactMapAAFile[i] = fopen(directory, "w");
+        }
     }
     
     sprintf(directory, "%s%s", path, files[outTrj][id].name);
@@ -117,7 +125,8 @@ void HBInfo(int id) {
             exit(EXIT_FAILURE);
         }
         
-        for (step = 0; step < sectInfo[sectNum].frameCount; step ++) {
+        totalFrame = (sectInfo[sectNum].oldTime + sectInfo[sectNum].frameCount) / sectInfo[sectNum].outputRate;
+        for (step = sectInfo[sectNum].oldTime / sectInfo[sectNum].outputRate; step < totalFrame; step ++) {
             if (ReadGro(TrjInputFile) || ReadConnectionMap(CntInputFile)) break;
             
             PrintProcess(step);
@@ -125,8 +134,10 @@ void HBInfo(int id) {
             sect = &sectInfo[sectNum];
             ResetHBNum();
             if (analysisList[AnalyzeConMap]) {
-                fprintf(ContactMapFile,   "Frame = %li\n", step + (long)sect->oldTime);
-                fprintf(ContactMapAAFile, "Frame = %li\n", step + (long)sect->oldTime);
+                for (int n = 0; n < numofprotein; n ++) {
+                    fprintf(ContactMapFile[n],   "Frame = %li\n", step * (long)sect->outputRate);
+                    fprintf(ContactMapAAFile[n], "Frame = %li\n", step * (long)sect->outputRate);
+                }
             }
             
             alphaRecord = betaRecord = 0;
@@ -136,8 +147,8 @@ void HBInfo(int id) {
                 if (atom[i].property->type == 18) {
                     RamachandranPlot(i, &phi, &psi);
                     
-                    if (phi != 0 && analysisList[AnalyzeRamach]) {
-                        fprintf(RamachFile[FindAANum(atom[i].property->nameOfAA)], "%-10.2lf%-10.2lf\n", phi, psi);
+                    if (phi != 0 && psi != 0 && analysisList[AnalyzeRamach]) {
+                        fprintf(RamachFile[atom[i].property->sequence.proteinNum - 1][FindAANum(atom[i].property->nameOfAA)], "%-10.2lf%-10.2lf\n", phi, psi);
                     }
                 }
                 
@@ -165,9 +176,10 @@ void HBInfo(int id) {
                     }
                 }
                 
-                if (analysisList[AnalyzeConMap]) {
-                    fprintf(ContactMapFile, "%8i%8i%10s%10s\n", i, connectAtom, atom[i].property->nameOfAA, atom[connectAtom].property->nameOfAA);
-                    fprintf(ContactMapAAFile, "%8i%8i\n", atom[i].property->sequence.aminoacidNum, atom[connectAtom].property->sequence.aminoacidNum);
+                if (analysisList[AnalyzeConMap] &&
+                    atom[i].property->sequence.proteinNum == atom[connectAtom].property->sequence.proteinNum) {
+                    fprintf(ContactMapFile[atom[i].property->sequence.proteinNum - 1], "%8i%8i%10s%10s\n", i, connectAtom, atom[i].property->nameOfAA, atom[connectAtom].property->nameOfAA);
+                    fprintf(ContactMapAAFile[atom[i].property->sequence.proteinNum - 1], "%8i%8i\n", atom[i].property->sequence.aminoacidNum, atom[connectAtom].property->sequence.aminoacidNum);
                 }
             }
             
@@ -194,15 +206,22 @@ void HBInfo(int id) {
     }
     
     if (analysisList[AnalyzeRamach]) {
-        for (int i = 0; i < 21; i ++) {
-            fclose(RamachFile[i]);
+        for (int n = 0; n < numofprotein; n ++) {
+            for (int i = 0; i < 21; i ++) {
+                fclose(RamachFile[n][i]);
+            }
+            free(RamachFile[n]);
         }
         free(RamachFile);
     }
 
     if (analysisList[AnalyzeConMap]) {
-        fclose(ContactMapFile);
-        fclose(ContactMapAAFile);
+        for (int i = 0; i < numofprotein; i ++) {
+            fclose(ContactMapFile[i]);
+            fclose(ContactMapAAFile[i]);
+        }
+        free(ContactMapFile);
+        free(ContactMapAAFile);
     }
     
     printf("\bDone!\n");
@@ -439,7 +458,7 @@ void SaveHBInfo(struct SectionStr *sect, FILE *HBInfoFile) {
     HBSum.other = HBSum.total    - HBSum.helix_alpha - HBSum.helix_310 -
                   HBSum.helix_pi - HBSum.beta;
     
-    fprintf(HBInfoFile, "%8.2lf%8i%8i%8i%8i%8i%8i\n", step * sect->outputRate + sect->oldTime,
+    fprintf(HBInfoFile, "%8.2lf%8i%8i%8i%8i%8i%8i\n", step * sect->outputRate,
             HBSum.helix_alpha,
             HBSum.helix_310,
             HBSum.helix_pi,

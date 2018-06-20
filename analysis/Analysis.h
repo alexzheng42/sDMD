@@ -224,7 +224,6 @@ struct DynamicStr {
 struct AtomStr {
     struct PropertyStr *property;   //static properties of the atom, such as mass, atom # ...
     struct DynamicStr *dynamic;    //dynamic properties of the atom, such as coordinate, velocity ...
-    struct EventListStr *eventList;  //binary tree
 };
 
 struct AAStr {

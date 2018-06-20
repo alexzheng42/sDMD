@@ -161,18 +161,10 @@ void SaveData(enum FileType type, struct ThreadStr *thisThread) {
 }
 
 
-void GlobalCloseFree() {
-    for (int i = 0; i < lenFileType; i ++) {
-        if (fileList[i].mark) {
-            fclose(fileList[i].file);
-        }
-    }
-    
+void GlobalCloseFree() {    
     for (int i = 0; i <= atomnum; i ++) {
         free(atom[i].property);
         free(atom[i].dynamic);
-        free(atom[i].eventList);
-        
         free(connectionMap[i]);
     }
     free(atom);
@@ -182,10 +174,13 @@ void GlobalCloseFree() {
         if (strcmp(wallType, "smooth")) {
             free(wall[0].dynamic);
             free(wall[0].property);
-            free(wall[0].eventList);
             free(wall);
         }
     }
+    
+    free(CBT.node);
+    free(CBT.leaf);
+    free(CBT.time);
     
     free(protein);
     free(aminoacid);
@@ -353,7 +348,7 @@ void SaveLog(struct FileStr *file) {
 
 
 void SaveHB(struct FileStr *file) {
-    if (file->file == NULL) {
+    if (unlikely(file->file == NULL)) {
         BackupFile(file);
         GenerateFile(file);
     }
@@ -367,7 +362,7 @@ void SaveHB(struct FileStr *file) {
 
 
 void SaveTemp(struct FileStr *file, struct ThreadStr *thisThread) {
-    if (file->file == NULL) {
+    if (unlikely(file->file == NULL)) {
         BackupFile(file);
         GenerateFile(file);
     }
@@ -382,7 +377,7 @@ void SaveTemp(struct FileStr *file, struct ThreadStr *thisThread) {
 
 
 void SaveXYZ(struct FileStr *file) {
-    if (file->file == NULL) {
+    if (unlikely(file->file == NULL)) {
         BackupFile(file);
         GenerateFile(file);
     }
@@ -404,7 +399,7 @@ void SaveXYZ(struct FileStr *file) {
 
 
 void SaveDAT(struct FileStr *file) {
-    if (file->file == NULL) {
+    if (unlikely(file->file == NULL)) {
         BackupFile(file);
     }
     GenerateFile(file);
@@ -467,16 +462,9 @@ void SaveDAT(struct FileStr *file) {
     fwrite(&HBnumformed, sizeof (int), 1, continuedata);
     fwrite(&alphaHBformed, sizeof (int), 1, continuedata);
     
-#ifdef DEBUG_IT
     //record the random seed for further debugging
     fwrite(&seed, sizeof(unsigned), 1, continuedata); //old seed
     
-#ifndef DEBUG_RANDOM
-    seed = (unsigned) time(NULL);
-    srand(seed);
-#endif
-    fwrite(&seed, sizeof(unsigned), 1, continuedata); //new seed
-#endif
     fclose(continuedata);
     
     return;
@@ -484,7 +472,7 @@ void SaveDAT(struct FileStr *file) {
 
 
 void SavePDB(struct FileStr *file) {
-    if (file->file == NULL) {
+    if (unlikely(file->file == NULL)) {
         BackupFile(file);
         GenerateFile(file);
     }
@@ -512,7 +500,7 @@ void SavePDB(struct FileStr *file) {
 
 
 void SaveGRO(struct FileStr *file) {
-    if (file->file == NULL) {
+    if (unlikely(file->file == NULL)) {
         BackupFile(file);
         GenerateFile(file);
     }
@@ -540,7 +528,7 @@ void SaveGRO(struct FileStr *file) {
 }
 
 void SaveConnectionMap(struct FileStr *file) {
-    if (file->file == NULL) {
+    if (unlikely(file->file == NULL)) {
         BackupFile(file);
         GenerateFile(file);
     }
@@ -559,7 +547,7 @@ void SaveConnectionMap(struct FileStr *file) {
 }
 
 void SaveKin(struct FileStr *file, struct ThreadStr *thisThread) {
-    if (file->file == NULL) {
+    if (unlikely(file->file == NULL)) {
         BackupFile(file);
         GenerateFile(file);
     }
@@ -571,7 +559,7 @@ void SaveKin(struct FileStr *file, struct ThreadStr *thisThread) {
 }
 
 void SavePot(struct FileStr *file, struct ThreadStr *thisThread) {
-    if (file->file == NULL) {
+    if (unlikely(file->file == NULL)) {
         BackupFile(file);
         GenerateFile(file);
     }

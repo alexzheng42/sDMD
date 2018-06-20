@@ -22,9 +22,9 @@ void SingleThread(void) {
         FirstRun(thread[0]);
     } else if (strncmp("continue", neworcontinue, 1) == 0) {
         outputrecord = currenttime + outputrate;
-        SchedulingRefresh(thread[0]);
+        CreateCBT();
     }
-    thrInfo[0].threadRenewList[1] = eventToCommit = SchedulingNextEvent(thread[0]);
+    thrInfo[0].threadRenewList[1] = eventToCommit = CBT.node[1];
     thread[0]->atomNum = eventToCommit;
     if (thread[0]->raw[eventToCommit]->dynamic->event.partner > 0) {
         thrInfo[0].threadRenewList[++thrInfo[0].threadRenewList[0]] = thread[0]->raw[eventToCommit]->dynamic->event.partner;
@@ -48,10 +48,6 @@ void SingleThreadRun(struct ThreadInfoStr *threadInfo) {
     
     while (currenttime <= timestep) {
         
-        if (frame == 920) {
-            printf("");
-        }
-        
         hazardType = ProcessEvent(threadRenewList, thisThread);
 
 #ifdef DEBUG_PRINTF
@@ -74,8 +70,7 @@ void SingleThreadRun(struct ThreadInfoStr *threadInfo) {
             Predict(threadRenewList, thisThread);
 
             AtomDataCpy(thisThread->raw[threadRenewList[1]], thisThread->listPtr[threadRenewList[1]], 0);
-            SchedulingDelete(threadRenewList, thisThread);
-            SchedulingAdd(threadRenewList, thisThread);
+            UpdateCBT(threadRenewList);
             
             AssignJob(threadRenewList, thisThread);
             AssignThread(threadRenewList, thisThread);
@@ -90,13 +85,12 @@ void SingleThreadRun(struct ThreadInfoStr *threadInfo) {
             printf(", executed!\n");
 #endif
             timeIncr = thisThread->raw[threadRenewList[1]]->dynamic->event.time;
-#ifdef DEBUG_IT
-            if (timeIncr < 0) {
+            if (unlikely(timeIncr < 0)) {
                 printf("!!ERROR!!: time calculation is not correct!\n");
             }
-#endif
+            
             UpdateData(timeIncr, "atom", thisThread); //update the coordinates
-            TimeForward(timeIncr, "atom", thisThread); //update the node time
+            TimeForward(timeIncr, thisThread); //update the node time
             currenttime += timeIncr;
             frame++;
 
@@ -106,12 +100,10 @@ void SingleThreadRun(struct ThreadInfoStr *threadInfo) {
                         thisThread->listPtr[oldTarget->dynamic->HB.neighbor],
                         (threadRenewList[2] > 0 ? thisThread->listPtr[oldPartner->dynamic->HB.neighbor] : NULL));
             
-            SchedulingDelete(threadRenewList, thisThread);
-            SchedulingAdd(threadRenewList, thisThread);
-            
+            UpdateCBT(threadRenewList);
             processratio = (currenttime - oldcurrenttime) / (timestep - oldcurrenttime) * 100;
             
-            if (processratio >= gap + 0.01) {
+            if (unlikely(processratio >= gap + 0.01)) {
                 
                 printf("Process=%8.2lf%%\r", processratio);
                 fflush(stdout);
@@ -122,7 +114,7 @@ void SingleThreadRun(struct ThreadInfoStr *threadInfo) {
             if (strcmp(wallDyn.mark, "no")) DoWallDyn();
             
             //save data to the output files
-            if (currenttime >= outputrecord) {
+            if (unlikely(currenttime >= outputrecord)) {
                 for (int i = 0; i < lenFileType; i ++) {
                     if (thisThread->fileList[i].mark) {
                         SaveData(i, thisThread);
@@ -147,7 +139,7 @@ void AssignJob(int *renewList, struct ThreadStr *thisThread) {
     renewList[1] = 0;
     renewList[2] = 0;
     
-    thisThread->atomNum = SchedulingNextEvent(thisThread);
+    thisThread->atomNum = CBT.node[1];
     renewList[1] = thisThread->atomNum;
     
     if (thisThread->raw[renewList[1]]->dynamic->event.partner > 0) {
@@ -184,9 +176,9 @@ void AssignThread(int *renewList, struct ThreadStr *thisThread) {
             cell_neighbor[1] = targetAtom->dynamic->cellIndex[1] + x[i];
             
             for (int j = 1; j <= 3; j++) {
-                if (cell_neighbor[j] < 0) {
+                if (unlikely(cell_neighbor[j] < 0)) {
                     cell_neighbor[j] = cellnum[j] - 1;
-                } else if (cell_neighbor[j] >= cellnum[j]) {
+                } else if (unlikely(cell_neighbor[j] >= cellnum[j])) {
                     cell_neighbor[j] = 0;
                 }
             }
@@ -212,7 +204,7 @@ void AssignThread(int *renewList, struct ThreadStr *thisThread) {
             
             while (neighborAtom != 0 && flag == 0) { //+partner, +check duplicated
                 count ++;
-                if (count > atomList->num_members && elem == NULL) {
+                if (unlikely(count > atomList->num_members && elem == NULL)) {
                     struct AtomStr *newAtom = calloc(1, sizeof(struct AtomStr));
                     newAtom->dynamic = (struct DynamicStr *)calloc(1, sizeof(struct DynamicStr));
                     
@@ -243,20 +235,17 @@ void AssignThread(int *renewList, struct ThreadStr *thisThread) {
     
     atomList->num_members = count;
     
-#ifdef DEBUG_IT
-    if (checkedCell[46] != 0) {
+    if (unlikely(checkedCell[46] != 0)) {
         printf("!!ERROR!!: checkedCell list overflows!\n");
     }
-#endif
+    
+    return;
 }
 
 
 void FreeVariables(void) {
     free(thread[0]->oldTarget.dynamic);
-    free(thread[0]->oldTarget.eventList);
-    
     free(thread[0]->oldPartner.dynamic);
-    free(thread[0]->oldPartner.eventList);
     
     listElem *thisElem = thread[0]->atomList.anchor.next;
     listElem *nextElem;
@@ -269,6 +258,13 @@ void FreeVariables(void) {
         free(thisElem);
         thisElem = nextElem;
     }
+    
+    for (int i = 0; i < lenFileType; i ++) {
+        if (thread[0]->fileList[i].mark && i != savedData) {
+            fclose(thread[0]->fileList[i].file);
+        }
+    }
+    free(thread[0]->fileList);
     
     free(thread[0]->raw);
     free(thread[0]->listPtr);

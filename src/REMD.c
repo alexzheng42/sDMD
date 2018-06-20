@@ -37,10 +37,10 @@ void REMD(void) {
         FirstRun(thread[0]);
     } else if (strncmp("continue", neworcontinue, 1) == 0) {
         outputrecord = currenttime + outputrate;
-        SchedulingRefresh(thread[0]);
+        CreateCBT();
     }
     
-    thrInfo[0].threadRenewList[1] = eventToCommit = SchedulingNextEvent(thread[0]);
+    thrInfo[0].threadRenewList[1] = eventToCommit = CBT.node[1];
     if (thread[0]->raw[eventToCommit]->dynamic->event.partner > 0) {
         thrInfo[0].threadRenewList[++thrInfo[0].threadRenewList[0]] = thread[0]->raw[eventToCommit]->dynamic->event.partner;
     }
@@ -50,83 +50,53 @@ void REMD(void) {
 
 void REMDRun(struct ThreadInfoStr *threadInfo, int outputRate, char *serverName, int *port_number) {
     int hazardType;
-    int targetNum;
     int tid = threadInfo->threadID;
     int *threadRenewList = threadInfo->threadRenewList;
     int rate = ((int)(currenttime / outputRate) + 1) * outputRate;
     double timeIncr;
     double processratio, gap = 0;
     struct ThreadStr *thisThread = thread[tid];
-    struct AtomStr **targetAtom = &thisThread->newTarget;;
-    struct AtomStr **partner = &thisThread->newPartner;
+    struct AtomStr **newTarget = &thisThread->newTarget;;
+    struct AtomStr **newPartner = &thisThread->newPartner;
     struct AtomStr *oldTarget = &thisThread->oldTarget;
     struct AtomStr *oldPartner = &thisThread->oldPartner;
-    struct AtomStr **neighbor_i, **neighbor_j;
     
     while (currenttime <= timestep) {
         
         hazardType = ProcessEvent(threadRenewList, thisThread);
         
-        neighbor_i = &thisThread->listPtr[oldTarget->dynamic->HB.neighbor];
-        neighbor_j = &thisThread->listPtr[oldPartner->dynamic->HB.neighbor];
-        targetNum = (*targetAtom)->property->num;
-        
-#ifdef DEBUGPRINTF
-        printf("frame = %4li, target atom = %5i, partner = %5i, type = %2i", frame, thisThread->atomNum, thisThread->oldTarget.dynamic->event.partner, thisThread->oldTarget.dynamic->event.eventType);
-        fflush(stdout);
-#endif
-        
-        if (hazardType == -1) {
-#ifdef DEBUGPRINTF
-            printf(", denied, self changed!\n");
-#endif
-            if (thisThread->raw[targetNum]->dynamic->event.partner > 0) {
-                threadRenewList[2] = thisThread->raw[targetNum]->dynamic->event.partner;
-            } else {
-                threadRenewList[0] = 1;
-                threadRenewList[2] = 0;
-            }
-            AssignThread(threadRenewList, thisThread);
-            
-        } else if (hazardType == -2) {
-#ifdef DEBUGPRINTF
-            printf(", denied, partner changed!\n");
-#endif
+        if (hazardType < 0) {
             threadRenewList[0] = 1;
             threadRenewList[2] = 0;
             
             AssignThread(threadRenewList, thisThread);
             Predict(threadRenewList, thisThread);
             
-            AtomDataCpy(thisThread->raw[targetNum], thisThread->listPtr[targetNum], 0);            
-            SchedulingDelete(threadRenewList, thisThread);
-            SchedulingAdd(threadRenewList, thisThread);
+            AtomDataCpy(thisThread->raw[threadRenewList[1]], thisThread->listPtr[threadRenewList[1]], 0);
+            UpdateCBT(threadRenewList);
             
             AssignJob(threadRenewList, thisThread);
             AssignThread(threadRenewList, thisThread);
             
-            eventToCommit = SchedulingNextEvent(thisThread);
-            
         } else {
-#ifdef DEBUGPRINTF
-            printf(", executed!\n");
-#endif
-            timeIncr = thisThread->raw[targetNum]->dynamic->event.time;
-#ifdef DEBUG_IT
-            if (timeIncr < 0) {
+
+            timeIncr = thisThread->raw[threadRenewList[1]]->dynamic->event.time;
+            if (unlikely(timeIncr < 0)) {
                 printf("!!ERROR!!: time calculation is not correct!\n");
             }
-#endif
-            TimeForward(timeIncr, "atom", thisThread); //update the node time
+            
+            UpdateData(timeIncr, "atom", thisThread); //update the coordinates
+            TimeForward(timeIncr, thisThread); //update the node time
             currenttime += timeIncr;
             frame++;
             
-            UpdateData(timeIncr, "atom", thisThread); //update the coordinates
-            CommitEvent(thisThread->raw, *targetAtom, (threadRenewList[2] > 0 ? *partner : NULL), oldTarget, (threadRenewList[2] > 0 ? oldPartner : NULL), (*neighbor_i), (*neighbor_j));
+            CommitEvent(thisThread->raw,
+                        *newTarget, (threadRenewList[2] > 0 ? *newPartner : NULL),
+                        oldTarget, (threadRenewList[2] > 0 ?  oldPartner : NULL),
+                        thisThread->listPtr[oldTarget->dynamic->HB.neighbor],
+                        (threadRenewList[2] > 0 ? thisThread->listPtr[oldPartner->dynamic->HB.neighbor] : NULL));
             
-            SchedulingDelete(threadRenewList, thisThread);
-            SchedulingAdd(threadRenewList, thisThread);
-            
+            UpdateCBT(threadRenewList);
             processratio = (currenttime - oldcurrenttime) / (timestep - oldcurrenttime) * 100;
             
             if (processratio >= gap + 0.01) {
@@ -157,12 +127,13 @@ void REMDRun(struct ThreadInfoStr *threadInfo, int outputRate, char *serverName,
             
             AssignJob(threadRenewList, thisThread);
             AssignThread(threadRenewList, thisThread);
-            eventToCommit = SchedulingNextEvent(thisThread);
         }
     }
     
     tmpDouble = 0.0;
     ReplicaExchange(&tmpDouble, &tmpDouble, serverName, port_number);
+    
+    return;
 }
 
 
@@ -194,13 +165,13 @@ void ReplicaExchange(double *E, double *T, char *serverName, int *port_number) {
     temperature = *T;
     
     len = write(sock, &energy, sizeof(double));
-    if (len != sizeof(double)) {
+    if (unlikely(len != sizeof(double))) {
         perror("send");
         exit(1);
     }
     
     len = write(sock, &temperature, sizeof(double));
-    if (len != sizeof(double)) {
+    if (unlikely(len != sizeof(double))) {
         perror("send");
         exit(1);
     }
@@ -208,14 +179,14 @@ void ReplicaExchange(double *E, double *T, char *serverName, int *port_number) {
     /*- - - - - - - - - - - - - - - - - - - - - - - - - - - -*
      if energy=temperature=0 close socket
      *- - - - - - - - - - - - - - - - - - - - - - - - - - - -*/
-    if (*E == 0 && *T == 0) {close(sock); return;};
+    if (unlikely(*E == 0 && *T == 0)) {close(sock); return;};
     
     /*- - - - - - - - - - - - - - - - - - - - - - - - - - - -*
      receive new temperature
      *- - - - - - - - - - - - - - - - - - - - - - - - - - - -*/
     temperature = 0;
     len = read(sock, &temperature, sizeof(double));
-    if (len != sizeof(double)) {
+    if (unlikely(len != sizeof(double))) {
         perror("recv");
         printf("%s:%i\n", __FILE__, __LINE__);
         exit(1);

@@ -20,6 +20,7 @@ int atomnum;
 int **connectionMap;
 int chargeAA[9] = {0};
 long int frame = 0;
+unsigned int seed;
 double timestep, currenttime = 0;
 double oldcurrenttime = 0;
 double cutoffr;
@@ -70,6 +71,7 @@ double cellsize[4];
 
 //-----------------
 //binary tree
+struct EventListStr CBT = {.count = 0};
 int nthCheck, nthNode;
 //-----------------
 
@@ -166,17 +168,12 @@ struct FileStr *fileList;
 //To maximum speed, open and close files as less as possible.
 
 
-#ifdef DEBUG_IT
 //-----------------
-//time benchmark
-clock_t begin[10], end[10];
-unsigned seed;
-double timeSpend;
-double tmpDouble;
-double *energy;
+//other
 int tmpInt;
+double tmpDouble;
 //-----------------
-#endif
+
 
 
 
@@ -187,12 +184,6 @@ int main(int argc, const char * argv[]) {
     char directory[200];
     FILE *timeFile;
     
-#ifndef DEBUG_RANDOM
-	seed = (unsigned) time(NULL);
-    srand(seed); // generate a random seed
-#else
-	srand(RANDOM_SEED);
-#endif
     st = clock();
     
     InputData(argc, argv); //input data from .txt files in input folder

@@ -378,7 +378,6 @@ void FreeVariables(void) {
         free(connectionMap[i]);
         free(atom[i].dynamic);
         free(atom[i].property);
-        free(atom[i].eventList);
     }
     free(connectionMap);
     free(atom);
