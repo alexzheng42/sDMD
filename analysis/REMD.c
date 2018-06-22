@@ -430,7 +430,6 @@ void ReadConfigFile() {
     temperature = (double *)calloc(num, sizeof(double));
     for (int i = 0; i < num; i ++) {
         fscanf(inConfigFile, "%lf", &temperature[i]);
-        temperature[i] /= boltzmann;
     }
     
     fscanf(inConfigFile, "\n");

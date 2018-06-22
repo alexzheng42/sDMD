@@ -15,6 +15,7 @@
 #include <sys/stat.h>
 #include <sys/wait.h>
 
+#define boltzmann 0.0019872041 //kcal / mol / K
 
 int main (int argc, char *argv[]) {
     pid_t child_pid, wpid;
@@ -83,6 +84,7 @@ int main (int argc, char *argv[]) {
             printf("!!ERROR!!: the number of temperatures provided is less than the number of replica!\n");
             exit(EXIT_FAILURE);
         }
+        T[i] *= boltzmann;
         pos += cur;
     }
     if (sscanf(buffer + pos, "%lf", &thisT) != EOF) {

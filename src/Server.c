@@ -15,7 +15,6 @@
 //#define PRTDETAIL
 #define BACKLOG 15         /* buffer for waiting connections */
 #define TIMEOUT 3600       /* exit if conect’s aren’t made in this #seconds */
-#define cR 1.987203611E-3  /* gas constant in unit of kcal K-1 mol-1 */
 
 #define min(x, y) (x < y) ? x : y
 
@@ -65,19 +64,19 @@ int main(int argc, char *argv[]) {
 		exit(1);
 	}
     
-    probability = (double **)calloc(numconnects, sizeof(double *));
-    for (int i = 0; i < numconnects; i ++) {
+    probability = (double **)calloc(numconnects + 1, sizeof(double *));
+    for (int i = 0; i <= numconnects; i ++) {
         probability[i] = (double *)calloc(2, sizeof(double));
     }
     
 	server(sockets, numconnects);
     
-    printf("\ntotal exchange rate = %.2lf%%\n", probability[0][1] / probability[0][0] * 100);
+    printf("\ntotal exchange rate = %.2lf%%\n", probability[numconnects][1] / probability[numconnects][0] * 100);
     for (int i = 0; i < numconnects - 1; i ++) {
         printf("%i <-> %i: %.2lf%%\n", i + 1, i + 2, probability[i][1] / probability[i][0] * 100);
     }
     
-    for (int i = 0; i < numconnects; i ++) {
+    for (int i = 0; i <= numconnects; i ++) {
         free(probability[i]);
     }
     free(probability);
@@ -147,16 +146,15 @@ void rearrange(double *Epot, double *T, int number_of_connects) {
             continue;
         }
         
-        beta1 = 1 / (T[first]  * 500 * cR);
-        beta2 = 1 / (T[second] * 500 * cR);
+        beta1 = 1 / T[first];
+        beta2 = 1 / T[second];
         
 		dE = (beta2 - beta1) * (Epot[first] - Epot[second]);
 
         if (first == second - 1 || first == second + 1) {
             probability[min(first, second)][0] ++;
-        } else {
-            probability[0][0] ++;
         }
+        probability[number_of_connects][0] ++;
         
 #ifdef PRTDETAIL
         printf("first = %2i, second = %2i, Epot[%i] = %6.2lf, Eport[%i] = %6.2lf, T[%i] = %6.2lf, T[%i] = %6.2lf, dE = %8.4lf, exp = %8.4lf ",
@@ -173,9 +171,8 @@ void rearrange(double *Epot, double *T, int number_of_connects) {
 
             if (first == second - 1 || first == second + 1) {
                 probability[min(first, second)][1] ++;
-            } else {
-                probability[0][1] ++;
             }
+            probability[number_of_connects][1] ++;
             
         } else {
 #ifdef PRTDETAIL
