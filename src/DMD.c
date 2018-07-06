@@ -143,6 +143,8 @@ struct DynamicWallStr wallDyn = {.mark = "no",
 struct ObstructionStr obstObj = {.mark = 0,
                                  .num  = 0};
 struct TunnelStr      tunlObj = {.mark = 0};
+struct SphObstStr  SphObstObj = {.mark = 0};
+
 char wallExist[20];
 char wallType[20];
 //-----------------
@@ -170,6 +172,7 @@ struct FileStr *fileList;
 
 //-----------------
 //other
+int visual = 0;
 int tmpInt;
 double tmpDouble;
 //-----------------

@@ -1045,26 +1045,29 @@ int EnterTunnel(double time, struct AtomStr *targetAtom) {
     double position_i[4], position_j[4];
     double speed[4];
     double distanceShift2, distance2;
-    double radius2 = tunlObj.diameter * 0.5;
+    double radius2;
     struct AtomStr *thisTunnel = &tunlObj.tunnel;
     
-    radius2 *= radius2;
-    distanceShift2 = FindPotWellWidth(thisTunnel, targetAtom);
-    
-    TRANSFER_VECTOR(position_i, targetAtom->dynamic->coordinate);
-    TRANSFER_VECTOR(position_j, thisTunnel->dynamic->coordinate);
-    TRANSFER_VECTOR(   speed, targetAtom->dynamic->velocity);
-    
-    position_i[1] = 0;
-    position_i[2] += speed[2] * time;
-    position_i[3] += speed[3] * time;
-    
-    DOT_MINUS(position_i, position_j, r_ij);
-    r_2 = DOT_PROD(r_ij, r_ij);
-    
-    distance2 = radius2 + distanceShift2 - 2 * sqrt(radius2 * distanceShift2);
-    if (r_2 <= distance2) {
-        return 1;
+    for (int n = 0; n < tunlObj.num; n ++) {
+        radius2 = tunlObj.diameter[n] * 0.5;
+        radius2 *= radius2;
+        distanceShift2 = FindPotWellWidth(thisTunnel, targetAtom);
+        
+        TRANSFER_VECTOR(position_i, targetAtom->dynamic->coordinate);
+        TRANSFER_VECTOR(position_j, tunlObj.position[n]);
+        TRANSFER_VECTOR(     speed, targetAtom->dynamic->velocity);
+        
+        position_i[1] = position_j[1];
+        position_i[2] += speed[2] * time;
+        position_i[3] += speed[3] * time;
+        
+        DOT_MINUS(position_i, position_j, r_ij);
+        r_2 = DOT_PROD(r_ij, r_ij);
+        
+        distance2 = radius2 + distanceShift2 - 2 * sqrt(radius2 * distanceShift2);
+        if (r_2 <= distance2) {
+            return 1;
+        }
     }
     
     return 0;

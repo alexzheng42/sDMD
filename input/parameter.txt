@@ -1,6 +1,6 @@
 Continue?          new
-Time               100
-T(reduced)         0.6
+Time               1000
+T(reduced)         0.5
 Dump_Rate          10
 CutOff_R(A)        9.0
 Force_Field        Ding
@@ -8,8 +8,9 @@ Thermostat         Andersen
 sDMD_Method        1
 ThreadNo           1
 WallExist?         no
-WallType           sphere
+WallType           cylinder
 WallDyn            no
-Flow               no charge 1 120 75 75 0.216 5.0
+Flow               no charge 1, 120 75 75 0.216 5.0
 Obstruct?          no 2, x 60.0, x 120.0
-Tunnel?            no 60 120 25
+Tunnel?            no 1, 60 120 75 75 25
+ColnObst?          no 1, 40 75 75 20

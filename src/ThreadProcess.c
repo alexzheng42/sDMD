@@ -24,7 +24,11 @@ int ThreadProcess(void) {
     if (REMDInfo.flag  == 1) { //REMD is requested
         REMD();
     } else if (codeNum == 1 && threadNum == 1) { //single thread - one core
-        SingleThread();
+        if (visual) {
+            VisualSGThread();
+        } else {
+            SingleThread();
+        }
     } else if (codeNum == 2 && threadNum > 1) { //multiple threads - one master, one or more slaves
         MSThread();
     } else {
@@ -84,7 +88,10 @@ void FirstRun(struct ThreadStr *thisThread) {
         thisThread->newTarget->dynamic->event.time = INFINIT;
         thisThread->newTarget->dynamic->event.partner = INVALID;
         
+#ifndef GEL
         BondTime(thisThread->newTarget, thisThread);
+#endif
+        
         CollisionTime(thisThread->newTarget, thisThread);
         PBCandCrossCellTime(thisThread->newTarget);
         ThermostatTime(thisThread->newTarget);
@@ -108,6 +115,10 @@ void FirstRun(struct ThreadStr *thisThread) {
         
         if (flow.mark == 3) {
             ChargeTime(thisThread->newTarget);
+        }
+        
+        if (SphObstObj.mark) {
+            SphObstTime(thisThread->newTarget);
         }
         
         AtomDataCpy(thisThread->raw[n], thisThread->newTarget, 0);
@@ -250,6 +261,7 @@ void CommitEvent(struct AtomStr **destLibrary, struct AtomStr *newTargetAtom, st
         case Wall_Event:
         case Obst_Event:
         case Tunl_Event:
+        case SphO_Event:
             walleventsum ++;
             break;
         case PCC_Event:
@@ -273,7 +285,10 @@ void Predict(int *renewList, struct ThreadStr *thisThread) {
     for (int n = 1; n <= renewList[0]; n ++) {
         targetAtom = thisThread->listPtr[renewList[n]];
         
+#ifndef GEL
         BondTime(targetAtom, thisThread);
+#endif
+        
         CollisionTime(targetAtom, thisThread);
         PBCandCrossCellTime(targetAtom);
         ThermostatTime(targetAtom);
@@ -297,6 +312,10 @@ void Predict(int *renewList, struct ThreadStr *thisThread) {
         
         if (flow.mark == 3) {
             ChargeTime(targetAtom);
+        }
+        
+        if (SphObstObj.mark) {
+            SphObstTime(targetAtom);
         }
     }
 }

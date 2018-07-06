@@ -749,93 +749,99 @@ void ObstTime(struct AtomStr *targetAtom) {
 
 void TunnelTime(struct AtomStr *targetAtom) {
     int atomNum = targetAtom->property->num;
-    double radius2 = tunlObj.diameter * 0.5;
+    double radius2;
     double distance2 = 0;
     double distanceShift2;
     double extraRange;
+    double futurePos;
     struct ParameterStr parameters;
     struct InteractionEventStr event;
     struct AtomStr *thisWall = &tunlObj.tunnel;
-    
-    radius2 *= radius2;
-    
     struct ConstraintStr *thisConstr = RightPair(targetAtom->property->type, thisWall->property->type, 0);
+    
     distanceShift2 = thisConstr->dmin;
     extraRange = sqrt(FindPotWellWidth(thisWall, targetAtom));
     
-    InitializeEvent(&event);
     TRANSFER_VECTOR(parameters.position_i, targetAtom->dynamic->coordinate);
-    TRANSFER_VECTOR(parameters.position_j,   thisWall->dynamic->coordinate);
-
-    TRANSFER_VECTOR(parameters.speed_i, targetAtom->dynamic->velocity);
-    TRANSFER_VECTOR(parameters.speed_j,   thisWall->dynamic->velocity);
-    
+    TRANSFER_VECTOR(parameters.speed_i,    targetAtom->dynamic->velocity);
     parameters.position_i[0] = parameters.position_i[1];
-    parameters.position_i[1] = 0;
     parameters.speed_i[0]    = parameters.speed_i[1];
-    parameters.speed_i[1]    = 0;
-    
-    DOT_MINUS(parameters.position_i, parameters.position_j, parameters.r_ij);
-    DOT_MINUS(parameters.speed_i,    parameters.speed_j,    parameters.v_ij);
-    parameters.r_2  = DOT_PROD(parameters.r_ij, parameters.r_ij);
-    parameters.b_ij = DOT_PROD(parameters.r_ij, parameters.v_ij);
-    parameters.v_2  = DOT_PROD(parameters.v_ij, parameters.v_ij);
-    
-    if (parameters.r_2 > radius2 + distanceShift2 - 2 * sqrt(radius2 * distanceShift2) + ZERO) {
-        return; //currently outside of the tunnel
-    }
-    distance2 = radius2 + parameters.r_2 - 2 * sqrt(parameters.r_2 * radius2);
-    
-    parameters.coreorShell = FindPair(targetAtom, thisWall, "collision",
-                                      -1 * parameters.b_ij, distance2,
-                                      &parameters.shortlimit2, &parameters.longlimit2,
-                                      &parameters.lowerPotential, &parameters.upperPotential,
-                                      &tmpDouble, NULL, 0);
-    
-    if (unlikely(parameters.lowerPotential == 0 &&
-                 parameters.upperPotential == 0)) {
-        printf("!!ERROR!!: atom #%i is outside of the wall! %s:%i\n", atomNum, __FILE__, __LINE__);
-        exit(EXIT_FAILURE);
-    }
-    
-    if (parameters.b_ij < 0 && CalculateDisc(&parameters) > 0) { //approaching to the center
-        if (parameters.coreorShell == 1) {
-            return;
-        } else {
-            event.subEventType = TBDCaptr;
+
+    for (int n = 0; n < tunlObj.num; n ++) {
+        radius2 = tunlObj.diameter[n] / 2;
+        radius2 *= radius2;
+        
+        InitializeEvent(&event);
+        TRANSFER_VECTOR(parameters.position_j, tunlObj.position[n]);
+        TRANSFER_VECTOR(parameters.speed_j,    thisWall->dynamic->velocity);
+        
+        parameters.position_i[1] = parameters.position_j[1]; //end position
+        parameters.speed_i[1]    = 0;
+        
+        DOT_MINUS(parameters.position_i, parameters.position_j, parameters.r_ij);
+        DOT_MINUS(parameters.speed_i,    parameters.speed_j,    parameters.v_ij);
+        parameters.r_2  = DOT_PROD(parameters.r_ij, parameters.r_ij);
+        parameters.b_ij = DOT_PROD(parameters.r_ij, parameters.v_ij);
+        parameters.v_2  = DOT_PROD(parameters.v_ij, parameters.v_ij);
+        
+        if (parameters.r_2 > radius2 + distanceShift2 - 2 * sqrt(radius2 * distanceShift2) + ZERO) {
+            continue; //currently outside of the tunnel
+        }
+        distance2 = radius2 + parameters.r_2 - 2 * sqrt(parameters.r_2 * radius2);
+        
+        parameters.coreorShell = FindPair(targetAtom, thisWall, "collision",
+                                          -1 * parameters.b_ij, distance2,
+                                          &parameters.shortlimit2, &parameters.longlimit2,
+                                          &parameters.lowerPotential, &parameters.upperPotential,
+                                          &tmpDouble, NULL, 0);
+        
+        if (unlikely(parameters.lowerPotential == 0 &&
+                     parameters.upperPotential == 0)) {
+            printf("!!ERROR!!: atom #%i is outside of the wall! %s:%i\n", atomNum, __FILE__, __LINE__);
+            exit(EXIT_FAILURE);
         }
         
-        parameters.s_time    = -1;
-        parameters.d_ij2     = radius2 + parameters.longlimit2 - 2 * sqrt(parameters.longlimit2 * radius2);
-        event.potential = parameters.upperPotential;
-        
-    } else { //approaching to the wall edge
-        if (parameters.coreorShell == 0) {
-            event.subEventType = WellBounc;
-        } else {
-            event.subEventType = TBDEscap;
+        if (parameters.b_ij < 0 && CalculateDisc(&parameters) > 0) { //approaching to the center
+            if (parameters.coreorShell == 1) {
+                continue;
+            } else {
+                event.subEventType = TBDCaptr;
+            }
+            
+            parameters.s_time    = -1;
+            parameters.d_ij2     = radius2 + parameters.longlimit2 - 2 * sqrt(parameters.longlimit2 * radius2);
+            event.potential = parameters.upperPotential;
+            
+        } else { //approaching to the wall edge
+            if (parameters.coreorShell == 0) {
+                event.subEventType = WellBounc;
+            } else {
+                event.subEventType = TBDEscap;
+            }
+            
+            parameters.s_time    = 1;
+            parameters.d_ij2     = radius2 + parameters.shortlimit2 - 2 * sqrt(parameters.shortlimit2 * radius2);
+            event.potential = parameters.lowerPotential;
         }
         
-        parameters.s_time    = 1;
-        parameters.d_ij2     = radius2 + parameters.shortlimit2 - 2 * sqrt(parameters.shortlimit2 * radius2);
-        event.potential = parameters.lowerPotential;
+        event.time = CalculateTime(&parameters);
+        
+        //at the next event, the target atom may have left the tunnel,
+        //then the current prediction should be invalid
+        futurePos = parameters.position_i[0] + parameters.speed_i[0] * event.time;
+        if (futurePos < tunlObj.position[n][0] - extraRange ||
+            futurePos > tunlObj.position[n][1] + extraRange) {
+            continue;
+        }
+        
+        if (unlikely(event.time < 0)) {
+            printf("!!ERROR!!: wall time is less than zero, atom #%i! %s:%i\n", atomNum, __FILE__, __LINE__);
+        }
+        
+        if (JobAssign(targetAtom, NULL, &event, Tunl_Event)) {
+            targetAtom->dynamic->event.partner = -10000 * n;
+        }
     }
-    
-    event.time = CalculateTime(&parameters);
-    
-    //at the next event, the target atom may have left the tunnel,
-    //then the current prediction should be invalid
-    parameters.position_i[0] += parameters.speed_i[0] * event.time;
-    if (parameters.position_i[0] < tunlObj.startPosition - extraRange ||
-        parameters.position_i[0] > tunlObj.endPosition   + extraRange) {
-        return;
-    }
-    
-    if (unlikely(event.time < 0)) {
-        printf("!!ERROR!!: wall time is less than zero, atom #%i! %s:%i\n", atomNum, __FILE__, __LINE__);
-    }
-    
-    JobAssign(targetAtom, NULL, &event, Tunl_Event);
     
     return;
 }
@@ -844,7 +850,7 @@ void TunnelTime(struct AtomStr *targetAtom) {
 void ChargeTime(struct AtomStr *targetAtom) {
     int flag = 0;
     int gapNum;
-    int totalCNum = (flow.charge.PBCMark) ? flow.charge.num : flow.charge.num - 1;
+    int totalCNum = (flow.charge.PBCMark) ? flow.charge.num : flow.charge.num / 2;
     double charge;
     double distance2, gap2;
     struct ParameterStr parameters;
@@ -855,11 +861,17 @@ void ChargeTime(struct AtomStr *targetAtom) {
     }
     charge = targetAtom->property->charge;
     
-    for (int chargeNum = 0; chargeNum <= totalCNum && flag == 0; chargeNum ++) {
-        if (targetAtom->dynamic->coordinate[1] < flow.charge.position[chargeNum][1] - flow.charge.gap[chargeNum] - ZERO) {
-            flag = 1;
-        } else {
+    for (int chargeNum = 0; chargeNum < totalCNum; chargeNum ++) {
+        if (targetAtom->dynamic->coordinate[1] > flow.charge.position[chargeNum][1] - ZERO) {
             continue;
+        }
+        
+        //if the atom have interacted with the charge in the system, then it will not interact
+        //with the pseudo-charge outside of the pbc box any more
+        if (flow.charge.position[chargeNum][1] < boxDimension[1]) {
+            flag = 1;
+        } else if (!(flag == 0 && flow.charge.position[chargeNum][1] > boxDimension[1])) {
+            break;
         }
         
         InitializeEvent(&event);
@@ -915,6 +927,60 @@ void ChargeTime(struct AtomStr *targetAtom) {
         
         if (JobAssign(targetAtom, NULL, &event, Chrg_Event))
             targetAtom->dynamic->event.partner = -100 * chargeNum;
+    }
+    
+    return;
+}
+
+
+void SphObstTime(struct AtomStr *targetAtom) {
+    int atomNum = targetAtom->property->num;
+    double distance2 = 0;
+    struct ParameterStr parameters;
+    struct InteractionEventStr event;
+    
+    for (int n = 0; n < SphObstObj.num; n ++) {
+        InitializeEvent(&event);
+        
+        TRANSFER_VECTOR(parameters.position_i, targetAtom->dynamic->coordinate);
+        TRANSFER_VECTOR(parameters.speed_i,    targetAtom->dynamic->velocity);
+        
+        TRANSFER_VECTOR(parameters.position_j, SphObstObj.position[n]);
+        parameters.speed_j[1] = 0;
+        parameters.speed_j[2] = 0;
+        parameters.speed_j[3] = 0;
+        
+        DOT_MINUS(parameters.position_i, parameters.position_j, parameters.r_ij);
+        DOT_MINUS(parameters.speed_i,    parameters.speed_j,    parameters.v_ij);
+        parameters.r_2  = DOT_PROD(parameters.r_ij, parameters.r_ij);
+        parameters.b_ij = DOT_PROD(parameters.r_ij, parameters.v_ij);
+        parameters.v_2  = DOT_PROD(parameters.v_ij, parameters.v_ij);
+        distance2 = parameters.r_2;
+        
+        parameters.shortlimit2 = SphObstObj.radius[n] * SphObstObj.radius[n];
+        parameters.lowerPotential = 0;
+        
+        parameters.longlimit2 = INFINIT;
+        parameters.upperPotential = INFINIT;
+        
+        if (parameters.b_ij < 0 && CalculateDisc(&parameters) > 0) { //approaching
+            event.subEventType   = CoreColli;
+            parameters.s_time    = -1;
+            parameters.d_ij2     = parameters.shortlimit2;
+            event.potential      = parameters.lowerPotential;
+        } else {
+            continue;
+        }
+        
+        event.time = CalculateTime(&parameters);
+        if (unlikely(event.time < 0)) {
+            printf("!!ERROR!!: spherical obstacle time is less than zero, atom #%i! %s:%i\n", atomNum, __FILE__, __LINE__);
+            exit(EXIT_FAILURE);
+        }
+        
+        if (JobAssign(targetAtom, NULL, &event, SphO_Event)) {
+            targetAtom->dynamic->event.partner = -1000 * n;
+        }
     }
     
     return;

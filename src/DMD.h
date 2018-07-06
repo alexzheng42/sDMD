@@ -17,7 +17,7 @@
 #include <pthread.h>
 #include "List.h"
 
-#define DEBUG_RANDOM
+//#define DEBUG_RANDOM
 //#define DEBUG_PRINTF
 //#define DETAILS
 //#define GEL
@@ -29,11 +29,6 @@
 #define INVALID      -111
 #define EXTEND_RATIO  0.95 //make sure the cut off radius is less than the subcell length
 #define THERMOSTAT(method) ((strncmp(method,"Andersen",1) == 0) ? (5.25) : (0.10)) //keep the frequency about 1%
-
-
-//------------------
-//scientific constants
-#define PI 3.14159265359
 
 #ifdef DEBUG_RANDOM
 #define RANDOM_SEED 1522672160
@@ -116,6 +111,7 @@ free(name);
 (((num1) < (num2)) ? (num1) : (num2))
 
 #define TRANSFER_VECTOR(recv, send)   \
+recv[0]=send[0];    \
 recv[1]=send[1];    \
 recv[2]=send[2];    \
 recv[3]=send[3];
@@ -237,6 +233,7 @@ enum EEventType {
     Obst_Event,  //obstruction event
     Tunl_Event,  //tunnel event
     Chrg_Event,  //charge event
+    SphO_Event,  //column event
      PCC_Event,  //PBC and crossing event
     Lagv_Event,  //Langevin event
      TBD_Event,  //TBD event
@@ -350,6 +347,7 @@ struct PropertyStr {
     int type;
     double charge;
     double mass;
+    double color[3];
     struct AtomSeqStr sequence;
     struct ConstraintStr *bond;
     struct ConstraintStr *constr;
@@ -461,11 +459,19 @@ struct ObstructionStr {
 };
 
 
+struct SphObstStr {
+    int mark;
+    int num;
+    double *radius;
+    double **position;
+};
+
+
 struct TunnelStr {
     int mark;
-    double startPosition;
-    double endPosition;
-    double diameter;
+    int num;
+    double **position;
+    double *diameter;
     struct AtomStr tunnel;
 };
 
@@ -623,6 +629,7 @@ extern struct AtomStr *wall;
 extern struct DynamicWallStr wallDyn;
 extern struct ObstructionStr obstObj;
 extern struct TunnelStr      tunlObj;
+extern struct SphObstStr     SphObstObj;
 extern char wallExist[20];
 extern char wallType[20];
 
@@ -641,6 +648,7 @@ extern struct FileStr *fileList;
 
 //-----------------
 //other
+extern int visual;
 extern int tmpInt;
 extern double tmpDouble;
 //-----------------
@@ -682,6 +690,7 @@ void WallTime(struct AtomStr *targetAtom);
 void ObstTime(struct AtomStr *targetAtom);
 void TunnelTime(struct AtomStr *targetAtom);
 void ChargeTime(struct AtomStr *targetAtom);
+void SphObstTime(struct AtomStr *targetAtom);
 //---------------------------------------------
 
 
@@ -758,6 +767,7 @@ void CalAccumulatedPoten(struct StepPotenStr *startPoint);
 void FreeConstr(struct ConstraintStr *thisConstr);
 void PrintData(int *list);
 void CalCOMV(int proteinNum, double *netV);
+void ChangeColor(int type, double *color);
 int AtomTypeChange(int originalType, int direct);
 int FindPair(struct AtomStr *atom1, struct AtomStr *atom2, char *interactionType, double direction, double distance2, double *lowerLimit, double *upperLimit, double *lowerPotential, double *upperPotential, double *accumPotential, struct AtomStr *HBPartner, int typeChange);
 //HBPartner is only used during finding pair between HB target atom and its neighbor. HBPartner is the partner atom of the target atom.
@@ -793,6 +803,14 @@ void SaveGRO(struct FileStr *file);
 void GlobalCloseFree(void);
 struct FileStr* InitializeFiles(char *extra, struct FileStr* preList);
 //---------------------------------------------
+
+
+//---------------------------------------------
+//Visual
+//---------------------------------------------
+void VisualSGThread(void);
+//---------------------------------------------
+
 
 #endif /* DMD_h */
 

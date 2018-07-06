@@ -178,6 +178,41 @@ void GlobalCloseFree() {
         }
     }
     
+    if (flow.mark == 3) {
+        for (int i = 0; i < flow.charge.num; i ++) {
+            free(flow.charge.position[i]);
+            free(flow.charge.velocity[i]);
+        }
+        free(flow.charge.position);
+        free(flow.charge.velocity);
+        
+        free(flow.charge.potGrad);
+        free(flow.charge.gap);
+    }
+    
+    if (obstObj.mark) {
+        for (int i = 0; i < obstObj.num; i ++) {
+            free(obstObj.position[i]);
+        }
+        free(obstObj.position);
+    }
+    
+    if (tunlObj.mark) {
+        for (int i = 0; i < tunlObj.num; i ++) {
+            free(tunlObj.position[i]);
+        }
+        free(tunlObj.position);
+        free(tunlObj.diameter);
+    }
+    
+    if (SphObstObj.mark) {
+        for (int i = 0; i < SphObstObj.num; i ++) {
+            free(SphObstObj.position[i]);
+        }
+        free(SphObstObj.position);
+        free(SphObstObj.radius);
+    }
+    
     free(CBT.node);
     free(CBT.leaf);
     free(CBT.time);
@@ -326,11 +361,42 @@ void SaveLog(struct FileStr *file) {
         }
         fprintf(Logfile, "\n");
     }
+    
     fprintf(Logfile, "Tunnel              = %-5i\n", tunlObj.mark);
     if (!tunlObj.mark) {
         fprintf(Logfile, "                      No tunnel.\n");
     } else {
-        fprintf(Logfile, "Tunnel(Ls,Le,D)     = %-8.2lf%-8.2lf%-8.2lf\n", tunlObj.startPosition, tunlObj.endPosition, tunlObj.diameter);
+        fprintf(Logfile, "TunnelInfo          =");
+        for (int i = 0; i < tunlObj.num; i ++) {
+            fprintf(Logfile, "%-8.2lf%-8.2lf%-8.2lf%-8.2lf%-8.2lf\n",
+                    tunlObj.position[i][0],
+                    tunlObj.position[i][1],
+                    tunlObj.position[i][2],
+                    tunlObj.position[i][3],
+                    tunlObj.diameter[i]);
+            if (i < tunlObj.num - 1) {
+                fprintf(Logfile, ", ");
+            }
+        }
+        fprintf(Logfile, "\n");
+    }
+    
+    fprintf(Logfile, "ColumnObstacles     = %-5i\n", SphObstObj.mark);
+    if (!SphObstObj.mark) {
+        fprintf(Logfile, "                      No column.\n");
+    } else {
+        fprintf(Logfile, "ColumnInfo          =");
+        for (int i = 0; i < SphObstObj.num; i ++) {
+            fprintf(Logfile, "%-8.2lf%-8.2lf%-8.2lf%-8.2lf\n",
+                    SphObstObj.position[i][1],
+                    SphObstObj.position[i][2],
+                    SphObstObj.position[i][3],
+                    SphObstObj.radius[i] * 2);
+            if (i < SphObstObj.num - 1) {
+                fprintf(Logfile, ", ");
+            }
+        }
+        fprintf(Logfile, "\n");
     }
     
     fprintf(Logfile, "RandomSeed          = %i\n", seed);

@@ -30,6 +30,7 @@ void ReadWall(void);
 void CreateFlow(void);
 void RemoveConstr(struct PropertyStr *property, int atomNum, char *type);
 void InitializeCharge(void);
+void InitializeColor(void);
 int FindNextBondList(int targetAtom, struct PropertyStr *property, double dmin, double dmax, int type);
 int ConstrList(int targetAtom, int step, struct PropertyStr *property, FILE *inputFile, int type);
 int FindTargetAtom(int AANum, char *targetAtom);
@@ -190,6 +191,8 @@ void InputData(int argc, const char * argv[]) {
                         sprintf(REMDInfo.REMD_ExtraName, "%s", argv[i + 5]);
                         sprintf(saveDataFileName, "savedData%s.dat", REMDInfo.REMD_ExtraName);
                     }
+                } else if (strcmp(argv[i], "-visual") == 0) {
+                    visual = 1;
                 } else if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "-help") == 0) {
                 help:
                     printf("   -i: directory of the parameter folder\n");
@@ -227,6 +230,8 @@ void InputData(int argc, const char * argv[]) {
                     printf("                                     the temperature, \n");
                     printf("                                     the exchange rate, and\n");
                     printf("                                     the suffix name of saving files\n");
+                    
+                    printf(" -visual: enable real-time visualization, default disabled\n");
 
                     exit(EXIT_SUCCESS);
                 }
@@ -432,7 +437,6 @@ void ReadBreakPoint(FILE *input_file) {
     
     //-------------------------
     //thermostat and solvent
-    //fread(thermostatType, sizeof (char), 20, input_file);
     
     
     //-------------------------
@@ -527,12 +531,12 @@ void ReadParameter() {
             flow.mark = 3;
             
             curpos = pos;
-            sscanf(directory + curpos, "%i%n", &flow.charge.num, &pos);
+            sscanf(directory + curpos, "%i%s%n", &flow.charge.num, statement, &pos);
             
             //PBC on charge source
             int chargeNum = flow.charge.num;
             if (flow.charge.PBCMark) {
-                flow.charge.num ++;
+                flow.charge.num *= 2;
             }
             
             DOUBLE_2CALLOC(flow.charge.position, flow.charge.num, 4);
@@ -620,11 +624,57 @@ void ReadParameter() {
     sscanf(directory, "%s%s%n", statement, statement, &pos);
     if (strcmp(statement, "no")) {
         tunlObj.mark = 1;
+        tunlObj.num = atoi(statement);
         
-        tunlObj.startPosition = atof(statement);
-        sscanf(directory + pos, "%lf%lf",
-               &tunlObj.endPosition,
-               &tunlObj.diameter);
+        tunlObj.position = (double **)calloc(tunlObj.num, sizeof(double *));
+        tunlObj.diameter = (double *)calloc(tunlObj.num, sizeof(double));
+        
+        curpos = 0;
+        for (int i = 0; i < tunlObj.num; i ++) {
+            curpos += pos;
+            
+            tunlObj.position[i] = (double *)calloc(4, sizeof(double));
+            sscanf(directory + curpos, "%lf%lf%lf%lf%lf%n",
+                   &tunlObj.position[i][0],
+                   &tunlObj.position[i][1],
+                   &tunlObj.position[i][2],
+                   &tunlObj.position[i][3],
+                   &tunlObj.diameter[i], &pos);
+            
+            curpos += pos; //comma
+            if (i != tunlObj.num - 1) {
+                sscanf(directory + curpos, "%s%n", statement, &pos);
+            }
+        }
+    }
+    
+    fgets(directory, sizeof(directory), input_file);
+    sscanf(directory, "%s%s%n", statement, statement, &pos);
+    if (strcmp(statement, "no")) {
+        SphObstObj.mark = 1;
+        
+        SphObstObj.num = atoi(statement);
+        SphObstObj.position = (double **)calloc(SphObstObj.num, sizeof(double *));
+        SphObstObj.radius = (double *)calloc(SphObstObj.num, sizeof(double));
+        
+        curpos = 0;
+        for (int i = 0; i < SphObstObj.num; i ++) {
+            curpos += pos;
+            
+            SphObstObj.position[i] = (double *)calloc(4, sizeof(double));
+            sscanf(directory + curpos, "%lf%lf%lf%lf%n",
+                   &SphObstObj.position[i][1],
+                   &SphObstObj.position[i][2],
+                   &SphObstObj.position[i][3],
+                   &SphObstObj.radius[i], &pos);
+            
+            SphObstObj.radius[i] /= 2;
+            
+            curpos += pos;
+            if (i != SphObstObj.num - 1) {
+                sscanf(directory + curpos, "%s%n", statement, &pos);
+            }
+        }
     }
     
     fclose(input_file);
@@ -1704,6 +1754,10 @@ void InitializeOthers() {
     //include those multi-thread variables
     
     thread_t = (pthread_t *)calloc(threadNum, sizeof(pthread_t));
+    
+    if (visual) {
+        InitializeColor();
+    }
 }
 
 void ReadWall(void) {
@@ -1848,10 +1902,12 @@ void ReadWall(void) {
         
         //find which two obstruction walls have holes
         for (int i = 0; i < obstObj.num; i ++) {
-            if (obstObj.position[i][1] > 0 &&
-                (ABSVALUE(obstObj.position[i][1] - tunlObj.startPosition) <= ZERO ||
-                 ABSVALUE(obstObj.position[i][1] - tunlObj.endPosition)   <= ZERO)) {
-                    obstObj.hole[i] = 1;
+            for (int n = 0; n < tunlObj.num; n ++) {
+                if (obstObj.position[i][1] > 0 &&
+                    (ABSVALUE(obstObj.position[i][1] - tunlObj.position[n][0]) <= ZERO ||
+                     ABSVALUE(obstObj.position[i][1] - tunlObj.position[n][1]) <= ZERO)) {
+                        obstObj.hole[i] = 1;
+                }
             }
         }
     }
@@ -1953,12 +2009,31 @@ void InitializeCharge(void) {
     //in order to keep the atoms moving even after passing the last charge source
     //do this here instead of in ReadParameter() is due to at this time boxDimension is assigned
     if (flow.mark == 3 && flow.charge.PBCMark) { //right now only support PBC on x axis
-        int chargeNum = flow.charge.num - 1;
-        TRANSFER_VECTOR(flow.charge.position[chargeNum], flow.charge.position[0]);
-        flow.charge.position[chargeNum][1] += boxDimension[1];
-        flow.charge.potGrad[chargeNum] = flow.charge.potGrad[0];
-        flow.charge.gap[chargeNum] = flow.charge.gap[0];
+        int chargeNum = flow.charge.num / 2;
+        
+        for (int i = chargeNum; i < flow.charge.num; i ++) {
+            TRANSFER_VECTOR(flow.charge.position[i], flow.charge.position[i - chargeNum]);
+            flow.charge.position[i][1] += boxDimension[1];
+            flow.charge.potGrad[i] = flow.charge.potGrad[i - chargeNum];
+            flow.charge.gap[i] = flow.charge.gap[i - chargeNum];
+        }
     }
     
     return;
 }
+
+void InitializeColor(void) {
+#ifndef GEL
+    for (int i = 1; i <= atomnum; i ++) {
+        ChangeColor(atom[i].property->type, atom[i].property->color);
+    }
+    
+#else
+    for (int i = 1; i <= atomnum; i ++) {
+        atom[i].property->color[0] = atom[i].dynamic->coordinate[1] / boxDimension[1];
+        atom[i].property->color[1] = atom[i].dynamic->coordinate[2] / boxDimension[2];
+        atom[i].property->color[2] = atom[i].dynamic->coordinate[3] / boxDimension[3];
+    }
+#endif
+}
+

@@ -15,6 +15,7 @@ void WallEvent(struct AtomStr *targetAtom);
 void ObstEvent(struct AtomStr *targetAtom);
 void TunnelEvent(struct AtomStr *targetAtom);
 void ChargeEvent(struct AtomStr *targetAtom);
+void SphObstEvent(struct AtomStr *targetAtom);
 void InteractionEvent(struct AtomStr *targetAtom, struct AtomStr *partner, struct AtomStr *HBNeighbor_i, struct AtomStr *HBNeighbor_j, struct ThreadStr* thisThread, list *atomList);
 double HBEnergyChange(struct AtomStr *targetAtom, int skipAtom, char *type, list *atomList, struct ThreadStr *thisThread);
 
@@ -69,6 +70,10 @@ int DoEvent(struct ThreadStr *thisThread) {
             
         case Chrg_Event: //do charge interaction
             ChargeEvent(targetAtom);
+            break;
+            
+        case SphO_Event: //do column interaction
+            SphObstEvent(targetAtom);
             break;
             
         case Invd_Event:
@@ -233,6 +238,11 @@ int HBEvent(struct AtomStr **atomLibrary, struct AtomStr *HB_i, struct AtomStr *
         HB_i->property->type = AtomTypeChange(HB_i->property->type, 1);
         HB_j->property->type = AtomTypeChange(HB_j->property->type, 1);
         
+        if (visual) {
+            ChangeColor(HB_i->property->type, HB_i->property->color);
+            ChangeColor(HB_j->property->type, HB_i->property->color);
+        }
+        
         //===================================
         //for HB acceptor and donor
         temp = ++HB_i->dynamic->HBNeighbor.neighborStatus;
@@ -255,6 +265,11 @@ int HBEvent(struct AtomStr **atomLibrary, struct AtomStr *HB_i, struct AtomStr *
         
         HB_i->property->type = AtomTypeChange(HB_i->property->type, 0);
         HB_j->property->type = AtomTypeChange(HB_j->property->type, 0);
+        
+        if (visual) {
+            ChangeColor(HB_i->property->type, HB_i->property->color);
+            ChangeColor(HB_j->property->type, HB_i->property->color);
+        }
         
         //===================================
         //for HB acceptor and donor
@@ -331,8 +346,7 @@ void WallEvent(struct AtomStr *targetAtom) {
     DOT_MINUS(speed_i, speed_j, v_ij);
     d_ij2 = DOT_PROD(r_ij, r_ij);
     b_ij = DOT_PROD(r_ij, v_ij);
-    reducedMass = targetAtom->property->mass * thisWall->property->mass /
-                 (targetAtom->property->mass + thisWall->property->mass);
+    reducedMass = targetAtom->property->mass;
     potential = targetAtom->dynamic->event.potential;
     
     switch (targetAtom->dynamic->event.subEventType) {
@@ -449,8 +463,7 @@ void ObstEvent(struct AtomStr *targetAtom) {
     DOT_MINUS(   speed_i,    speed_j, v_ij);
     d_ij2 = DOT_PROD(r_ij, r_ij);
     b_ij  = DOT_PROD(r_ij, v_ij);
-    reducedMass = targetAtom->property->mass * thisWall->property->mass /
-                 (targetAtom->property->mass + thisWall->property->mass);
+    reducedMass = targetAtom->property->mass;
     potential = targetAtom->dynamic->event.potential;
     
     switch (targetAtom->dynamic->event.subEventType) {
@@ -507,18 +520,18 @@ void TunnelEvent(struct AtomStr *targetAtom) {
     double position_i[4] = {0}, position_j[4] = {0};
     struct AtomStr *thisWall = &tunlObj.tunnel;
     
+    int num = targetAtom->dynamic->event.partner / -10000;
     TRANSFER_VECTOR(position_i, targetAtom->dynamic->coordinate);
-    TRANSFER_VECTOR(position_j,   thisWall->dynamic->coordinate);
+    TRANSFER_VECTOR(position_j, tunlObj.position[num]);
     speed_i = targetAtom->dynamic->velocity;
     speed_j =   thisWall->dynamic->velocity;
-    position_i[1] = 0;
+    position_i[1] = position_j[1]; //end position
 
     DOT_MINUS(position_i, position_j, r_ij);
     DOT_MINUS(speed_i, speed_j, v_ij);
     d_ij2 = DOT_PROD(r_ij, r_ij);
     b_ij = DOT_PROD(r_ij, v_ij);
-    reducedMass = targetAtom->property->mass * thisWall->property->mass /
-                 (targetAtom->property->mass + thisWall->property->mass);
+    reducedMass = targetAtom->property->mass;
     potential = targetAtom->dynamic->event.potential;
     
     switch (targetAtom->dynamic->event.subEventType) {
@@ -625,6 +638,53 @@ void ChargeEvent(struct AtomStr *targetAtom) {
     
     return;
 }
+
+
+void SphObstEvent(struct AtomStr *targetAtom) {
+    int s_vel = 0;
+    int thisObst = targetAtom->dynamic->event.partner / -1000;
+    double v_ij[4];
+    double b_ij, d_ij2, r_ij[4], term[4];
+    double phi, potential, reducedMass;
+    double *speed_i = NULL, speed_j[4] = {0};
+    double position_i[4] = {0}, position_j[4] = {0};
+    
+    TRANSFER_VECTOR(position_i, targetAtom->dynamic->coordinate);
+    TRANSFER_VECTOR(position_j, SphObstObj.position[thisObst]);
+    
+    speed_i = targetAtom->dynamic->velocity;
+    
+    DOT_MINUS(position_i, position_j, r_ij);
+    DOT_MINUS(   speed_i,    speed_j, v_ij);
+    d_ij2 = DOT_PROD(r_ij, r_ij);
+    b_ij  = DOT_PROD(r_ij, v_ij);
+    reducedMass = targetAtom->property->mass;
+    
+    switch (targetAtom->dynamic->event.subEventType) {
+        case CoreColli:
+            s_vel = 1;
+            potential = 0;
+            break;
+            
+        default:
+            printf("!ERROR!: wall interaction type error! %s:%i\n", __FILE__, __LINE__);
+            exit(EXIT_FAILURE);
+            break;
+    }
+    
+    phi = (-1 * b_ij + s_vel * sqrt(b_ij * b_ij - 2 * d_ij2 * potential / targetAtom->property->mass)) / d_ij2;
+    
+    if (unlikely(isnan(phi))) {
+        printf("!!ERROR!!: phi is NaN! %s:%i\n", __FILE__, __LINE__);
+        exit(EXIT_FAILURE);
+    }
+    
+    FACTOR_PROD(phi, r_ij, term);
+    DOT_PLUS(speed_i, term, targetAtom->dynamic->velocity);
+    
+    return;
+}
+
 
 void InteractionEvent (struct AtomStr *targetAtom, struct AtomStr *partner, struct AtomStr *HBNeighbor_i, struct AtomStr *HBNeighbor_j, struct ThreadStr* thisThread, list *atomList)
 {
