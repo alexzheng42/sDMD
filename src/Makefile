@@ -26,7 +26,7 @@ endif
 
 #Windows (cygwin)
 ifeq ($(OS), Windows_NT)
-	LDFLAGS = -lopengl32 -lglu32 -lglut32
+	LDFLAGS = -lgl -lglu -lglut
 endif
 
 all: sDMD sServer sREMD

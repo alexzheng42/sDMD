@@ -13,4 +13,4 @@ WallDyn            no
 Flow               no charge 1, 120 75 75 0.216 5.0
 Obstruct?          no 2, x 60.0, x 120.0
 Tunnel?            no 1, 60 120 75 75 25
-ColnObst?          no 1, 40 75 75 20
+SphObst?           no 1, 40 75 75 20

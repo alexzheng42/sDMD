@@ -8,9 +8,18 @@
 
 #include "DMD.h"
 
+#ifdef __APPLE__
 #include <OpenGL/gl.h>    /* Header file for the OpenGL library */
 #include <OpenGL/glu.h>   /* Header file for the GLu library */
 #include <GLUT/glut.h>    /* Header file for the GLut library */
+#else
+#ifdef _WIN32
+    #include <windows.h>
+#endif
+#include <GL/gl.h>
+#include <GL/glu.h>
+#include <GL/glut.h>
+#endif
 
 GLuint   sphereid;
 GLuint   atomsid;

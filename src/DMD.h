@@ -30,6 +30,10 @@
 #define EXTEND_RATIO  0.95 //make sure the cut off radius is less than the subcell length
 #define THERMOSTAT(method) ((strncmp(method,"Andersen",1) == 0) ? (5.25) : (0.10)) //keep the frequency about 1%
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846264338327950288
+#endif
+
 #ifdef DEBUG_RANDOM
 #define RANDOM_SEED 1522672160
 #endif
