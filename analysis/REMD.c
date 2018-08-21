@@ -8,9 +8,6 @@
 
 #include "Analysis.h"
 
-#define boltzmann 0.0019872041 //kcal / mol / K
-#define tolerance 10E-7
-
 
 int replicaNo;
 int exRate, binNum = 10;
@@ -174,7 +171,7 @@ void CountReplica(long startTime, long endTime) {
         double curT;
         
         inEnergyFile = OpenInputFile(files[outPE   ][id].name);
-        inTempFile   = OpenInputFile(files[REMDTemp][id].name);
+        inTempFile   = OpenInputFile(files[inREMDTemp][id].name);
         if (aHB || bHB || tHB) {
             inReCorFile = OpenInputFile(files[outHBInfo][id].name);
         }
@@ -222,6 +219,7 @@ void CountReplica(long startTime, long endTime) {
 void CalDoS(double *dos, long **n, long *totN, double *pE, int repNo, int binNo) {
     double *newFValue;
     double numerator, denominator;
+    double tolerance = 10E-7;
     
     fValue = (double *)calloc(repNo, sizeof(double));
     newFValue = (double *)calloc(repNo, sizeof(double));
@@ -234,7 +232,9 @@ repeat:
         numerator = denominator = 0;
         for (int i = 0; i < repNo; i ++) {
             numerator += n[i][l];
-            denominator += totN[i] * exp(-1 * CalBeta(temperature[i]) * pE[l] - fValue[i]);
+            denominator += totN[i] / exp(fValue[i])
+                         * exp(-1 * CalBeta(temperature[i]) * pE[l] / 2)
+                         * exp(-1 * CalBeta(temperature[i]) * pE[l] / 2); //avoid INF or NaN
         }
         
         if (CheckValidity(denominator)) {
@@ -248,7 +248,9 @@ repeat:
             if (pE[l] == 0) {
                 continue;
             }
-            denominator += dos[l] * exp(-1 * CalBeta(temperature[i]) * pE[l]);
+            denominator += dos[l]
+                         * exp(-1 * CalBeta(temperature[i]) * pE[l] / 2)
+                         * exp(-1 * CalBeta(temperature[i]) * pE[l] / 2); //avoid INF or NaN
         }
         
         newFValue[i] = log(denominator);
@@ -273,10 +275,11 @@ repeat:
 
 
 void CalProbability(double *dos, double *f, double *pE, int reNo, int binNum) {
-    
     for (int i = 0; i < reNo; i ++) {
         for (int l = 0; l < binNum; l ++) {
-            probability[i][l] = dos[l] * exp(-1 * CalBeta(temperature[i]) * pE[l] - f[i]);
+            probability[i][l] = dos[l] / exp(f[i])
+                              * exp(-1 * CalBeta(temperature[i]) * pE[l] / 2)
+                              * exp(-1 * CalBeta(temperature[i]) * pE[l] / 2);
         }
     }
     
@@ -286,7 +289,7 @@ void CalProbability(double *dos, double *f, double *pE, int reNo, int binNum) {
 
 
 double CalBeta(double T) {
-    return 1 / (T * boltzmann);
+    return 1 / (T * BOLTZMANN);
 }
 
 
@@ -319,7 +322,7 @@ double FindCurT(FILE *inputFile, long *step, long startTime, long endTime) {
         *step = curFrame;
     }
     
-    return thisT / boltzmann;
+    return thisT / BOLTZMANN;
 }
 
 
@@ -586,8 +589,8 @@ double CalAvePoten(double tgtT, double *dos, double *pE, int binNum, int dimensi
         for (int i = 1; i < dimension; i ++) {
             PEn *= pE[l];
         }
-        numerator += PEn * dos[l] * exp(-1 * CalBeta(tgtT) * pE[l]);
-        denominator += dos[l] * exp(-1 * CalBeta(tgtT) * pE[l]);
+        numerator   += PEn * dos[l] * exp(-1 * CalBeta(tgtT) * pE[l] / 2) * exp(-1 * CalBeta(tgtT) * pE[l] / 2); //avoid INF or NaN
+        denominator +=       dos[l] * exp(-1 * CalBeta(tgtT) * pE[l] / 2) * exp(-1 * CalBeta(tgtT) * pE[l] / 2);
     }
     return numerator / denominator;
 }
@@ -599,7 +602,7 @@ double CalCv(double tgtT) {
      U = CalAvePoten(tgtT, DoS, potenE, binNum, 1);
     U2 = CalAvePoten(tgtT, DoS, potenE, binNum, 2);
     
-    denominator = boltzmann * tgtT;
+    denominator = BOLTZMANN * tgtT;
     denominator *= denominator;
     
     if (CheckValidity(U2) && CheckValidity(U) && CheckValidity(denominator)) {

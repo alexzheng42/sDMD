@@ -18,6 +18,9 @@ double FindPair (struct AtomStr *atom1, struct AtomStr *atom2, char *type, void 
 struct ConstraintStr *RightPair(int type1, int type2, int flag);
 
 
+static int beginP, endP, offSet, thisAtomNum;
+
+
 void EnergyInfo(int id) {
     double TKE = 0, TPE = 0, TWE = 0, Temp;
     long step = 0, totalFrame;
@@ -25,6 +28,17 @@ void EnergyInfo(int id) {
     struct SectionStr *sect;
     FILE *TrjInputFile, *CntInputFile;
     FILE *KEOutputFile, *PEOutputFile, *WEOutputFile, *TolEOutputFile, *TempOutputFile;
+    
+    beginP = 1;
+    endP = numofprotein;
+    thisAtomNum = atomnum;
+    offSet = 0;
+    
+    if (nPP) {
+        beginP = endP = nPP;
+        thisAtomNum = protein[nPP].endAtomNum - protein[nPP].startAtomNum + 1;
+        offSet = protein[nPP].startAtomNum - 1;
+    }
     
     printf("Analyzing energy information... ");
     fflush(stdout);
@@ -61,7 +75,7 @@ void EnergyInfo(int id) {
         sprintf(directory, "%s%s", path, buffer);
         TrjInputFile = fopen(directory, "r");
         if (TrjInputFile == NULL) {
-            printf("!!ERROR!!: cannot find file %s in directory %s. make sure the input path is correct and the file does exist! %s:%i\n", files[inTrj][id].name, path, __FILE__, __LINE__);
+            printf("!!ERROR!!: cannot find file %s in directory %s. make sure the input path is correct and the file does exist! %s:%i\n", directory, path, __FILE__, __LINE__);
             printf("           You may need to execute -rPBC first to generate the required file!\n");
             exit(EXIT_FAILURE);
         }
@@ -118,7 +132,7 @@ double CalKeEnergy(void) { //per frame
     double TKE = 0;
     double speed[4] = {0};
     
-    for (int n = 1; n <= atomnum; n++) {
+    for (int n = 1 + offSet; n <= thisAtomNum + offSet; n++) {
         transfer_vector(speed, atom[n].dynamic->velocity);
         temp = dotprod(speed, speed);
         TKE += 0.5 * atom[n].property->mass * temp;
@@ -150,7 +164,7 @@ double CalPoEnergy(void) { //per frame
     LinkList();
     pointToStruct(boxsize, boxOrigDim);
     
-    for (int i = 1; i <= atomnum; i ++) {
+    for (int i = 1 + offSet; i <= thisAtomNum + offSet; i ++) {
         pointToStruct(atom_CellAxis, atom[i].dynamic->cellIndex);
         
         for (int n = 0; n <= 26; n ++) {
@@ -174,11 +188,26 @@ double CalPoEnergy(void) { //per frame
                         cell_neighbor[1] + 1;
             
             pair = celllist[atomnum + cellindex];
-            while (pair != 0 && pair > i) {
-                dotplus(atom[pair].dynamic->coordinate, positionshift, atom[pair].dynamic->coordinate);
-                TPE += FindPair(&atom[i], &atom[pair], "normal", NULL);
-                
-                pair = celllist[pair];
+            if (!nPP) {
+                while (pair != 0) {
+                    if (pair > i) {
+                        dotplus(atom[pair].dynamic->coordinate, positionshift, atom[pair].dynamic->coordinate);
+                        TPE += FindPair(&atom[i], &atom[pair], "normal", NULL);
+                        dotminus(atom[pair].dynamic->coordinate, positionshift, atom[pair].dynamic->coordinate);
+                    }
+                    
+                    pair = celllist[pair];
+                }
+            } else {
+                while (pair != 0) {
+                    if (pair != i /*&& atom[pair].property->sequence.proteinNum == atom[i].property->sequence.proteinNum*/) {
+                        dotplus(atom[pair].dynamic->coordinate, positionshift, atom[pair].dynamic->coordinate);
+                        TPE += FindPair(&atom[i], &atom[pair], "normal", NULL) * 0.5;
+                        dotminus(atom[pair].dynamic->coordinate, positionshift, atom[pair].dynamic->coordinate);
+                    }
+                    
+                    pair = celllist[pair];
+                }
             }
         }
     }
@@ -204,13 +233,13 @@ double CalWlEnergy(struct SectionStr *sect) { //per frame
     }
     
     if (strcmp(sect->wallObj.wallExist, "smooth") == 0) {
-        for (int i = 1; i <= atomnum; i ++) {
+        for (int i = 1 + offSet; i <= thisAtomNum + offSet; i ++) {
             TWE += FindPair(&atom[i], &sect->wallObj.wall, "wall", &sect->wallObj);
         }
     }
     
     if (sect->tunlObj.mark) {
-        for (int i = 1; i <= atomnum; i ++) {
+        for (int i = 1 + offSet; i <= thisAtomNum + offSet; i ++) {
             if (atom[i].dynamic->coordinate[1] >= sect->tunlObj.startPosition &&
                 atom[i].dynamic->coordinate[1] <= sect->tunlObj.endPosition) {
                 TWE += FindPair(&atom[i], &sect->tunlObj.tunnel, "tunnel", &sect->tunlObj);
@@ -222,7 +251,7 @@ double CalWlEnergy(struct SectionStr *sect) { //per frame
 }
 
 double CalTemp(double TKE) { //per frame
-    return 2 * TKE / (3 * atomnum) * 500; //remove "500" will be the reduced T
+    return 2 * TKE / (3 * thisAtomNum) / BOLTZMANN; //remove "BOLTZMANN" will be the reduced T
 }
 
 double FindPair (struct AtomStr *atom1, struct AtomStr *atom2, char *type, void *obstInfo)

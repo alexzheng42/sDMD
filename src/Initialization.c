@@ -499,7 +499,15 @@ void ReadParameter() {
     fscanf(input_file, "%s%lf",       statement, &outputrate);
     fscanf(input_file, "%s%lf",       statement, &cutoffr);
     fscanf(input_file, "%s%s",        statement, Methodtype);
+    
     fscanf(input_file, "%s%s",        statement, thermostatType);
+    if (strcmp(thermostatType, "Andersen") == 0) {
+        thermoF = THERMO_AND;
+    }
+#ifdef GEL
+    thermoF = THERMO_GEL;
+#endif
+    
     fscanf(input_file, "%s%i",        statement, &codeNum);
     fscanf(input_file, "%s%i",        statement, &threadNum);
     fscanf(input_file, "%s%s",        statement, wallExist);

@@ -25,6 +25,8 @@ int FindAANum(char * name);
 void HBInfo(int id) {
     int connectAtom = 0;
     int alphaRecord = 0, betaRecord = 0;
+    int beginP = 1, endP = numofprotein;
+    int thisAtomNum = atomnum, offSet = 0;
     long **markAA = NULL, totalFrame;
     double phi = 0, psi = 0;
     double prePhi = 0, prePsi = 0;
@@ -33,6 +35,12 @@ void HBInfo(int id) {
     FILE ***RamachFile = NULL, *HBOutputFile, *AAMarkOutputFile = NULL;
     FILE **ContactMapFile = NULL, **ContactMapAAFile = NULL;
     FILE *TrjInputFile, *CntInputFile;
+
+    if (nPP) { //for only analyze a specific peptide instead of all
+        beginP = endP = nPP;
+        thisAtomNum = protein[nPP].endAtomNum - protein[nPP].startAtomNum + 1;
+        offSet = protein[nPP].startAtomNum - 1;
+    }
     
     printf("Analyzing HB information... ");
     fflush(stdout);
@@ -74,6 +82,9 @@ void HBInfo(int id) {
         RamachFile = (FILE ***)calloc(numofprotein, sizeof(FILE **));
         for (int n = 0; n < numofprotein; n ++) {
             RamachFile[n] = (FILE **)calloc(21, sizeof(FILE *));
+        }
+
+        for (int n = beginP - 1; n < endP; n ++) {
             for (int i = 0; i < 21; i ++) {
                 sprintf(directory, "%sRamachFile_%i_%s.txt", path, n + 1, AAName[i]);
                 RamachFile[n][i] = fopen(directory, "w");
@@ -96,7 +107,7 @@ void HBInfo(int id) {
         ContactMapFile = (FILE **)calloc(numofprotein, sizeof(FILE *));
         ContactMapAAFile = (FILE **)calloc(numofprotein, sizeof(FILE *));
         
-        for (int i = 0; i < numofprotein; i ++) {
+        for (int i = beginP - 1; i < endP; i ++) {
             sprintf(directory, "%sContactInfo_%i.txt", path, i + 1);
             ContactMapFile[i] = fopen(directory, "w");
             
@@ -134,7 +145,7 @@ void HBInfo(int id) {
             sect = &sectInfo[sectNum];
             ResetHBNum();
             if (analysisList[AnalyzeConMap]) {
-                for (int n = 0; n < numofprotein; n ++) {
+                for (int n = beginP - 1; n < endP; n ++) {
                     fprintf(ContactMapFile[n],   "Frame = %li\n", step * (long)sect->outputRate);
                     fprintf(ContactMapAAFile[n], "Frame = %li\n", step * (long)sect->outputRate);
                 }
@@ -142,7 +153,7 @@ void HBInfo(int id) {
             
             alphaRecord = betaRecord = 0;
             
-            for (int i = 1; i <= atomnum; i++) {
+            for (int i = offSet + 1; i <= offSet + thisAtomNum; i++) {
                 
                 if (atom[i].property->type == 18) {
                     RamachandranPlot(i, &phi, &psi);
@@ -206,17 +217,21 @@ void HBInfo(int id) {
     }
     
     if (analysisList[AnalyzeRamach]) {
-        for (int n = 0; n < numofprotein; n ++) {
+        for (int n = beginP - 1; n < endP; n ++) {
             for (int i = 0; i < 21; i ++) {
                 fclose(RamachFile[n][i]);
             }
+        }
+        
+        for (int n = 0; n < numofprotein; n ++) {
             free(RamachFile[n]);
         }
+
         free(RamachFile);
     }
 
     if (analysisList[AnalyzeConMap]) {
-        for (int i = 0; i < numofprotein; i ++) {
+        for (int i = beginP - 1; i < endP; i ++) {
             fclose(ContactMapFile[i]);
             fclose(ContactMapAAFile[i]);
         }

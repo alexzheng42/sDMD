@@ -137,6 +137,8 @@ int AtomModel(char *type) {
         num = 3;
     } else if (strcmp(type, "HB_HB") == 0) {
         num = 4;
+    } else if (strcmp(type, "GEL") == 0) {
+        num = 32;
     } else {
         printf("\nNo atom type is matched! Check the atom outerType assignment! %s:%i\n", __FILE__, __LINE__);
         exit(EXIT_FAILURE);

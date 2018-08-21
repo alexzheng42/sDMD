@@ -29,6 +29,10 @@ void SystemInformationInput(int id) {
     fread(&numofprotein, sizeof (int), 1, SysInfoFile);
     fread(&totalAminoAcids, sizeof (int), 1, SysInfoFile);
     
+    if (nPP > numofprotein) {
+        printf("!!ERROR!!: target peptide number #%i cannot excess the total peptide number %i! %s:%i\n", nPP, numofprotein, __FILE__, __LINE__);
+    }
+    
     connectionMap = (int **)calloc(atomnum + 1, sizeof(int *));
     for (int i = 0; i <= atomnum; i ++) {
         connectionMap[i] = (int *)calloc(atomnum + 1, sizeof(int));

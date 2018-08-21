@@ -240,7 +240,7 @@ int HBEvent(struct AtomStr **atomLibrary, struct AtomStr *HB_i, struct AtomStr *
         
         if (visual) {
             ChangeColor(HB_i->property->type, HB_i->property->color);
-            ChangeColor(HB_j->property->type, HB_i->property->color);
+            ChangeColor(HB_j->property->type, HB_j->property->color);
         }
         
         //===================================
@@ -268,7 +268,7 @@ int HBEvent(struct AtomStr **atomLibrary, struct AtomStr *HB_i, struct AtomStr *
         
         if (visual) {
             ChangeColor(HB_i->property->type, HB_i->property->color);
-            ChangeColor(HB_j->property->type, HB_i->property->color);
+            ChangeColor(HB_j->property->type, HB_j->property->color);
         }
         
         //===================================

@@ -253,8 +253,8 @@ void SaveSysInfo(struct FileStr *file) {
     
     fwrite(&HBPotential, sizeof(struct HBPotentialStr), 1, SysInfoFile);
     
-    for (int i = 0; i < 32; i++) {
-        for (int n = 0; n < 32; n++) {
+    for (int i = 0; i < NATOMTYPE; i++) {
+        for (int n = 0; n < NATOMTYPE; n++) {
             fwrite(&potentialPairCollision[i][n], sizeof(struct ConstraintStr), 1, SysInfoFile);
             
             struct StepPotenStr *thisStep = potentialPairCollision[i][n].step;
@@ -266,8 +266,8 @@ void SaveSysInfo(struct FileStr *file) {
     }
     
     for (int type = 0; type < 11; type ++) {
-        for (int i = 0; i < 32; i++) {
-            for (int n = 0; n < 32; n++) {
+        for (int i = 0; i < NATOMTYPE; i++) {
+            for (int n = 0; n < NATOMTYPE; n++) {
                 fwrite(&potentialPairHB[type][i][n], sizeof(struct ConstraintStr), 1, SysInfoFile);
                 
                 struct StepPotenStr *thisStep = potentialPairHB[type][i][n].step;
@@ -313,7 +313,7 @@ void SaveLog(struct FileStr *file) {
     fprintf(Logfile, "CutOffR             = %-5.2lf\n", cutoffr);
     fprintf(Logfile, "Method              = %s\n", Methodtype);
     fprintf(Logfile, "ThermostatType      = %s\n", thermostatType);
-    fprintf(Logfile, "ThermostatParameter = %-5.3lf\n", THERMOSTAT(thermostatType));
+    fprintf(Logfile, "ThermostatParameter = %-5.3lf\n", thermoF);
     fprintf(Logfile, "DMDMethod           = %-5i\n", codeNum);
     fprintf(Logfile, "ThreadNo            = %-5i\n", threadNum);
     fprintf(Logfile, "WallExist           = %s\n", wallExist);

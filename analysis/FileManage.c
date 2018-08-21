@@ -9,7 +9,7 @@
 #include <dirent.h>
 #include "Analysis.h"
 
-void AssignName(char *oldName, char *newName, char *extra);
+void AssignName(char *oldName, char *newName, char *extra, int row);
 int Comparator(const void *a, const void *b);
 
 
@@ -22,7 +22,7 @@ void InitializeFiles(int row, int column) {
         }
         
         for (int n = 0; n < row; n ++) {
-            AssignName(names[n], files[n][i].name, extraName);
+            AssignName(names[n], files[n][i].name, extraName, n);
         }
     }
     
@@ -30,7 +30,7 @@ void InitializeFiles(int row, int column) {
 }
 
 
-void AssignName(char *oldName, char *newName, char *extra) {
+void AssignName(char *oldName, char *newName, char *extra, int row) {
     long len = strlen(oldName);
     
     if (len <= 4) {
@@ -38,6 +38,12 @@ void AssignName(char *oldName, char *newName, char *extra) {
     }
     
     strncpy(newName, oldName, len - 4);
+
+    if (row > 5 && nPP) { //for analyzing specific peptide
+        strcat(newName, "_p");
+        strcat(newName, targetPeptideNum);
+    }
+
     strcat(newName, extra);
     strcat(newName, oldName + len - 4);
     
@@ -54,7 +60,7 @@ void AssignFileList(int id) {
     }
     
     if (freshStart) {
-        long len;
+        long len = strlen(files[inLog][id].name);
         DIR *dir;
         struct dirent *dp;
         
@@ -64,7 +70,6 @@ void AssignFileList(int id) {
         }
         
         while ((dp = readdir(dir)) != NULL) {
-            len = strlen(files[inLog][id].name);
             if (strncmp(dp->d_name, files[inLog][id].name, len - 4) == 0) {
                 if (strchr(dp->d_name, '@') == NULL) {
                     strcpy(fileList.list[0], dp->d_name);
@@ -74,7 +79,7 @@ void AssignFileList(int id) {
             }
         }
         
-        qsort(fileList.list, fileList.count, 64, Comparator);
+        qsort(fileList.list[1], fileList.count, 64, Comparator);
         if (strlen(fileList.list[0])) {
             strcpy(fileList.list[++fileList.count], fileList.list[0]);
         }

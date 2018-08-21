@@ -78,14 +78,15 @@ int nthCheck, nthNode;
 
 //-----------------
 //potential pair
-struct ConstraintStr potentialPairCollision[32][32];
-struct ConstraintStr potentialPairHB[11][32][32];
+struct ConstraintStr potentialPairCollision[NATOMTYPE + 1][NATOMTYPE + 1];
+struct ConstraintStr potentialPairHB[11][NATOMTYPE + 1][NATOMTYPE + 1];
 struct HBPotentialStr HBPotential;
 
 
 //-----------------
 //thermostat and solvent
 char thermostatType[20];
+double thermoF;
 //-----------------
 
 

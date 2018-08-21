@@ -411,6 +411,39 @@ void VisualSGThreadRun(void) {
             AssignJob(threadRenewList, thisThread);
             AssignThread(threadRenewList, thisThread);
         }
+    } else {
+        for (int i = 0; i < threadNum; ++i) {
+            free(thrInfo[i].threadRenewList);
+        }
+        free(thrInfo);
+        
+        printf("\nFinished!\n");
+        printf("\n");
+        printf("\n");
+        
+        newtotaleventsum = collisioneventsum   +
+                           bondeventsum        +
+                           HBeventsum          +
+                           HBNeighboreventsum  +
+                           thermostateventsum  +
+                           pbcandcrosseventsum +
+                           walleventsum;
+        
+        printf("ReCalculate times   =%li\n\n", countReCal);
+        printf("collision times     =%li\n", collisioneventsum);
+        printf("bond times          =%li\n", bondeventsum);
+        printf("HB times            =%li\n", HBeventsum);
+        printf("HB Neighbor times   =%li\n", HBNeighboreventsum);
+        printf("thermostat times    =%li\n", thermostateventsum);
+        printf("PBC&CC times        =%li\n", pbcandcrosseventsum);
+        printf("Wall times          =%li\n", walleventsum);
+        printf("percentage of thermostat=%.4f%%\n", (float) thermostateventsum / newtotaleventsum * 100);
+        
+        printf("\nCalculate event times: %li\n", newtotaleventsum - oldtotaleventsum);
+        
+        GlobalCloseFree();
+        
+        exit(EXIT_SUCCESS);
     }
     
     return;
@@ -483,6 +516,11 @@ void ChangeColor(int type, double *color) {
             color[1] = 1.0;
             color[2] = 0.0;
             break;
+            
+        case 32:
+            color[0] = 0.0;
+            color[1] = 1.0;
+            color[2] = 1.0;
             
         default:
             break;

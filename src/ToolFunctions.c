@@ -8,8 +8,6 @@
 
 #include "DMD.h"
 
-void RemovePBC(double **coor);
-
 
 void TimeForward(double time, struct ThreadStr *thisThread) {
     for (int i = 1; i <= atomnum; ++i) {
@@ -777,99 +775,104 @@ double CalKinetE(struct ThreadStr *thisThread) {
 
 
 double CalPotenE(struct ThreadStr *thisThread) {
+    signed int x[27]={0,1,0,0,0,1,1,1,-1,0,0,0,-1,-1,-1,0,0,1,-1,1,-1,-1,-1,1,1,1,-1};
+    signed int y[27]={0,0,1,0,1,0,1,1,0,-1,0,-1,0,-1,-1,-1,1,0,0,-1,1,-1,1,-1,1,-1,1};
+    signed int z[27]={0,0,0,1,1,1,0,1,0,0,-1,-1,-1,0,-1,1,-1,-1,1,0,0,1,-1,-1,-1,1,1};
+    
     int atom_i, atom_j, swap;
+    int pair;
+    int cell_neighbor[4];
+    int cellindex;
+    int *atom_CellAxis;
     char eventType[20];
     double tmp;
-    double **coor;
+    double coor[4];
     double speed_i[4], speed_j[4];
     double r_ij[4], v_ij[4], direction, distance2;
     double TPE = 0, accumPotential = 0;
+    double positionshift[4] = {0};
     struct AtomStr **raw = thisThread->raw;
     struct AtomStr *HBPartner;
     
-    coor = (double **)calloc(atomnum + 1, sizeof(double *));
-    for (int i = 0; i <= atomnum; i ++) {
-        coor[i] = (double *)calloc(4, sizeof(double));
-        
-        coor[i][1] = raw[i]->dynamic->coordinate[1];
-        coor[i][2] = raw[i]->dynamic->coordinate[2];
-        coor[i][3] = raw[i]->dynamic->coordinate[3];
-    }
-    RemovePBC(coor);
-    
     for (int i = 1; i <= atomnum; i ++) {
-        for (int n = i + 1; n <= atomnum; n ++) {
-            DOT_MINUS(coor[i], coor[n], r_ij);
-            distance2 = DOT_PROD(r_ij, r_ij);
+        POINT_TO_STRUCT(atom_CellAxis, atom[i].dynamic->cellIndex);
+        
+        for (int n = 0; n <= 26; n ++) {
+            cell_neighbor[3] = atom_CellAxis[3] + z[n];
+            cell_neighbor[2] = atom_CellAxis[2] + y[n];
+            cell_neighbor[1] = atom_CellAxis[1] + x[n]; //scan the neighborhood 27 subcells, include the target subcell itself
             
-            if (distance2 <= cutoffr * cutoffr && !(connectionMap[i][n] & BOND_CONNECT)) {
-                
-                atom_i = i;
-                atom_j = n;
-                HBPartner = NULL;
-                
-                if (connectionMap[atom_i][atom_j] & HB_CONNECT) {
-                    int type = HBModel(raw[atom_i], raw[atom_j]);
-                    if (type == 1) {
-                        TPE -= HBPotential.BB;
-                    } else {
-                        TPE -= HBPotential.BS;
+            for (int j = 1; j <= 3; j ++) {
+                positionshift[j] = 0; //PBC position shift
+                if (cell_neighbor[j] < 0) {
+                    cell_neighbor[j] = cellnum[j] - 1;
+                    positionshift[j] = -1 * boxDimension[j];
+                } else if (cell_neighbor[j] >= cellnum[j]) {
+                    cell_neighbor[j] = 0;
+                    positionshift[j] = boxDimension[j];
+                }
+            }
+            
+            cellindex = cell_neighbor[3] * cellnum[1] * cellnum[2] +
+                        cell_neighbor[2] * cellnum[1] +
+                        cell_neighbor[1] + 1;
+            
+            pair = celllist[atomnum + cellindex];
+            while (pair != 0) {
+                if (pair > i) {
+                    DOT_PLUS(atom[pair].dynamic->coordinate, positionshift, coor);
+                    DOT_MINUS(atom[i].dynamic->coordinate, coor, r_ij);
+                    
+                    distance2 = DOT_PROD(r_ij, r_ij);
+                    
+                    if (distance2 <= cutoffr * cutoffr && !(connectionMap[i][pair] & BOND_CONNECT)) {
+                        
+                        atom_i = i;
+                        atom_j = pair;
+                        HBPartner = NULL;
+                        
+                        if (connectionMap[atom_i][atom_j] & HB_CONNECT) {
+                            int type = HBModel(raw[atom_i], raw[atom_j]);
+                            if (type == 1) {
+                                TPE -= HBPotential.BB;
+                            } else {
+                                TPE -= HBPotential.BS;
+                            }
+                            sprintf(eventType, "HB");
+                        } else if (connectionMap[atom_i][atom_j] & CONSTRAINT_CONNECT) {
+                            sprintf(eventType, "constraint");
+                        } else if (connectionMap[atom_i][atom_j] & NEIGHBOR_CONNECT) {
+                            if (raw[raw[atom_i]->dynamic->HB.bondConnection]->dynamic->HB.neighbor == atom_j) {
+                                swap = atom_i;
+                                atom_i = atom_j;
+                                atom_j = swap;
+                            }
+                            HBPartner = raw[raw[atom_j]->dynamic->HB.bondConnection];
+                            sprintf(eventType, "neighbor");
+                        } else {
+                            sprintf(eventType, "collision");
+                        }
+                        
+                        TRANSFER_VECTOR(speed_i, raw[atom_i]->dynamic->velocity);
+                        TRANSFER_VECTOR(speed_j, raw[atom_j]->dynamic->velocity);
+                        
+                        DOT_MINUS(speed_i, speed_j, v_ij);
+                        direction = DOT_PROD(r_ij, v_ij);
+                        
+                        FindPair(raw[atom_i], raw[atom_j], eventType, direction, distance2, &tmp, &tmp, &tmp, &tmp, &accumPotential, HBPartner, 0);
+                        
+                        if (accumPotential < INFINIT / 2) {
+                            TPE += accumPotential;
+                        }
                     }
-                    sprintf(eventType, "HB");
-                } else if (connectionMap[atom_i][atom_j] & CONSTRAINT_CONNECT) {
-                    sprintf(eventType, "constraint");
-                } else if (connectionMap[atom_i][atom_j] & NEIGHBOR_CONNECT) {
-                    if (raw[raw[atom_i]->dynamic->HB.bondConnection]->dynamic->HB.neighbor == atom_j) {
-                        swap = atom_i;
-                        atom_i = atom_j;
-                        atom_j = swap;
-                    }
-                    HBPartner = raw[raw[atom_j]->dynamic->HB.bondConnection];
-                    sprintf(eventType, "neighbor");
-                } else {
-                    sprintf(eventType, "collision");
                 }
                 
-                TRANSFER_VECTOR(speed_i, raw[atom_i]->dynamic->velocity);
-                TRANSFER_VECTOR(speed_j, raw[atom_j]->dynamic->velocity);
-                
-                DOT_MINUS(speed_i, speed_j, v_ij);
-                direction = DOT_PROD(r_ij, v_ij);
-                
-                FindPair(raw[atom_i], raw[atom_j], eventType, direction, distance2, &tmp, &tmp, &tmp, &tmp, &accumPotential, HBPartner, 0);
-                
-                if (accumPotential < INFINIT / 2) {
-                    TPE += accumPotential;
-                }
+                pair = celllist[pair];
             }
         }
     }
-    
-    for (int i = 0; i <= atomnum; i ++) {
-        free(coor[i]);
-    }
-    free(coor);
     
     return TPE;
-}
-
-
-void RemovePBC(double **coor) {
-    double gap[4];
-    
-    gap[1] = boxDimension[1] / 3;
-    gap[2] = boxDimension[2] / 3;
-    gap[3] = boxDimension[3] / 3;
-    
-    for (int i = 2; i <= atomnum; i ++) {
-        for (int n = 1; n <= 3; n ++) {
-            if (coor[i][n] - coor[i - 1][n] > gap[n]) {
-                coor[i][n] -= boxDimension[n];
-            } else if (coor[i - 1][n] - coor[i][n] > gap[n]) {
-                coor[i][n] += boxDimension[n];
-            }
-        }
-    }
 }
 
 
@@ -1092,8 +1095,8 @@ double FindPotWellWidth(struct AtomStr *atom_i, struct AtomStr *atom_j) {
 }
 
 void PrintCollisionPotentialTable() {
-    for (int n1 = 1; n1 <= 31; n1 ++) {
-        for (int n2 = 1; n2 <= 31; n2 ++) {
+    for (int n1 = 1; n1 <= NATOMTYPE; n1 ++) {
+        for (int n2 = 1; n2 <= NATOMTYPE; n2 ++) {
             if (potentialPairCollision[n1][n2].dmin != 0) {
                 printf("%2i : %2i = %6.4lf ", n1, n2, sqrt(potentialPairCollision[n1][n2].dmin));
                 struct StepPotenStr *thisStep = potentialPairCollision[n1][n2].step;
@@ -1108,8 +1111,8 @@ void PrintCollisionPotentialTable() {
 }
 
 void PrintHBPotentialTable(int HBTypeNum) {
-    for (int n1 = 0; n1 <= 31; n1 ++) {
-        for (int n2 = 0; n2 <= 31; n2 ++) {
+    for (int n1 = 0; n1 <= NATOMTYPE; n1 ++) {
+        for (int n2 = 0; n2 <= NATOMTYPE; n2 ++) {
             if (potentialPairHB[HBTypeNum][n1][n2].dmin != 0) {
                 printf("%2i : %2i = %6.4lf ", n1, n2, sqrt(potentialPairHB[HBTypeNum][n1][n2].dmin));
                 struct StepPotenStr *thisStep = potentialPairHB[HBTypeNum][n1][n2].step;

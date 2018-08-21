@@ -27,8 +27,11 @@
 #define INFINIT       1E8
 #define ZERO          1E-8
 #define INVALID      -111
+#define NATOMTYPE     32
 #define EXTEND_RATIO  0.95 //make sure the cut off radius is less than the subcell length
-#define THERMOSTAT(method) ((strncmp(method,"Andersen",1) == 0) ? (5.25) : (0.10)) //keep the frequency about 1%
+
+#define THERMO_AND    5.25 //keep the frequency about 1%
+#define THERMO_GEL    5
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846264338327950288
@@ -586,14 +589,15 @@ extern int nthCheck, nthNode;
 
 //-----------------
 //potential pair
-extern struct ConstraintStr potentialPairCollision[32][32];
-extern struct ConstraintStr potentialPairHB[11][32][32];
+extern struct ConstraintStr potentialPairCollision[NATOMTYPE + 1][NATOMTYPE + 1];
+extern struct ConstraintStr potentialPairHB[11][NATOMTYPE + 1][NATOMTYPE + 1];
 extern struct HBPotentialStr HBPotential;
 
 
 //-----------------
 //thermostat and solvent
 extern char thermostatType[20];
+extern double thermoF;
 //-----------------
 
 

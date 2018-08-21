@@ -14,6 +14,7 @@ int totalAminoAcids;
 int *celllist;
 int freshStart = 0;
 int *analysisList;
+int nPP = 0;
 
 double cutoffr;
 double boxOrigDim[4] = {0};
@@ -22,8 +23,9 @@ double cellNum[4] = {0};
 double cellSize[4] = {0};
 
 char path[1024];
-char names[NumofFileType][256] = {"SysInfo.dat", "", "", "out_log.txt", "rPBCGRO.gro", "PE.txt", "KE.txt", "WE.txt", "TolE.txt", "HBInfo.txt", "AAMark.txt", "Temp.txt", "AggNum.txt", "out_REMD.txt"};
+char names[NumofFileType][256] = {"SysInfo.dat", "", "", "out_log.txt", "out_REMD.txt", "rPBCGRO.gro", "PE.txt", "KE.txt", "WE.txt", "TolE.txt", "HBInfo.txt", "AAMark.txt", "Temp.txt", "AggNum.txt"};
 char obstDir[1024] = "NUll";
+char targetPeptideNum[16] = "";
 
 struct FileStr **files;
 struct AAStr *aminoacid;
@@ -94,6 +96,9 @@ void Initialization(int argc, const char *argv[]) {
                 sprintf(names[inLog], "%s", argv[i + 1]);
             } else if (strcmp(argv[i], "-obs") == 0) {
                 sprintf(obstDir, "%s", argv[i + 1]);
+            } else if (strcmp(argv[i], "-nPP") == 0) {
+                sprintf(targetPeptideNum, "%s", argv[i + 1]);
+                nPP = atoi(argv[i + 1]);
             } else if (strcmp(argv[i], "-sum") == 0 ) {
                 freshStart = 1;
             } else if (strcmp(argv[i], "-REMD") == 0) {
@@ -114,6 +119,7 @@ void Initialization(int argc, const char *argv[]) {
                 printf("-sys        (optional) system info input file\n");
                 printf("-log        (optional) log input file\n");
                 printf("-obs        (optional) exact path of obstruction info input file\n");
+                printf("-nPP        (optional) only analyze this specific number of peptide\n");
                 printf("-sum        (optional) analyze all the files in the \"path\"\n");
                 printf("-rPBC       remove PBC, call at the beginning. require -trj input file\n");
                 printf("-HB         analyze HB info. require -cnt input file\n");

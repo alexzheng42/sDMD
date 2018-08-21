@@ -17,6 +17,7 @@
 #define TRUE      1
 #define FALSE     0
 #define INVALID  -111
+#define BOLTZMANN 0.0019872041 //kcal / mol / K
 
 #define bondConnect             0b00001
 #define constraintConnect       0b00010
@@ -102,6 +103,7 @@ enum EFileType {
     inTrj,
     inCnt,
     inLog,
+    inREMDTemp,
     outTrj,
     outPE,
     outKE,
@@ -111,7 +113,6 @@ enum EFileType {
     outAAMark,
     outTemp,
     outAgg,
-    REMDTemp,
     NumofFileType
 };
 
@@ -207,6 +208,7 @@ struct PropertyStr {
     int type;
     double charge;
     double mass;
+    double color[3];
     struct AtomSeqStr sequence;
     struct ConstraintStr *bond;
     struct ConstraintStr *constr;
@@ -357,6 +359,7 @@ extern int **connectionMap;
 extern int *celllist;
 extern int freshStart;
 extern int *analysisList;
+extern int nPP;
 
 extern double cutoffr;
 extern double boxOrigDim[4];
@@ -367,6 +370,7 @@ extern double cellSize[4];
 extern char path[1024];
 extern char names[NumofFileType][256];
 extern char obstDir[1024];
+extern char targetPeptideNum[16];
 
 extern struct FileStr **files;
 extern struct AAStr *aminoacid;

@@ -505,7 +505,7 @@ void ThermostatTime(struct AtomStr *targetAtom) {
     
     InitializeEvent(&event);
     temp = Maxwell_Boltzmann_Distribution(0, 1);
-    event.time = THERMOSTAT(thermostatType) * ABSVALUE(temp);
+    event.time = thermoF * ABSVALUE(temp);
     
     JobAssign(targetAtom, NULL, &event, Ther_Event);
 }
