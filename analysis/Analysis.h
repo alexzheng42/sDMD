@@ -208,7 +208,7 @@ struct PropertyStr {
     int type;
     double charge;
     double mass;
-    //double color[3];
+    double color[3];
     struct AtomSeqStr sequence;
     struct ConstraintStr *bond;
     struct ConstraintStr *constr;

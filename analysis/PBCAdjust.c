@@ -20,7 +20,7 @@ void AdjustPBC(int id)
     char directory[1024], buffer[1024];
     FILE *positionInput;
     FILE *positionOutput;
-	FILE *positionOutputMono = NULL;
+    FILE *positionOutputMono = NULL;
     
     printf("Checking trajectory file... ");
     fflush(stdout);
@@ -172,19 +172,19 @@ void SaveGRO(FILE *saveFile) {
 
 	for (int i = 1; i <= atomnum; i++) {
 		fprintf(saveFile, "%5i%-5s%5s%5i%8.3f%8.3f%8.3f%10.4f%10.4f%10.4f\n",
-			atom[i].property->sequence.aminoacidNum, atom[i].property->nameOfAA, atom[i].property->name, i,
-			atom[i].dynamic->coordinate[1] / 10,
-			atom[i].dynamic->coordinate[2] / 10,
-			atom[i].dynamic->coordinate[3] / 10,
-			atom[i].dynamic->velocity[1],
-			atom[i].dynamic->velocity[2],
-			atom[i].dynamic->velocity[3]);
+                atom[i].property->sequence.aminoacidNum, atom[i].property->nameOfAA, atom[i].property->name, i,
+                atom[i].dynamic->coordinate[1] / 10,
+                atom[i].dynamic->coordinate[2] / 10,
+                atom[i].dynamic->coordinate[3] / 10,
+                atom[i].dynamic->velocity[1],
+                atom[i].dynamic->velocity[2],
+                atom[i].dynamic->velocity[3]);
 	}
 
 	fprintf(saveFile, "%10.5f%10.5f%10.5f\n",
-		boxCurtDim[1] / 10,
-		boxCurtDim[2] / 10,
-		boxCurtDim[3] / 10);
+            boxCurtDim[1] / 10,
+            boxCurtDim[2] / 10,
+            boxCurtDim[3] / 10);
 	fflush(saveFile);
 }
 
