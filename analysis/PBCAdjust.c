@@ -9,6 +9,7 @@
 #include "Analysis.h"
 
 void SaveGRO(FILE *saveFile);
+void SaveGROMono(FILE *saveFile);
 
 
 void AdjustPBC(int id)
@@ -19,12 +20,18 @@ void AdjustPBC(int id)
     char directory[1024], buffer[1024];
     FILE *positionInput;
     FILE *positionOutput;
+	FILE *positionOutputMono = NULL;
     
     printf("Checking trajectory file... ");
     fflush(stdout);
     
     sprintf(directory, "%s%s", path, files[outTrj][id].name);
     positionOutput = fopen(directory, "w");
+
+	if (nPP) {
+		sprintf(directory, "%srPBCGRO_%i.gro", path, nPP);
+		positionOutputMono = fopen(directory, "w");
+	}
     
     for (int sectNum = 0; sectNum < fileList.count; sectNum ++) {
         memset(buffer, '\0', sizeof(buffer));
@@ -80,6 +87,10 @@ void AdjustPBC(int id)
                 }
             }
             SaveGRO(positionOutput);
+
+			if (nPP) {
+				SaveGROMono(positionOutputMono);
+			}
         }
         fclose(positionInput);
     }
@@ -132,11 +143,11 @@ int ReadGro(FILE *inputFile) { //per frame
 }
 
 
-void SaveGRO(FILE *saveFile) {
-    fprintf(saveFile, "model\n");
-    fprintf(saveFile, "%5i\n", atomnum);
+void SaveGROMono(FILE *saveFile) {
+    fprintf(saveFile, "Protein %i\n", nPP);
+    fprintf(saveFile, "%5i\n", protein[nPP].endAtomNum - protein[nPP].startAtomNum + 1);
     
-    for (int i = 1; i <= atomnum; i++) {
+    for (int i = protein[nPP].startAtomNum; i <= protein[nPP].endAtomNum; i++) {
         fprintf(saveFile, "%5i%-5s%5s%5i%8.3f%8.3f%8.3f%10.4f%10.4f%10.4f\n",
                 atom[i].property->sequence.aminoacidNum, atom[i].property->nameOfAA, atom[i].property->name, i,
                 atom[i].dynamic->coordinate[1] / 10,
@@ -152,5 +163,28 @@ void SaveGRO(FILE *saveFile) {
             boxCurtDim[2] / 10,
             boxCurtDim[3] / 10);
     fflush(saveFile);
+}
+
+
+void SaveGRO(FILE *saveFile) {
+	fprintf(saveFile, "model\n");
+	fprintf(saveFile, "%5i\n", atomnum);
+
+	for (int i = 1; i <= atomnum; i++) {
+		fprintf(saveFile, "%5i%-5s%5s%5i%8.3f%8.3f%8.3f%10.4f%10.4f%10.4f\n",
+			atom[i].property->sequence.aminoacidNum, atom[i].property->nameOfAA, atom[i].property->name, i,
+			atom[i].dynamic->coordinate[1] / 10,
+			atom[i].dynamic->coordinate[2] / 10,
+			atom[i].dynamic->coordinate[3] / 10,
+			atom[i].dynamic->velocity[1],
+			atom[i].dynamic->velocity[2],
+			atom[i].dynamic->velocity[3]);
+	}
+
+	fprintf(saveFile, "%10.5f%10.5f%10.5f\n",
+		boxCurtDim[1] / 10,
+		boxCurtDim[2] / 10,
+		boxCurtDim[3] / 10);
+	fflush(saveFile);
 }
 

@@ -30,12 +30,15 @@ void ReadWall(void);
 void CreateFlow(void);
 void RemoveConstr(struct PropertyStr *property, int atomNum, char *type);
 void InitializeCharge(void);
-void InitializeColor(void);
 int FindNextBondList(int targetAtom, struct PropertyStr *property, double dmin, double dmax, int type);
 int ConstrList(int targetAtom, int step, struct PropertyStr *property, FILE *inputFile, int type);
 int FindTargetAtom(int AANum, char *targetAtom);
 int CheckValidAtom(char *atomName, char atomList[][5], int listSize);
 int ChargeAACheck(char *AAName);
+
+#ifdef VIS
+void InitializeColor(void);
+#endif
 
 void InputData(int argc, const char * argv[]) {
     FILE *input_file;
@@ -215,11 +218,11 @@ void InputData(int argc, const char * argv[]) {
                     printf(" -Wrt: (required only if WallDyn is assigned) follow the total time needed for the size change, default 200\n\n");
                     
                     printf(" -ter: (optional) interactive termini selection, instead of charged (default)\n");
-                    printf(" -arg: (optional) interactive arginine selection, instead of charged(default)\n");
-                    printf(" -asp: (optional) interactive aspartic acid selection, instead of charged(default)\n");
-                    printf(" -glu: (optional) interactive glutamic acid acid selection, instead of charged(default)\n");
-                    printf(" -his: (optional) interactive histidine selection, instead of charged(default)\n");
-                    printf(" -lys: (optional) interactive lysine selection, instead of charged(default)\n");
+                    printf(" -arg: (optional) interactive arginine selection, instead of charged (default)\n");
+                    printf(" -asp: (optional) interactive aspartic acid selection, instead of charged (default)\n");
+                    printf(" -glu: (optional) interactive glutamic acid acid selection, instead of charged (default)\n");
+                    printf(" -his: (optional) interactive histidine selection, instead of charged (default)\n");
+                    printf(" -lys: (optional) interactive lysine selection, instead of charged (default)\n");
                     printf(" -AlC: (optional) charge all the atoms with 1 proton\n");
                     printf(" -AlP: (optional) charge the atoms in each peptide with [peptide net charge / peptide atom number]\n");
                     printf(" -npC: (optional) charge source will have no PBC\n");
@@ -231,7 +234,7 @@ void InputData(int argc, const char * argv[]) {
                     printf("                                     the exchange rate, and\n");
                     printf("                                     the suffix name of saving files\n");
                     
-                    printf(" -visual: enable real-time visualization, default disabled\n");
+                    printf(" -visual: (optional) enable real-time visualization, default disabled\n");
 
                     exit(EXIT_SUCCESS);
                 }
@@ -1763,9 +1766,11 @@ void InitializeOthers() {
     
     thread_t = (pthread_t *)calloc(threadNum, sizeof(pthread_t));
     
+#ifdef VIS
     if (visual) {
         InitializeColor();
     }
+#endif
 }
 
 void ReadWall(void) {
@@ -2030,6 +2035,7 @@ void InitializeCharge(void) {
     return;
 }
 
+#ifdef VIS
 void InitializeColor(void) {
 #ifndef GEL
     for (int i = 1; i <= atomnum; i ++) {
@@ -2044,4 +2050,5 @@ void InitializeColor(void) {
     }
 #endif
 }
+#endif
 

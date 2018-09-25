@@ -24,9 +24,12 @@ int ThreadProcess(void) {
     if (REMDInfo.flag  == 1) { //REMD is requested
         REMD();
     } else if (codeNum == 1 && threadNum == 1) { //single thread - one core
+#ifdef VIS
         if (visual) {
             VisualSGThread();
-        } else {
+        } else
+#endif
+        {
             SingleThread();
         }
     } else if (codeNum == 2 && threadNum > 1) { //multiple threads - one master, one or more slaves

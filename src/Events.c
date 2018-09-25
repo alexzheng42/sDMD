@@ -238,10 +238,12 @@ int HBEvent(struct AtomStr **atomLibrary, struct AtomStr *HB_i, struct AtomStr *
         HB_i->property->type = AtomTypeChange(HB_i->property->type, 1);
         HB_j->property->type = AtomTypeChange(HB_j->property->type, 1);
         
+#ifdef VIS
         if (visual) {
             ChangeColor(HB_i->property->type, HB_i->property->color);
             ChangeColor(HB_j->property->type, HB_j->property->color);
         }
+#endif
         
         //===================================
         //for HB acceptor and donor
@@ -266,10 +268,12 @@ int HBEvent(struct AtomStr **atomLibrary, struct AtomStr *HB_i, struct AtomStr *
         HB_i->property->type = AtomTypeChange(HB_i->property->type, 0);
         HB_j->property->type = AtomTypeChange(HB_j->property->type, 0);
         
+#ifdef VIS
         if (visual) {
             ChangeColor(HB_i->property->type, HB_i->property->color);
             ChangeColor(HB_j->property->type, HB_j->property->color);
         }
+#endif
         
         //===================================
         //for HB acceptor and donor
