@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -I. -Os -std=c99
+CFLAGS = -I. -Os -std=c99 -w
 DEPS = Analysis.h
 OBJ = Analysis.o 		  \
 	  Cluster.o  		  \
@@ -8,6 +8,8 @@ OBJ = Analysis.o 		  \
 	  HBRamach.o   		  \
 	  PBCAdjust.o  		  \
 	  REMD.o       		  \
+	  RG.o 				  \
+	  RMSD.o              \
 	  SystemInformation.o \
 	  Tools.o
 
