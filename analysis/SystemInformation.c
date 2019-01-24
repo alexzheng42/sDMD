@@ -8,7 +8,7 @@
 
 #include "Analysis.h"
 
-void ReadObst(struct AtomStr *obst, char *type);
+static void ReadObst(struct AtomStr *obst, char *type);
 
 
 void SystemInformationInput(int id) {
@@ -33,10 +33,7 @@ void SystemInformationInput(int id) {
         printf("!!ERROR!!: target peptide number #%i cannot excess the total peptide number %i! %s:%i\n", nPP, numofprotein, __FILE__, __LINE__);
     }
     
-    connectionMap = (int **)calloc(atomnum + 1, sizeof(int *));
-    for (int i = 0; i <= atomnum; i ++) {
-        connectionMap[i] = (int *)calloc(atomnum + 1, sizeof(int));
-    }
+    INT_2CALLOC(connectionMap, (atomnum + 1), (atomnum + 1));
     
     aminoacid = (struct AAStr *)calloc(totalAminoAcids + 1, sizeof(struct AAStr));
     fread(aminoacid, sizeof (struct AAStr), (totalAminoAcids + 1), SysInfoFile);
@@ -375,23 +372,23 @@ void ReadObst(struct AtomStr *obst, char *type) {
 
 
 void FreeVariables(void) {
-    free(aminoacid);
-    free(protein);
+    free(aminoacid);    aminoacid = NULL;
+    free(protein);      protein   = NULL;
     
     for (int i = 0; i <= atomnum; i ++) {
-        free(connectionMap[i]);
         free(atom[i].dynamic);
         free(atom[i].property);
     }
-    free(connectionMap);
-    free(atom);
-    free(celllist);
+    free(atom);     atom     = NULL;
+    free(celllist); celllist = NULL;
 
     for (int i = 0; i < NumofFileType; i++) {
         free(files[i]);
     }
-    free(files);
-    free(analysisList);
+    free(files);        files        = NULL;
+    free(analysisList); analysisList = NULL;
+    
+    _2FREE(connectionMap);
     
     return;
 }

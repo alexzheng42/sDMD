@@ -103,7 +103,7 @@ void LinkList(char * type, struct AtomStr *targetAtom, struct ThreadStr *thisThr
         
         //-------------------------------------------
         //assign a group of memory to store the link list
-        celllist = (int *)calloc((atomnum + cellnum[1] * cellnum[2] * cellnum[3] + 1), sizeof (int));
+        INT_CALLOC(celllist, (atomnum + cellnum[1] * cellnum[2] * cellnum[3] + 1));
         
         //-------------------------------------------
         //calculate which subcells the atoms are in and generate the list
@@ -124,7 +124,7 @@ void LinkList(char * type, struct AtomStr *targetAtom, struct ThreadStr *thisThr
                 //just in case the floating-point arithmetic error
                 //the PBC-adjusted coordinates may be exactly equal to the upper edge of the PBC box
                 if (thisThread->raw[i]->dynamic->cellIndex[n] == cellnum[n]) {
-                    thisThread->raw[i]->dynamic->cellIndex[n]--;
+                    thisThread->raw[i]->dynamic->cellIndex[n] --;
                 }
             }
             

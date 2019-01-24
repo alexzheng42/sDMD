@@ -51,6 +51,7 @@ long int pbcandcrosseventsum = 0;
 long int walleventsum = 0;
 long int oldtotaleventsum = 0;
 long int newtotaleventsum = 0;
+long int warningsum = 0;
 //-----------------
 
 
@@ -254,7 +255,8 @@ int main(int argc, const char * argv[]) {
     printf("thermostat times    =%li\n", thermostateventsum);
     printf("PBC&CC times        =%li\n", pbcandcrosseventsum);
     printf("Wall times          =%li\n", walleventsum);
-    printf("percentage of thermostat=%.4f%%\n", (float) thermostateventsum / newtotaleventsum * 100);
+    printf("percentage of thermostat=%.4f%%\n\n", (float) thermostateventsum / newtotaleventsum * 100);
+    printf("total warning       =%li\n", warningsum);
     
     et = clock();    //record the ending time
     hours = floor((double) (et - st) / CLOCKS_PER_SEC / 3600);

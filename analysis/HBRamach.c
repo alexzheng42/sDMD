@@ -11,15 +11,16 @@
 int **connectionMap;
 char AAName[21][4] = {"ALA", "ARG", "ASN", "ASP", "CYS", "GEL", "GLN", "GLU", "GLY", "HIS", "ILE", "LEU", "LYS", "MET", "PHE", "PRO", "SER", "THR", "TRP", "TYR", "VAL"};
 struct HBType HBSum;
+struct HBReadStr hb;
 
 static long step;
 
-void RamachandranPlot(int atom_N, double *phi, double *psi);
-void ResetHBNum(void);
-void CheckHelixHB(int atomNum, int connectAtom, double phi, double psi);
-void CheckBetaHB(int atomNum, int connectAtom, double phi, double psi);
-void SaveHBInfo(struct SectionStr *sect, FILE *HBInfoFile);
-int FindAANum(char * name);
+static void RamachandranPlot(int atom_N, double *phi, double *psi);
+static void ResetHBNum(void);
+static void CheckHelixHB(int atomNum, int connectAtom, double phi, double psi);
+static void CheckBetaHB(int atomNum, int connectAtom, double phi, double psi);
+static void SaveHBInfo(struct SectionStr *sect, FILE *HBInfoFile);
+static int FindAANum(char * name);
 
 
 void HBInfo(int id) {
@@ -72,10 +73,7 @@ void HBInfo(int id) {
         fprintf(AAMarkOutputFile, "@TYPE xy\n");
         
         int num = protein[1].endAANum - protein[1].startAANum + 1;
-        markAA = (long **)calloc(num + 1, sizeof(long *));
-        for (int i = 0; i <= num; i ++) {
-            markAA[i] = (long *)calloc(2, sizeof(long));
-        }
+        LONG_2CALLOC(markAA, (num + 1), 2);
     }
     
     if (analysisList[AnalyzeRamach]) {
@@ -210,10 +208,7 @@ void HBInfo(int id) {
     
     if (numofprotein == 1) {
         fclose(AAMarkOutputFile);
-        for (int i = 0; i <= protein[1].endAANum - protein[1].startAANum + 1; i ++) {
-            free(markAA[i]);
-        }
-        free(markAA);
+        _2FREE(markAA);
     }
     
     if (analysisList[AnalyzeRamach]) {
@@ -227,7 +222,7 @@ void HBInfo(int id) {
             free(RamachFile[n]);
         }
 
-        free(RamachFile);
+        free(RamachFile); RamachFile = NULL;
     }
 
     if (analysisList[AnalyzeConMap]) {
@@ -235,8 +230,8 @@ void HBInfo(int id) {
             fclose(ContactMapFile[i]);
             fclose(ContactMapAAFile[i]);
         }
-        free(ContactMapFile);
-        free(ContactMapAAFile);
+        free(ContactMapFile);   ContactMapFile = NULL;
+        free(ContactMapAAFile); ContactMapAAFile = NULL;
     }
     
     printf("\bDone!\n");
@@ -487,3 +482,25 @@ void SaveHBInfo(struct SectionStr *sect, FILE *HBInfoFile) {
             HBSum.total);
 }
 
+int ReadHBFile(FILE *HBInputFile, struct HBReadStr *thisHB) {
+    char buffer[1024];
+    
+repeat:
+    if (fgets(buffer, sizeof(buffer), HBInputFile) == NULL)
+        return -1;
+    
+    if (buffer[0] == '@' || buffer[0] == '#') {
+        goto repeat;
+    }
+    
+    sscanf(buffer, "%lf%i%i%i%i%i%i",
+           &thisHB->step,
+           &thisHB->alpha,
+           &thisHB->a310,
+           &thisHB->pi,
+           &thisHB->beta,
+           &thisHB->other,
+           &thisHB->totl);
+    
+    return 0;
+}

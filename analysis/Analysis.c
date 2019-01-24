@@ -11,7 +11,7 @@
 int atomnum;
 int numofprotein;
 int totalAminoAcids;
-int *celllist;
+int *celllist = NULL;
 int freshStart = 0;
 int *analysisList;
 int nPP = 0;
@@ -23,7 +23,7 @@ double cellNum[4] = {0};
 double cellSize[4] = {0};
 
 char path[1024];
-char names[NumofFileType][256] = {"SysInfo.dat", "", "", "out_log.txt", "out_REMD.txt", "rPBCGRO.gro", "PE.txt", "KE.txt", "WE.txt", "TolE.txt", "HBInfo.txt", "AAMark.txt", "Temp.txt", "AggNum.txt"};
+char names[NumofFileType][256] = {"SysInfo.dat", "", "", "out_log.txt", "out_REMD.txt", "rPBCGRO.gro", "Energy.txt", "HBInfo.txt", "AAMark.txt", "AggNum.txt", "RG.txt", "RMSD.txt", "PotMap.txt"};
 char obstDir[1024] = "NUll";
 char targetPeptideNum[16] = "";
 
@@ -36,11 +36,12 @@ struct ConstraintStr potentialPairHB[11][32][32];
 struct HBPotentialStr HBPotential;
 struct REMDStr RE = {.mark = 0, .numReplica = -1};
 struct FileListStr fileList = {.count = 0};
+struct FileListStr RMSDFile = {.count = 0};
 struct SectionStr *sectInfo;
 
 
-void Initialization(int argc, const char *argv[]);
-void DoAnalysis(int argc, const char *argv[]);
+static void Initialization(int argc, const char *argv[]);
+static void DoAnalysis(int argc, const char *argv[]);
 
 
 int main(int argc, const char * argv[]) {
@@ -82,6 +83,10 @@ void Initialization(int argc, const char *argv[]) {
                 analysisList[CalculateRG] = 1;
             } else if (strcmp(argv[i], "-MSD") == 0) {
                 analysisList[CalculateMSD] = 1;
+            } else if (strcmp(argv[i], "-RMSD") == 0) {
+                analysisList[CalculateRMSD] = 1;
+            } else if (strcmp(argv[i], "-PotMap") == 0) {
+                analysisList[CalculatePotMap] = 1;
             } else if (strcmp(argv[i], "-Ramach") == 0) {
                 analysisList[AnalyzeRamach] = 1;
             } else if (strcmp(argv[i], "-ConMap") == 0) {
@@ -94,6 +99,10 @@ void Initialization(int argc, const char *argv[]) {
                 sprintf(names[inSys], "%s", argv[i + 1]);
             } else if (strcmp(argv[i], "-log") == 0) {
                 sprintf(names[inLog], "%s", argv[i + 1]);
+            } else if (strcmp(argv[i], "-ref") == 0) {
+                while (strncmp(argv[i + RMSDFile.count + 1], "-", 1) != 0) {
+                    sprintf(RMSDFile.list[RMSDFile.count], "%s", argv[i + (++RMSDFile.count)]);
+                }
             } else if (strcmp(argv[i], "-obs") == 0) {
                 sprintf(obstDir, "%s", argv[i + 1]);
             } else if (strcmp(argv[i], "-nPP") == 0) {
@@ -118,6 +127,7 @@ void Initialization(int argc, const char *argv[]) {
                 printf("-cnt        connect map input file\n");
                 printf("-sys        (optional) system info input file\n");
                 printf("-log        (optional) log input file\n");
+                printf("-ref        (optional) reference structure input file for RMSD\n");
                 printf("-obs        (optional) exact path of obstruction info input file\n");
                 printf("-nPP        (optional) only analyze this specific number of peptide\n");
                 printf("-sum        (optional) analyze all the files in the \"path\"\n");
@@ -125,10 +135,11 @@ void Initialization(int argc, const char *argv[]) {
                 printf("-HB         analyze HB info. require -cnt input file\n");
                 printf("-En         analyze energy info\n");
                 printf("-Ag         analyze aggregation info\n");
-                printf("-RG         calculate RG\n");
+                printf("-RG         calculate radius of gyration\n");
                 printf("-MSD        calculate MSD\n");
-                printf("-Ramach     (require -HB) plot Ramachandran plots for each amino acid\n");
-                printf("-ConMap     (require -HB) plot contact maps for atoms and amino acids\n");
+                printf("-RMSD       (require -ref) calculate root-mean-square deviation\n");
+                printf("-Ramach     (require -HB)  plot Ramachandran plots for each amino acid\n");
+                printf("-ConMap     (require -HB)  plot contact maps for atoms and amino acids\n");
                 printf("-REMD       analyze REMD data. follow the flags below:\n");
                 printf("  -reNo     number of replicas\n");
                 printf("  -bin      (optional) number of bins in histogram. default 10\n");
@@ -143,16 +154,19 @@ void Initialization(int argc, const char *argv[]) {
                 printf("  -et       (optional) end frame of analyzing. default -1 (the final frame)\n");
                 exit(EXIT_SUCCESS);
             } else {
-                if (!(strcmp(argv[i], "-bin")  == 0 ||
-                      strcmp(argv[i], "-maxE") == 0 ||
-                      strcmp(argv[i], "-minE") == 0 ||
-                      strcmp(argv[i], "-rate") == 0 ||
-                      strcmp(argv[i], "-temp") == 0 ||
-                      strcmp(argv[i], "-st")   == 0 ||
-                      strcmp(argv[i], "-et")   == 0 ||
-                      strcmp(argv[i], "-aHB")  == 0 ||
-                      strcmp(argv[i], "-bHB")  == 0 ||
-                      strcmp(argv[i], "-tHB")  == 0)) {
+                if (!(strcmp(argv[i], "-bin")   == 0 ||
+                      strcmp(argv[i], "-maxE")  == 0 ||
+                      strcmp(argv[i], "-minE")  == 0 ||
+                      strcmp(argv[i], "-rate")  == 0 ||
+                      strcmp(argv[i], "-temp")  == 0 ||
+                      strcmp(argv[i], "-st")    == 0 ||
+                      strcmp(argv[i], "-et")    == 0 ||
+                      strcmp(argv[i], "-aHB")   == 0 ||
+                      strcmp(argv[i], "-bHB")   == 0 ||
+                      strcmp(argv[i], "-tHB")   == 0 ||
+                      strcmp(argv[i], "-rmsd")  == 0 ||
+                      strcmp(argv[i], "-minRC") == 0 ||
+                      strcmp(argv[i], "-maxRC") == 0)) {
                     printf ("!!ERROR!!: invalid flag: %s!\n %s:%i", argv[i], __FILE__, __LINE__);
                     exit(EXIT_FAILURE);
                 }
@@ -209,9 +223,18 @@ void DoAnalysis(int argc, const char *argv[]) {
                         break;
                         
                     case CalculateRG:
+                        RGInfo(i);
                         break;
                         
                     case CalculateMSD:
+                        break;
+                        
+                    case CalculateRMSD:
+                        RMSDInfo(i);
+                        break;
+                        
+                    case CalculatePotMap:
+                        PESurfaceInfo(i);
                         break;
                         
                     default:
@@ -224,6 +247,10 @@ void DoAnalysis(int argc, const char *argv[]) {
     
     if (RE.mark) {
         WHAM(argc, argv);
+        
+        if (analysisList[CalculatePotMap]) {
+            REMDPESurfaceCombine();
+        }
     }
 }
 

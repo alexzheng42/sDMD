@@ -1,2 +1,2 @@
 RESIDUE GEL
-   ATOM CA     CA1    12.0  N N
+   ATOM GEL    GEL    12.0  N N

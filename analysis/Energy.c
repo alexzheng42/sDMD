@@ -8,26 +8,28 @@
 
 #include "Analysis.h"
 
-int HBModel(struct AtomStr *atom1, struct AtomStr *atom2);
-int AtomTypeChange(int originalType, int direct);
-double CalKeEnergy(void);
-double CalPoEnergy(void);
-double CalWlEnergy(struct SectionStr *sect);
-double CalTemp(double TKE);
-double FindPair (struct AtomStr *atom1, struct AtomStr *atom2, char *type, void *obstInfo);
-struct ConstraintStr *RightPair(int type1, int type2, int flag);
+struct EnergyReadStr energy;
+
+static int HBModel(struct AtomStr *atom1, struct AtomStr *atom2);
+static int AtomTypeChange(int originalType, int direct);
+static double CalKeEnergy(void);
+static double CalPoEnergy(void);
+static double CalWlEnergy(struct SectionStr *sect);
+static double CalTemp(double TKE);
+static double FindPair (struct AtomStr *atom1, struct AtomStr *atom2, char *type, void *obstInfo);
+static struct ConstraintStr *RightPair(int type1, int type2, int flag);
 
 
 static int beginP, endP, offSet, thisAtomNum;
 
 
 void EnergyInfo(int id) {
-    double TKE = 0, TPE = 0, TWE = 0, Temp;
+    double TKE = 0, TPE = 0, TWE = 0, Temp = 0;
     long step = 0, totalFrame;
     char directory[1024], buffer[1024];
     struct SectionStr *sect;
     FILE *TrjInputFile, *CntInputFile;
-    FILE *KEOutputFile, *PEOutputFile, *WEOutputFile, *TolEOutputFile, *TempOutputFile;
+    FILE *EneOutputFile;
     
     beginP = 1;
     endP = numofprotein;
@@ -43,30 +45,15 @@ void EnergyInfo(int id) {
     printf("Analyzing energy information... ");
     fflush(stdout);
     
-    sprintf(directory, "%s%s", path, files[outTemp][id].name);
-    TempOutputFile = fopen(directory, "w");
-    fprintf(TempOutputFile, "%s\n", "@    xaxis  label \"t\"");
-    fprintf(TempOutputFile, "%s\n", "@    yaxis  label \"T (K)\"");
-    
-    sprintf(directory, "%s%s", path, files[outKE][id].name);
-    KEOutputFile = fopen(directory, "w");
-    fprintf(KEOutputFile, "%s\n", "@    xaxis  label \"t\"");
-    fprintf(KEOutputFile, "%s\n", "@    yaxis  label \"E (kcal/mol)\"");
-    
-    sprintf(directory, "%s%s", path, files[outPE][id].name);
-    PEOutputFile = fopen(directory, "w");
-    fprintf(PEOutputFile, "%s\n", "@    xaxis  label \"t\"");
-    fprintf(PEOutputFile, "%s\n", "@    yaxis  label \"E (kcal/mol)\"");
-    
-    sprintf(directory, "%s%s", path, files[outWE][id].name);
-    WEOutputFile = fopen(directory, "w");
-    fprintf(WEOutputFile, "%s\n", "@    xaxis  label \"t\"");
-    fprintf(WEOutputFile, "%s\n", "@    yaxis  label \"E (kcal/mol)\"");
-    
-    sprintf(directory, "%s%s", path, files[outTolE][id].name);
-    TolEOutputFile = fopen(directory, "w");
-    fprintf(TolEOutputFile, "%s\n", "@    xaxis  label \"t\"");
-    fprintf(TolEOutputFile, "%s\n", "@    yaxis  label \"E (kcal/mol)\"");
+    sprintf(directory, "%s%s", path, files[outEne][id].name);
+    EneOutputFile = fopen(directory, "w");
+    fprintf(EneOutputFile, "# %13s %17s %17s %17s %17s %17s\n",
+            "Step",
+            "Temp (K)",
+            "KinE (kCal/mol)",
+            "PotE (kCal/mol)",
+            "WalE (kCal/mol)",
+            "TotE (kCal/mol)");
     
     for (int sectNum = 0; sectNum < fileList.count; sectNum ++) {
         memset(buffer, '\0', sizeof(buffer));
@@ -75,7 +62,7 @@ void EnergyInfo(int id) {
         sprintf(directory, "%s%s", path, buffer);
         TrjInputFile = fopen(directory, "r");
         if (TrjInputFile == NULL) {
-            printf("!!ERROR!!: cannot find file %s in directory %s. make sure the input path is correct and the file does exist! %s:%i\n", directory, path, __FILE__, __LINE__);
+            printf("!!ERROR!!: cannot find file %s in directory %s. make sure the input path is correct and the file does exist! %s:%i\n", buffer, path, __FILE__, __LINE__);
             printf("           You may need to execute -rPBC first to generate the required file!\n");
             exit(EXIT_FAILURE);
         }
@@ -106,21 +93,18 @@ void EnergyInfo(int id) {
             }
             Temp = CalTemp(TKE);
             
-            fprintf(KEOutputFile,   "%15.2lf %15.4lf\n", step * sect->outputRate, TKE);
-            fprintf(PEOutputFile,   "%15.2lf %15.4lf\n", step * sect->outputRate, TPE + TWE);
-            fprintf(WEOutputFile,   "%15.2lf %15.4lf\n", step * sect->outputRate, TWE);
-            fprintf(TolEOutputFile, "%15.2lf %15.4lf\n", step * sect->outputRate, TKE + TPE + TWE);
-            fprintf(TempOutputFile, "%15.2lf %15.4lf\n", step * sect->outputRate, Temp);
+            fprintf(EneOutputFile, "%15.2lf %17.4lf %17.4lf %17.4lf %17.4lf %17.4lf\n",
+                    step * sect->outputRate,
+                    Temp,
+                    TKE,
+                    TPE + TWE,
+                    TWE,
+                    TKE + TPE + TWE);
         }
         fclose(TrjInputFile);
         fclose(CntInputFile);
     }
-    
-    fclose(KEOutputFile);
-    fclose(PEOutputFile);
-    fclose(WEOutputFile);
-    fclose(TolEOutputFile);
-    fclose(TempOutputFile);
+    fclose(EneOutputFile);
     
     printf("\bDone!\n");
     fflush(stdout);
@@ -498,3 +482,25 @@ struct ConstraintStr *RightPair(int type1, int type2, int flag) {
     return targetPair;
 }
 
+
+int ReadEnergyFile(FILE *EnergyInputFile, struct EnergyReadStr *thisE) {
+    char buffer[1024];
+    
+repeat:
+    if (fgets(buffer, sizeof(buffer), EnergyInputFile) == NULL)
+        return -1;
+    
+    if (buffer[0] == '@' || buffer[0] == '#') {
+        goto repeat;
+    }
+    
+    sscanf(buffer, "%lf%lf%lf%lf%lf%lf",
+           &thisE->step,
+           &thisE->T,
+           &thisE->KE,
+           &thisE->PE,
+           &thisE->WE,
+           &thisE->TE);
+    
+    return 0;
+}

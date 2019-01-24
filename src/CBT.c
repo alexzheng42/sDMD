@@ -14,10 +14,10 @@ void DeleteCBTRun(int atomNum);
 
 
 void CreateCBT(void) {
-    CBT.node = (int *)calloc(atomnum * 2, sizeof(int));
-    CBT.leaf = (int *)calloc(atomnum + 1, sizeof(int));
-    CBT.time = (double **)calloc(atomnum + 1, sizeof(double *));
+    INT_CALLOC(CBT.node, (atomnum * 2));
+    INT_CALLOC(CBT.leaf, (atomnum + 1));
     
+    CBT.time = (double **)calloc(atomnum + 1, sizeof(double *));
     for (int i = 1; i <= atomnum; i ++) {
         CBT.time[i] = &atom[i].dynamic->event.time;
     }

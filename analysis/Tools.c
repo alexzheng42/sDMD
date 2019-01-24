@@ -37,13 +37,14 @@ void EstCell(void) {
     
     if (celllist) {
         free(celllist);
+        celllist = NULL;
     }
-    celllist = (int *)calloc((atomnum + cellNum[1] * cellNum[2] * cellNum[3] + 1), sizeof (int));
+    
+    celllist = (int *)calloc(cellNum[0], sizeof(int));
 }
 
 
 void LinkList(void) {
-    int i, n;
     int cellindex;
     double *boxsize;
     double *position;
@@ -55,11 +56,11 @@ void LinkList(void) {
     
     //-------------------------------------------
     //calculate which subcells the atoms are in and generate the list
-    for (i = 1; i <= atomnum; i++) {
+    for (int i = 1; i <= atomnum; i++) {
         
         pointToStruct(position, atom[i].dynamic->coordinate);
         
-        for (n = 1; n <= 3; n++) {
+        for (int n = 1; n <= 3; n++) {
             
             atom[i].dynamic->cellIndex[n] = position[n] / cellSize[n]; //include 0
             //atom on the edge of box size has been removed by function pbc()
@@ -72,13 +73,13 @@ void LinkList(void) {
             //just in case the floating-point arithmetic error
             //the PBC-adjusted coordinates may be exactly equal to the upper edge of the PBC box
             if (atom[i].dynamic->cellIndex[n] == cellNum[n]) {
-                atom[i].dynamic->cellIndex[n]--;
+                atom[i].dynamic->cellIndex[n] --;
             }
         }
         
         cellindex = atom[i].dynamic->cellIndex[3] * cellNum[1] * cellNum[2]
-        + atom[i].dynamic->cellIndex[2] * cellNum[1]
-        + atom[i].dynamic->cellIndex[1] + 1;
+                  + atom[i].dynamic->cellIndex[2] * cellNum[1]
+                  + atom[i].dynamic->cellIndex[1] + 1;
         
         celllist[i] = celllist[atomnum + cellindex];
         celllist[atomnum + cellindex] = i;

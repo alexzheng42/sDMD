@@ -79,11 +79,27 @@ n1[1]*n2[1]+n1[2]*n2[2]+n1[3]*n2[3];
 #define pointToStruct(pointer, struct)  \
 pointer=&struct[0];
 
+#define INT_2CALLOC(name, size1, size2) \
+name=(int **)calloc(size1, sizeof(int *));   \
+name[0]=(int *)calloc(size1*size2, sizeof(int)); \
+for (int NN=1; NN<size1; NN++) name[NN]=name[0] + NN * size2;
+
+#define LONG_2CALLOC(name, size1, size2) \
+name=(long **)calloc(size1, sizeof(long *));   \
+name[0]=(long *)calloc(size1*size2, sizeof(long)); \
+for (int NN=1; NN<size1; NN++) name[NN]=name[0] + NN * size2;
+
 #define DOUBLE_2CALLOC(name, size1, size2)    \
 name=(double **)calloc(size1, sizeof(double *));   \
-for (int NN=0; NN<size1; NN++) {    \
-name[NN]=(double *)calloc(size2, sizeof(double)); \
-}
+name[0]=(double *)calloc(size1*size2, sizeof(double)); \
+for (int NN=1; NN<size1; NN++) name[NN]=name[0] + NN * size2;
+
+#define _2FREE(name)    \
+free(name[0]);  \
+free(name); \
+name = NULL;
+
+
 
 enum EOperation {
     empty,
@@ -95,6 +111,8 @@ enum EOperation {
     AnalyzeConMap,
     CalculateRG,
     CalculateMSD,
+    CalculateRMSD,
+    CalculatePotMap,
     NumofElem
 };
 
@@ -105,14 +123,13 @@ enum EFileType {
     inLog,
     inREMDTemp,
     outTrj,
-    outPE,
-    outKE,
-    outWE,
-    outTolE,
+    outEne,
     outHBInfo,
     outAAMark,
-    outTemp,
     outAgg,
+    outRG,
+    outRMSD,
+    outPotMap,
     NumofFileType
 };
 
@@ -351,6 +368,30 @@ struct SectionStr {
     struct FlowStr flow;
 };
 
+struct EnergyReadStr {
+    double step;
+    double T;
+    double KE;
+    double PE;
+    double WE;
+    double TE;
+};
+
+struct HBReadStr {
+    double step;
+    int alpha;
+    int a310;
+    int pi;
+    int beta;
+    int other;
+    int totl;
+};
+
+struct RMSDReadStr {
+    double step;
+    double vRMSD;
+};
+
 
 extern int atomnum;
 extern int numofprotein;
@@ -382,7 +423,11 @@ extern struct ConstraintStr potentialPairHB[11][32][32];
 extern struct HBPotentialStr HBPotential;
 extern struct REMDStr RE;
 extern struct FileListStr fileList;
+extern struct FileListStr RMSDFile;
 extern struct SectionStr *sectInfo;
+extern struct EnergyReadStr energy;
+extern struct HBReadStr hb;
+extern struct RMSDReadStr rmsd;
 
 void InitializeFiles(int row, int column);
 void SystemInformationInput(int id);
@@ -391,15 +436,22 @@ void FreeVariables(void);
 void HBInfo(int id);
 void ClusterInfo(int id);
 void EnergyInfo(int id);
+void RGInfo(int id);
+void RMSDInfo(int id);
+void PESurfaceInfo(int id);
 void EstCell(void);
 void LinkList(void);
 void PrintProcess(long step);
 void AssignFileList(int id);
 void FindTargetFile(char *oldName, char *fileListName, char *newName);
+void REMDPESurfaceCombine(void);
 int ReadLog(void);
 int ReadGro(FILE *inputFile);
 int ReadConnectionMap(FILE *inputFile);
 int WHAM(int argc, const char * argv[]);
 int CheckHBConnection(int thisAtomNum);
 int AtomModel(char *type);
+int ReadEnergyFile(FILE *EnergyInputFile, struct EnergyReadStr *thisE);
+int ReadHBFile(FILE *HBInputFile, struct HBReadStr *thisHB);
+int ReadRMSDFile(FILE *RMSDInputFile, struct RMSDReadStr *thisRMSD, int tCol);
 double absvalue_vector(double * vector);

@@ -94,7 +94,7 @@ void BackupFile(struct FileStr *file) {
     char directory[1024], newDir[1024];
     
     sprintf(extraName, "@%s", timer);
-    memset(newName, 0, 256);
+    memset(newName, '\0', sizeof(newName));
     sprintf(directory, "%s/%s", savedir, name);
 
     if (fopen(directory, "r") != NULL) {
@@ -156,6 +156,7 @@ void SaveData(enum FileType type, struct ThreadStr *thisThread) {
             
         default:
             printf("!!WARNING!!: unrecognized file type! %s:%i\n", __FILE__, __LINE__);
+            warningsum ++;
             break;
     }
 }
@@ -165,10 +166,10 @@ void GlobalCloseFree() {
     for (int i = 0; i <= atomnum; i ++) {
         free(atom[i].property);
         free(atom[i].dynamic);
-        free(connectionMap[i]);
     }
     free(atom);
-    free(connectionMap);
+    
+    FREE2(connectionMap);
     
     if (strcmp(wallExist, "no")) {
         if (strcmp(wallType, "smooth")) {
@@ -178,38 +179,26 @@ void GlobalCloseFree() {
         }
     }
     
+    free(flow.force.timeRec);
+    FREE2(flow.force.a);
     if (flow.mark == 3) {
-        for (int i = 0; i < flow.charge.num; i ++) {
-            free(flow.charge.position[i]);
-            free(flow.charge.velocity[i]);
-        }
-        free(flow.charge.position);
-        free(flow.charge.velocity);
+        FREE2(flow.charge.position);
+        FREE2(flow.charge.velocity);
         
         free(flow.charge.potGrad);
         free(flow.charge.gap);
     }
     
-    if (obstObj.mark) {
-        for (int i = 0; i < obstObj.num; i ++) {
-            free(obstObj.position[i]);
-        }
-        free(obstObj.position);
-    }
+    if (obstObj.mark)
+        FREE2(obstObj.position);
     
     if (tunlObj.mark) {
-        for (int i = 0; i < tunlObj.num; i ++) {
-            free(tunlObj.position[i]);
-        }
-        free(tunlObj.position);
+        FREE2(tunlObj.position);
         free(tunlObj.diameter);
     }
     
     if (SphObstObj.mark) {
-        for (int i = 0; i < SphObstObj.num; i ++) {
-            free(SphObstObj.position[i]);
-        }
-        free(SphObstObj.position);
+        FREE2(SphObstObj.position);
         free(SphObstObj.radius);
     }
     

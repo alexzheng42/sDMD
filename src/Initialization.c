@@ -29,11 +29,12 @@ void InitializeOthers(void);
 void ReadWall(void);
 void CreateFlow(void);
 void RemoveConstr(struct PropertyStr *property, int atomNum, char *type);
+void RemoveSpace(char *str);
 void InitializeCharge(void);
 int FindNextBondList(int targetAtom, struct PropertyStr *property, double dmin, double dmax, int type);
 int ConstrList(int targetAtom, int step, struct PropertyStr *property, FILE *inputFile, int type);
 int FindTargetAtom(int AANum, char *targetAtom);
-int CheckValidAtom(char *atomName, char atomList[][5], int listSize);
+int CheckValidAtom(char *atomName, char atomList[][8], int listSize);
 int ChargeAACheck(char *AAName);
 
 #ifdef VIS
@@ -353,10 +354,9 @@ void ReadBreakPoint(FILE *input_file) {
     atom = (struct AtomStr *) calloc(atomnum + 1, sizeof (struct AtomStr));
     protein = (struct PepStr *) calloc((numofprotein + 1), sizeof (struct PepStr));
     aminoacid = (struct AAStr *) calloc((totalAminoAcids + 1), sizeof (struct AAStr));
-    connectionMap = (int **)calloc(atomnum + 1, sizeof(int *));
+    INT_2CALLOC(connectionMap, (atomnum + 1), (atomnum + 1));
     
     for (int i = 0; i <= atomnum; i ++) {
-        connectionMap[i] = (int *)calloc(atomnum + 1, sizeof(int));
         for (int n = 0; n <= atomnum; n ++) {
             fread(&connectionMap[i][n], sizeof(int), 1, input_file);
         }
@@ -425,7 +425,7 @@ void ReadBreakPoint(FILE *input_file) {
     //-------------------------
     //link list
     fread(cellnum, sizeof (int), 4, input_file);
-    celllist = (int *) calloc((atomnum + 1 + cellnum[1] * cellnum[2] * cellnum[3]), sizeof (int));
+    INT_CALLOC(celllist, (atomnum + 1 + cellnum[1] * cellnum[2] * cellnum[3]));
     fread(celllist, sizeof (int), atomnum + 1 + cellnum[1] * cellnum[2] * cellnum[3], input_file);
     fread(cellsize, sizeof (double), 4, input_file);
     
@@ -452,10 +452,12 @@ void ReadBreakPoint(FILE *input_file) {
     
     if (targetTemperature != oldTemperature) {
         printf("\n!WARNING!: the new temperature is different from the previous!\n");
+        warningsum ++;
     }
     
     if (outputrate != oldoutputrate) {
         printf("\n!WARNING!: the new output rate is different from the previous!\n");
+        warningsum ++;
     }
     
     if (strcmp(Methodtype, oldMethodtype) != 0) {
@@ -466,6 +468,7 @@ void ReadBreakPoint(FILE *input_file) {
     if (timestep > currenttime + outputrate) {
         if (timestep < oldtimestep) {
             printf("\n!WARNING!: the new simulation time is shorter than the previous!\n");
+            warningsum ++;
         }
     } else {
         printf("\n!!Error!!: the new simulation time is shorter than the current time! %s:%i\n", __FILE__, __LINE__);
@@ -552,8 +555,9 @@ void ReadParameter() {
             
             DOUBLE_2CALLOC(flow.charge.position, flow.charge.num, 4);
             DOUBLE_2CALLOC(flow.charge.velocity, flow.charge.num, 4);
-            flow.charge.potGrad = (double *)calloc(flow.charge.num, sizeof(double));
-            flow.charge.gap     = (double *)calloc(flow.charge.num, sizeof(double));
+            DOUBLE_CALLOC(flow.charge.potGrad, flow.charge.num);
+            DOUBLE_CALLOC(flow.charge.gap,     flow.charge.num);
+
             for (int i = 0; i < chargeNum; i ++) {
                 curpos += pos;
                 sscanf(directory + curpos, "%lf%lf%lf%lf%lf%n",
@@ -594,10 +598,8 @@ void ReadParameter() {
         obstObj.mark = 1;
         obstObj.num  = atoi(statement);
         
-        obstObj.position = (double **)calloc(obstObj.num, sizeof(double *));
+        DOUBLE_2CALLOC(obstObj.position, obstObj.num, 4);
         for (int i = 0; i < obstObj.num; i ++) {
-            obstObj.position[i] = (double *)calloc(4, sizeof(double));
-            
             //negative number means invalid
             obstObj.position[i][1] = -1;
             obstObj.position[i][2] = -1;
@@ -637,14 +639,12 @@ void ReadParameter() {
         tunlObj.mark = 1;
         tunlObj.num = atoi(statement);
         
-        tunlObj.position = (double **)calloc(tunlObj.num, sizeof(double *));
-        tunlObj.diameter = (double *)calloc(tunlObj.num, sizeof(double));
+        DOUBLE_2CALLOC(tunlObj.position, tunlObj.num, 4);
+        DOUBLE_CALLOC(tunlObj.diameter, tunlObj.num);
         
         curpos = 0;
         for (int i = 0; i < tunlObj.num; i ++) {
             curpos += pos;
-            
-            tunlObj.position[i] = (double *)calloc(4, sizeof(double));
             sscanf(directory + curpos, "%lf%lf%lf%lf%lf%n",
                    &tunlObj.position[i][0],
                    &tunlObj.position[i][1],
@@ -665,14 +665,12 @@ void ReadParameter() {
         SphObstObj.mark = 1;
         
         SphObstObj.num = atoi(statement);
-        SphObstObj.position = (double **)calloc(SphObstObj.num, sizeof(double *));
-        SphObstObj.radius = (double *)calloc(SphObstObj.num, sizeof(double));
+        DOUBLE_2CALLOC(SphObstObj.position, SphObstObj.num, 4);
+        DOUBLE_CALLOC(SphObstObj.radius, SphObstObj.num);
         
         curpos = 0;
         for (int i = 0; i < SphObstObj.num; i ++) {
             curpos += pos;
-            
-            SphObstObj.position[i] = (double *)calloc(4, sizeof(double));
             sscanf(directory + curpos, "%lf%lf%lf%lf%n",
                    &SphObstObj.position[i][1],
                    &SphObstObj.position[i][2],
@@ -730,11 +728,12 @@ void ModifyCoordinateFile(char *coorFileName) {
 void ReadPDBFile(FILE* inputFile) {
     int num = 0;
     int tmpInt = 0, rInt;
-    char tmpChar[5] = "\0", rChar[5];
-    char atomName[5];
+    char tmpChar[8] = "\0", rChar[8];
+    char atomName[8];
+    char tmpAAName[256] = {0};
     char buffer[1024];
-    char directory[1024], libraryType[5];
-    char atomList[20][5] = {0};   //assume the max number of atoms in an amino acid is 20;
+    char directory[1024], libraryType[8];
+    char atomList[20][8] = {0};   //assume the max number of atoms in an amino acid is 20;
     double coordinate[3];
     FILE *outputFile;
     FILE *AAInputFile = NULL;
@@ -748,6 +747,7 @@ void ReadPDBFile(FILE* inputFile) {
     totalAminoAcids = 0;
     protein = NULL;
     aminoacid = NULL;
+    
     while (fscanf(inputFile, "%s", buffer) != EOF && strncmp(buffer, "END", 3)) {
         if (strcmp(buffer, "ATOM") == 0) {
             fscanf(inputFile, "%s%s%s%s%i", buffer, atomName, libraryType, rChar, &rInt);
@@ -778,35 +778,39 @@ void ReadPDBFile(FILE* inputFile) {
                 atomnum ++;
                 fscanf(inputFile, "%lf%lf%lf", &coordinate[0], &coordinate[1], &coordinate[2]);
                 fprintf(outputFile, "%-8s%16.6lf%16.6lf%16.6lf\n", atomName, coordinate[0], coordinate[1], coordinate[2]);
+            } else {
+                fgets(buffer, sizeof(buffer), inputFile);
+                continue;
             }
             
-            if (tmpInt != rInt) {
-                tmpInt = rInt;
+            if (tmpInt != rInt || strcmp(libraryType, tmpAAName)) {
                 aminoacid = (struct AAStr *)realloc(aminoacid, sizeof(struct AAStr) * (++totalAminoAcids + 1));
                 sprintf(aminoacid[totalAminoAcids].nameOfAA, "%s", libraryType);
-                aminoacid[totalAminoAcids].proteinNum = strcmp(rChar, tmpChar) ? numofprotein + 1 : numofprotein;
+                aminoacid[totalAminoAcids].proteinNum = (strcmp(rChar, tmpChar) || numofprotein == 0 || rInt < tmpInt) ? numofprotein + 1 : numofprotein;
                 aminoacid[totalAminoAcids - 1].endAtomNum = atomnum - 1;
                 aminoacid[totalAminoAcids].startAtomNum = atomnum;
-            }
-            if (strcmp(rChar, tmpChar)) {
-                sprintf(tmpChar, "%s", rChar);
-                protein = (struct PepStr *)realloc(protein, sizeof(struct PepStr) * (++numofprotein + 1));
-                protein[numofprotein - 1].endAANum = totalAminoAcids - 1;
-                protein[numofprotein].startAANum = totalAminoAcids;
-                protein[numofprotein - 1].endAtomNum = atomnum - 1;
-                protein[numofprotein].startAtomNum = atomnum;
+                
+                if (strcmp(rChar, tmpChar) || numofprotein == 0 || rInt < tmpInt) {
+                    sprintf(tmpChar, "%s", rChar);
+                    protein = (struct PepStr *)realloc(protein, sizeof(struct PepStr) * (++numofprotein + 1));
+                    protein[numofprotein - 1].endAANum = totalAminoAcids - 1;
+                    protein[numofprotein].startAANum = totalAminoAcids;
+                    protein[numofprotein - 1].endAtomNum = atomnum - 1;
+                    protein[numofprotein].startAtomNum = atomnum;
+                }
+                
+                tmpInt = rInt;
+                sprintf(tmpAAName, "%s", libraryType);
             }
         }
         fgets(buffer, sizeof(buffer), inputFile);
     }
+    
     aminoacid[totalAminoAcids].endAtomNum = atomnum;
     protein[numofprotein].endAANum = totalAminoAcids;
     protein[numofprotein].endAtomNum = atomnum;
     
-    connectionMap = (int **)calloc(atomnum + 1, sizeof(int *));
-    for (int i = 0; i <= atomnum; i ++) {
-        connectionMap[i] = (int *)calloc(atomnum + 1, sizeof(int));
-    }
+    INT_2CALLOC(connectionMap, (atomnum + 1), (atomnum + 1));
     
     //print out protein/peptide info
     for (int i = 1; i <= numofprotein; i ++) {
@@ -826,10 +830,11 @@ void ReadGROFile(FILE *inputFile) {
     int num = 0;
     int tmpAtomNum = 0;
     int tmpInt = 0, rInt;
-    char atomName[5];
+    char atomName[8];
+    char tmpAAName[256] = {0};
     char buffer[1024];
-    char directory[1024], libraryType[5];
-    char atomList[20][5] = {0};   //assume the max number of atoms in an amino acid is 20;
+    char directory[1024], libraryType[8];
+    char atomList[20][8] = {0};   //assume the max number of atoms in an amino acid is 20;
     double coordinate[3];
     FILE *outputFile;
     FILE *AAInputFile = NULL;
@@ -848,8 +853,13 @@ void ReadGROFile(FILE *inputFile) {
     fscanf(inputFile, "%i", &tmpAtomNum);
     
     for (int i = 1; i <= tmpAtomNum; i ++) {
-        fscanf(inputFile, "%i%s%s%s", &rInt, libraryType, atomName, buffer);
-        if (tmpInt != rInt) {
+        memset(libraryType, 0, sizeof(libraryType));
+        memset(atomName,    0, sizeof(atomName));
+        fscanf(inputFile, "%i%5c%5c%s", &rInt, libraryType, atomName, buffer);
+        RemoveSpace(libraryType);
+        RemoveSpace(atomName);
+        
+        if (tmpInt != rInt || strcmp(libraryType, tmpAAName)) {
             if (strcmp(libraryType, "GLY") == 0) {
                 sprintf(directory, "%s/Library_%s/AA/%s.txt", datadir, Methodtype, "ALA");
             } else {
@@ -885,7 +895,7 @@ void ReadGROFile(FILE *inputFile) {
             fgets(buffer, sizeof(buffer), inputFile);
         }
         
-        if (tmpInt != rInt) {
+        if (tmpInt != rInt || strcmp(libraryType, tmpAAName)) {
             aminoacid = (struct AAStr *)realloc(aminoacid, sizeof(struct AAStr) * (++totalAminoAcids + 1));
             sprintf(aminoacid[totalAminoAcids].nameOfAA, "%s", libraryType);
             aminoacid[totalAminoAcids].proteinNum = (rInt < tmpInt || numofprotein == 0) ? numofprotein + 1 : numofprotein;
@@ -901,6 +911,7 @@ void ReadGROFile(FILE *inputFile) {
             }
             
             tmpInt = rInt;
+            sprintf(tmpAAName, "%s", libraryType);
         }
     }
     
@@ -913,10 +924,7 @@ void ReadGROFile(FILE *inputFile) {
     protein[numofprotein].endAANum = totalAminoAcids;
     protein[numofprotein].endAtomNum = atomnum;
     
-    connectionMap = (int **)calloc(atomnum + 1, sizeof(int *));
-    for (int i = 0; i <= atomnum; i ++) {
-        connectionMap[i] = (int *)calloc(atomnum + 1, sizeof(int));
-    }
+    INT_2CALLOC(connectionMap, (atomnum + 1), (atomnum + 1));
     
     //print out protein/peptide info
     for (int i = 1; i <= numofprotein; i ++) {
@@ -1015,22 +1023,21 @@ void CreateCell() {
 
 void ReadModel() {
     for (int i = 1; i <= totalAminoAcids; i++) {
-        ScanAA(i, 0);
+        ScanAA(i, 0); //first, every amino acid read its own data file. GLY read the data file of ALA
         
         if (strcmp(aminoacid[i].nameOfAA, "GEL") == 0) {
             continue;
         } else {
             //every other AA (except for PRO) shares the same backbone of ALA/GLY
             if (strcmp(aminoacid[i].nameOfAA, "ALA") &&
-                strcmp(aminoacid[i].nameOfAA, "GLY")) { //if not ALA or GLY
+                strcmp(aminoacid[i].nameOfAA, "GLY") &&
+                strcmp(aminoacid[i].nameOfAA, "PRO")) { //if NOT ALA or GLY or PRO
                 
-                if (strcmp(aminoacid[i].nameOfAA, "PRO")) {
-                    ScanAA(i, 1); //PRO has its own full AA file
-                }
-                
-                if (strcmp(aminoacid[i + 1].nameOfAA, "PRO") == 0) {
-                    ScanAA(i, 2);
-                }
+                ScanAA(i, 1); //read the shared info from the data file of ALA
+            }
+            
+            if (strcmp(aminoacid[i + 1].nameOfAA, "PRO") == 0) { //if the next amino acid is PRO, more/modified constraints would be required
+                ScanAA(i, 2);
             }
         }
     }
@@ -1045,11 +1052,11 @@ void ScanAA(int AANum, int type) {
     double length, delta;
     FILE *inputFile;
     
-    if (type == 1 || strcmp(aminoacid[AANum].nameOfAA, "GLY") == 0) {
-        sprintf(AAName, "ALA");
-    } else if (type == 2) {
+    if (type == 2) {
         //re-assign pre-PRO amino acid INTER
         sprintf(AAName, "%s", "PRO_INTER");
+    } else if (type == 1 || strcmp(aminoacid[AANum].nameOfAA, "GLY") == 0) {
+        sprintf(AAName, "%s", "ALA");
     } else {
         sprintf(AAName, "%s", aminoacid[AANum].nameOfAA);
     }
@@ -1098,7 +1105,7 @@ void ScanAA(int AANum, int type) {
                         (strcmp(aminoacid[AANum + 1].nameOfAA, "PRO") == 0 && strcmp(rName, "+H") == 0)) {
                         continue;
                     }
-                    printf("!!ERROR!!: cannot find atom %s near atom #%i! check the model library or the coordinate file! %s:%i\n", rName, num, __FILE__, __LINE__);
+                    printf("!!ERROR!!: protein #%i AA #%i cannot find atom %s in itself or the next AA! check the model library or the coordinate file! %s:%i\n", aminoacid[AANum].proteinNum, AANum - protein[aminoacid[AANum].proteinNum - 1].endAANum, rName, __FILE__, __LINE__);
                     exit(EXIT_FAILURE);
                 } else if (tmpInt == -1) { //not available (terminal atom) but legal
                     continue;
@@ -1110,12 +1117,20 @@ void ScanAA(int AANum, int type) {
                 
                 flag = FindNextBondList(tmpInt, atom[num].property, dmin, dmax, type);
                 if (flag == 1) {
+                    if (connectionMap[num][tmpInt] & CONSTRAINT_CONNECT) {
+                        connectionMap[num][tmpInt] ^= CONSTRAINT_CONNECT;
+                    }
                     connectionMap[num][tmpInt] |= BOND_CONNECT;
                 }
                 
             } else if (num == FALSE) {
                 if (strncmp(rName, "H", 1) == 0) {
                     printf("!WARNING!: atom %s at protein #%i AA #%i. if it is a terminal N, then no H attached! if it is not, then there could be a H missing!\n", rName, aminoacid[AANum].proteinNum, AANum);
+                    fgets(buffer, sizeof(buffer), inputFile);
+                    warningsum ++;
+                    continue;
+                }
+                if (strcmp(rName, "CB") == 0 && strcmp(aminoacid[AANum].nameOfAA, "GLY") == 0) { //GLY has no CB
                     fgets(buffer, sizeof(buffer), inputFile);
                     continue;
                 }
@@ -1137,6 +1152,9 @@ void ScanAA(int AANum, int type) {
             if (tmpInt > 0 && num > 0) {
                 flag = ConstrList(tmpInt, i, atom[num].property, inputFile, type);
                 if (flag == 1) {
+                    if (connectionMap[num][tmpInt] & BOND_CONNECT) {
+                        connectionMap[num][tmpInt] ^= BOND_CONNECT;
+                    }
                     connectionMap[num][tmpInt] |= CONSTRAINT_CONNECT;
                 }
             } else if (tmpInt == FALSE) {
@@ -1196,6 +1214,7 @@ int FindNextBondList(int targetAtom, struct PropertyStr *property, double dmin, 
                 if (strcmp(property->nameOfAA, "PRO") &&
                     strcmp(atom[targetAtom].property->nameOfAA, "PRO")) {
                     printf("\n!WARNING!: bond info assignment has something wrong! only PRO will reach here! %i - %i %s:%i\n", targetAtom, property->num, __FILE__, __LINE__);
+                    warningsum ++;
                     return 0;
                 }
                 thisBond->dmin = dmin;
@@ -1264,13 +1283,29 @@ int ConstrList(int targetAtom, int step, struct PropertyStr *property, FILE *inp
 }
 
 
-int CheckValidAtom(char *atomName, char atomList[][5], int listSize) {
+int CheckValidAtom(char *atomName, char atomList[][8], int listSize) {
     for (int i = 0; i < listSize; i ++) {
         if (strcmp(atomName, atomList[i]) == 0) {
+            sprintf(atomList[i], "%s", "0");
             return TRUE;
         }
     }
     return FALSE;
+}
+
+
+void RemoveSpace(char *str) {
+    int n = 0;
+    char *pointer = str;
+    
+    while ((*pointer) == ' ') pointer ++; //remove the white space infront
+    while ((*pointer) != ' ' && (*pointer)) {
+        str[n++] = *pointer;
+        pointer ++;
+    }
+    
+    str[n] = '\0';
+    return;
 }
 
 
@@ -1756,7 +1791,7 @@ void GenerateVelocity(void) {
         atom[i].dynamic->velocity[3] = COMspeed[i][3];
     }
     
-    FREE2(COMspeed, (atomnum + 1));
+    FREE2(COMspeed);
 }
 
 
@@ -1931,8 +1966,8 @@ void ReadWall(void) {
 
 
 void CreateFlow(void) {
-    flow.force.timeRec = (double *)calloc(atomnum + 1, sizeof(double));
-    DOUBLE_2CALLOC(flow.force.a, atomnum + 1, 4);
+    DOUBLE_CALLOC(flow.force.timeRec, (atomnum + 1));
+    DOUBLE_2CALLOC(flow.force.a, (atomnum + 1), 4);
     
     if (flow.mark == 2) {
         for (int i = 1; i <= atomnum; i ++) {

@@ -8,8 +8,8 @@
 
 #include "Analysis.h"
 
-void SaveGRO(FILE *saveFile);
-void SaveGROMono(FILE *saveFile);
+static void SaveGRO(FILE *saveFile);
+static void SaveGROMono(FILE *saveFile);
 
 
 void AdjustPBC(int id)
@@ -106,12 +106,12 @@ void AdjustPBC(int id)
 
 int ReadGro(FILE *inputFile) { //per frame
     int num;
-    char buffer[1024];
+    char buffer[1024], line[1024];
     
     if (fscanf(inputFile, "%[^\n]\n", buffer) == EOF)
         return -1;
     
-    fscanf(inputFile, "%i", &num);
+    fscanf(inputFile, "%i\n", &num);
     
     if (num != atomnum) {
         printf("!!ERROR!!: atom number does not match! from info file: %i, from trajectory: %i! %s:%i\n", atomnum, num, __FILE__, __LINE__);
@@ -119,18 +119,26 @@ int ReadGro(FILE *inputFile) { //per frame
     }
     
     for (int i = 1; i <= num; i ++) {
-        fscanf(inputFile, "%s%s%s%lf%lf%lf%lf%lf%lf", buffer, buffer, buffer,
+        fgets(line, sizeof(line), inputFile);
+        
+        int pos = 0;
+        sscanf(line, "%s%s%s%lf%lf%lf%n", buffer, buffer, buffer,
                &atom[i].dynamic->coordinate[1],
                &atom[i].dynamic->coordinate[2],
                &atom[i].dynamic->coordinate[3],
-               &atom[i].dynamic->velocity[1],
-               &atom[i].dynamic->velocity[2],
-               &atom[i].dynamic->velocity[3]);
+               &pos);
+        
+        if (sscanf(line + pos, "%s", buffer) != EOF) {
+            sscanf(line + pos, "%lf%lf%lf",
+                   &atom[i].dynamic->velocity[1],
+                   &atom[i].dynamic->velocity[2],
+                   &atom[i].dynamic->velocity[3]);
+        }
+        
         atom[i].dynamic->coordinate[1] *= 10;
         atom[i].dynamic->coordinate[2] *= 10;
         atom[i].dynamic->coordinate[3] *= 10;
     }
-    fscanf(inputFile, "\n");
     fscanf(inputFile, "%lf%lf%lf\n",
            &boxCurtDim[1],
            &boxCurtDim[2],

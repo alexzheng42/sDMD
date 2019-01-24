@@ -9,8 +9,8 @@
 #include <dirent.h>
 #include "Analysis.h"
 
-void AssignName(char *oldName, char *newName, char *extra, int row);
-int Comparator(const void *a, const void *b);
+static void AssignName(char *oldName, char *newName, char *extra, int row);
+static int Comparator(const void *a, const void *b);
 
 
 void InitializeFiles(int row, int column) {

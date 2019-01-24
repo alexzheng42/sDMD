@@ -30,20 +30,20 @@
 #define NATOMTYPE     32
 #define EXTEND_RATIO  0.95 //make sure the cut off radius is less than the subcell length
 
-#define THERMO_AND    5.25 //keep the frequency about 1%
-#define THERMO_GEL    5
+#define THERMO_AND    6.0 //keep the frequency about 1%
+#define THERMO_GEL    5.0
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846264338327950288
 #endif
 
 #ifdef DEBUG_RANDOM
-#define RANDOM_SEED 1522672160
+#define RANDOM_SEED 1547620899
 #endif
 
 /*
  Units of the system
- Temperature: kcal / (mol * kB) around 502 K (kB = 0.001987204118 kcal / (mol * K))
+ Temperature: kcal / (mol * kB) around 503.2 K (kB = 0.001987204118 kcal / (mol * K))
         Mass: u (unified atomic mass unit)
       Energy: kcal / mol
       Length: A
@@ -67,43 +67,21 @@
 #define INT_CALLOC(name, size) \
 name=(int *)calloc(size, sizeof(int));
 
-#define INT_2CALLOC(name, size1, size2, NN)    \
+#define INT_2CALLOC(name, size1, size2)    \
 name=(int **)calloc(size1, sizeof(int *));   \
-for (NN=0; NN<size1; NN++) {    \
-name[NN]=(int *)calloc(size2, sizeof(int)); \
-}
+name[0]=(int *)calloc(size1*size2, sizeof(int));  \
+for (int NN=1; NN<size1; NN++) name[NN]=name[0]+NN*size2;
 
 #define DOUBLE_CALLOC(name, size) \
 name=(double *)calloc(size, sizeof(double));
 
 #define DOUBLE_2CALLOC(name, size1, size2)    \
 name=(double **)calloc(size1, sizeof(double *));   \
-for (int NN=0; NN<size1; NN++) {    \
-name[NN]=(double *)calloc(size2, sizeof(double)); \
-}
+name[0]=(double *)calloc(size1*size2, sizeof(double));  \
+for (int NN=1; NN<size1; NN++) name[NN]=name[0]+NN*size2;
 
-#define DOUBLE_3CALLOC(name, size1, size2, size3)    \
-name=(double ***)calloc(size1, sizeof(double **));  \
-for (int NN=0; NN<size1; NN++) {    \
-name[NN]=(double **)calloc(size2, sizeof(double *));    \
-for (int NN2=0; NN2<size2; NN2++) { \
-name[NN][NN2]=(double *)calloc(size3, sizeof(double));  \
-}   \
-}
-
-#define FREE2(name, size2)    \
-for (int NN=0; NN<size2; NN++) {    \
-free(name[NN]); \
-}   \
-free(name);
-
-#define FREE3(name, size2, size3)   \
-for (int NN=0; NN<size2; NN++) {    \
-for (int NN2=0; NN2<size3; NN2++) {    \
-free(name[NN][NN2]);    \
-}   \
-free(name[NN]); \
-}   \
+#define FREE2(name) \
+free(name[0]);  \
 free(name);
 
 #define MIN3(num1, num2, num3)    \
@@ -562,6 +540,7 @@ extern long int pbcandcrosseventsum;
 extern long int walleventsum;
 extern long int oldtotaleventsum;
 extern long int newtotaleventsum;
+extern long int warningsum;
 //-----------------
 
 
@@ -754,7 +733,6 @@ void Rotation(double *, double *, double, char);
 void TimeBenchmark(char *, char *, int);
 void PrintCellList(struct ThreadStr *thisThread);
 void PrintList(list *atomList);
-double TotalPotentialEnergy(int collision_i, double * direction, struct ThreadStr *thisThread);
 void SDEnergyMin(long int stepNum, struct ThreadStr *thisThread);
 void AtomDataCpy(struct AtomStr * dest, struct AtomStr * sour, int flag);
 void RenewCellList(struct AtomStr *newTargetAtom, struct AtomStr *oldTargetAtom);

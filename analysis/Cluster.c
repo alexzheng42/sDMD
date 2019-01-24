@@ -10,19 +10,19 @@
 
 #define gapTime 200
 
-int *proteinList;
-int **cluster;
-long **interaction;
+static int *proteinList;
+static int **cluster;
+static long **interaction;
 
-int CheckInteraction (struct AtomStr *atom1, struct AtomStr *atom2, int **connection);
-int CheckListandAdd(int *list, int listLen, int num);
-void CalCluster(int id);
-void SetListZero(int *list, int listLen);
-void SetClusterZero(int **cluster);
-void PrintInteraction(long **inter);
-void PrintCluster(int **cluster);
+static int CheckInteraction (struct AtomStr *atom1, struct AtomStr *atom2, int **connection);
+static int CheckListandAdd(int *list, int listLen, int num);
+static void CalCluster(int id);
+static void SetListZero(int *list, int listLen);
+static void SetClusterZero(int **cluster);
 static void InitializeVariables(void);
 static void FreeVar(void);
+void PrintInteraction(long **inter);
+void PrintCluster(int **cluster);
 
 
 void ClusterInfo(int id) {
@@ -39,26 +39,14 @@ void ClusterInfo(int id) {
 
 static void InitializeVariables(void) {
     proteinList = (int *)calloc(numofprotein + 1, sizeof(int));
-    cluster = (int **)calloc(numofprotein + 1, sizeof(int *));
-    interaction = (long **)calloc(atomnum + 1, sizeof(long *));
-    for (int i = 0; i <= numofprotein; i ++) {
-        cluster[i] = (int *)calloc(numofprotein + 1, sizeof(int));
-    }
-    for (int i = 0; i <= atomnum; i ++) {
-        interaction[i] = (long *)calloc(atomnum + 1, sizeof(long));
-    }
+    LONG_2CALLOC(interaction, (atomnum + 1), (atomnum + 1));
+    INT_2CALLOC(cluster, (numofprotein + 1), (numofprotein + 1));
 }
 
 static void FreeVar() {
-    for (int i = 0; i <= numofprotein; i ++) {
-        free(cluster[i]);
-    }
-    for (int i = 0; i <= atomnum; i ++) {
-        free(interaction[i]);
-    }
-    free(proteinList);
-    free(cluster);
-    free(interaction);
+    free(proteinList); proteinList = NULL;
+    _2FREE(interaction);
+    _2FREE(cluster);
 }
 
 void CalCluster(int id) {

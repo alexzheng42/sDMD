@@ -125,11 +125,12 @@ int FindPair (struct AtomStr *atom1, struct AtomStr *atom2, char *interactionTyp
                      !(strcmp(wallDyn.mark, "no")) &&
                      !tunlObj.mark &&
                      !(codeNum > 1))) {
-            printf("!WARNING!: the distance between atom %2i(%2i%2s) and %2i(%2i%2s) is too small! %.4lf\n",
+            printf("!WARNING!: the distance between atom %2i(%2i%2s) and %2i(%2i%2s) is too small!\n",
                    atom1->property->num, atom1->property->sequence.aminoacidNum, atom1->property->name,
-                   atom2->property->num, atom2->property->sequence.aminoacidNum, atom2->property->name,
-                   distance2 - thisConstr->dmin);
-            printf("!WARNING!: pair type: %s: %s:%i\n", interactionType, __FILE__, __LINE__);
+                   atom2->property->num, atom2->property->sequence.aminoacidNum, atom2->property->name);
+            printf("           pair type: %s. the current distance is %.4lf, while the min is %.4lf.\n", interactionType, sqrt(distance2), sqrt(thisConstr->dmin));
+            printf("           %s:%i\n", __FILE__, __LINE__);
+            warningsum ++;
         }
         return coreorShell;
     }
@@ -153,7 +154,7 @@ int FindPair (struct AtomStr *atom1, struct AtomStr *atom2, char *interactionTyp
             } else if (strcmp(interactionType, "neighbor") == 0 &&
                        thisStep->next == NULL && atom2->dynamic->HB.bondConnection > 0) {
                 *upperPotential = 0;
-                coreorShell = 1;
+                coreorShell = 1; //for HBNeighbor event, the paired atoms will NOT move out of the range, i.e. the last step->d = dmax
                 return coreorShell;
             }
             
@@ -165,11 +166,12 @@ int FindPair (struct AtomStr *atom1, struct AtomStr *atom2, char *interactionTyp
     }
     
     if (unlikely(strcmp(interactionType, "HB") == 0 && atom1->dynamic->HB.bondConnection > 0)) {
-        printf("!WARNING!: HB length between atom %i and %i is too large, %lf! %s:%i\n",
+        printf("!WARNING!: HB length between atom %i and %i is too large!\n",
                atom1->property->sequence.atomNum,
-               atom2->property->sequence.atomNum,
-               sqrt(distance2 - *upperLimit),
-               __FILE__, __LINE__);
+               atom2->property->sequence.atomNum);
+        printf("           the current is %.4lf, while the max is %.4lf\n", sqrt(distance2), sqrt(*upperLimit));
+        printf("           %s:%i\n", __FILE__, __LINE__);
+        warningsum ++;
     }
     
     if (thisConstr->dmax > 0) {
@@ -196,11 +198,12 @@ int FindPair (struct AtomStr *atom1, struct AtomStr *atom2, char *interactionTyp
             
             if (unlikely(!(strcmp(interactionType, "neighbor") == 0 && atom2->dynamic->HB.bondConnection == 0) &&
                          !(strcmp(interactionType, "HB") == 0 && atom1->dynamic->HB.bondConnection == 0))) {
-                printf("!WARNING!: the distance between atom %2i(%2i%2s) and %2i(%2i%2s) is too large! %.4lf\n",
+                printf("!WARNING!: the distance between atom %2i(%2i%2s) and %2i(%2i%2s) is too large!\n",
                        atom1->property->num, atom1->property->sequence.aminoacidNum, atom1->property->name,
-                       atom2->property->num, atom2->property->sequence.aminoacidNum, atom2->property->name,
-                       distance2 - thisConstr->dmax);
-                printf("!WARNING!: pair type: %s: %s:%i\n", interactionType, __FILE__, __LINE__);
+                       atom2->property->num, atom2->property->sequence.aminoacidNum, atom2->property->name);
+                printf("           pair type: %s. the current distance is %.4lf, while the min is %.4lf.\n", interactionType, sqrt(distance2), sqrt(thisConstr->dmax));
+                printf("           %s:%i\n", __FILE__, __LINE__);
+                warningsum ++;
             }
         }
     } else {
@@ -316,251 +319,172 @@ void DisplayTime(char * timer) {
 }
 
 
-double TotalPotentialEnergy(int collision_i, double * direction, struct ThreadStr *thisThread) {
-    int flag, connectionFlag;
-    int collision_j;
-    double r_ij[4], distance;
-    double **newPosition;
-    double longLimit, shortLimit;
-    double tempDirection[4];
-    double potential = 0;
-    
-    DOUBLE_2CALLOC(newPosition, (atomnum + 1), 4);
-    
-    for (int n = 1; n <= atomnum; n++) {
-        TRANSFER_VECTOR(newPosition[n], thisThread->raw[n]->dynamic->coordinate);
-    }
-    
-    for (int n = 1; n <= 3; n++) {
-        direction[n] = 0;
-    }
-    
-    for (collision_j = 1; collision_j <= atomnum; collision_j++) {
-        if (collision_i != collision_j) {
-            
-            connectionFlag = 0;
-            DOT_MINUS(newPosition[collision_i], newPosition[collision_j], r_ij);
-            distance = DOT_PROD(r_ij, r_ij);
-            
-            //bonds
-            struct ConstraintStr *thisBond = thisThread->raw[collision_i]->property->bond;
-            flag = 0;
-            while (thisBond != NULL) {
-                if (thisBond->connection == collision_j) {
-                    flag = 1;
-                    connectionFlag = 1;
-                    break;
-                }
-                thisBond = thisBond->next;
-            }
-            
-            if (flag == 1) {
-                longLimit  = thisBond->dmax;
-                shortLimit = thisBond->dmin;
-                
-                if (distance <= shortLimit) {
-                    potential += INFINIT;
-                    DOT_MINUS(newPosition[collision_i], newPosition[collision_j], tempDirection);
-                    for (int n = 1; n <= 3; n++) {
-                        direction[n] += tempDirection[n];
-                    }
-                    
-                } else if (distance >= longLimit) {
-                    potential += INFINIT;
-                    DOT_MINUS(newPosition[collision_j], newPosition[collision_i], tempDirection);
-                    for (int n = 1; n <= 3; n++) {
-                        direction[n] += tempDirection[n];
-                    }
-                    
-                } else {
-                    potential += 0;
-                }
-            }
-            
-            //constraints
-            struct ConstraintStr *thisConstr = thisThread->raw[collision_i]->property->constr;
-            flag = 0;
-            while (thisConstr != NULL) {
-                if (thisConstr->connection == collision_j) {
-                    flag = 1;
-                    connectionFlag = 1;
-                    break;
-                }
-                thisConstr = thisConstr->next;
-            }
-            
-            if (flag == 1) {
-                if (distance <= thisConstr->dmin) {
-                    
-                    potential += INFINIT;
-                    DOT_MINUS(newPosition[collision_i], newPosition[collision_j], tempDirection);
-                    for (int n = 1; n <= 3; n++) {
-                        direction[n] += tempDirection[n];
-                    }
-                } else if (distance >= thisConstr->dmax) {
-                    
-                    potential += INFINIT;
-                    DOT_MINUS(newPosition[collision_j], newPosition[collision_i], tempDirection);
-                    for (int n = 1; n <= 3; n++) {
-                        direction[n] += tempDirection[n];
-                    }
-                }
-            }
-            
-            //interactions
-            if (distance <= 6.5 * 6.5 && connectionFlag == 0) {
-                int type1 = thisThread->raw[collision_i]->property->type;
-                int type2 = thisThread->raw[collision_j]->property->type;
-                
-                if (type1 > type2) {
-                    int i = type2;
-                    type2 = type1;
-                    type1 = i;
-                }
-                
-                struct ConstraintStr *thisConstr = RightPair(type1, type2, 0);
-                if (distance <= thisConstr->dmin) {
-                    potential += INFINIT;
-                }
-            }
-        }
-    }
-    
-    FREE2(newPosition, (atomnum + 1));
-    return potential;
-}
-
-
 void SDEnergyMin(long int stepNum, struct ThreadStr *thisThread) {
-    long int step = 0;
-    int connect[200] = {0};
+    struct interStr {
+        int connect[512];
+        double coordinate[4];
+        double hiLimit[512];
+        double loLimit[512];
+        double length[512];
+    };
+    
+    long step = 0;
+    long totalCN = INFINIT * INFINIT;
     int l, flag;
-    int dupRecord = 0;
+    double factor = 0.1;
     double diff;
     double energy;
-    double totalE = INFINIT * INFINIT;
-    double oldE = 0;
-    double hiLimit[200] = {0};
-    double loLimit[200] = {0};
-    double length[200] = {0};
     double direction[4];
     double length2;
     char directory[100];
+    struct interStr *interaction;
     struct FileStr outputFile;
     
+    interaction = (struct interStr *)calloc(atomnum + 1, sizeof(struct interStr));
     sprintf(directory, "%s/MiniEnergy%s.gro", datadir, REMDInfo.REMD_ExtraName);
     outputFile.file = fopen(directory, "w");
     
-    printf("\nMinimizing the potential energy:\n");
-    while (totalE > INFINIT) {
-        for (int i = 1; i <= atomnum; ++i) {
-            //transfer bond information
-            int m = 0;
-            struct ConstraintStr *thisBond = thisThread->raw[i]->property->bond;
-            while (thisBond != NULL) {
-                m++;
-                connect[m] = thisBond->connection;
-                hiLimit[m] = sqrt(thisBond->dmax);
-                loLimit[m] = sqrt(thisBond->dmin);
-                 length[m] = 0.5 * (hiLimit[m] + loLimit[m]);
-                
-                thisBond = thisBond->next;
-            }
+    for (int i = 1; i <= atomnum; ++i) {
+        
+        TRANSFER_VECTOR(interaction[i].coordinate, thisThread->raw[i]->dynamic->coordinate);
+        
+        //transfer bond information
+        int m = 0;
+        struct ConstraintStr *thisBond = thisThread->raw[i]->property->bond;
+        while (thisBond != NULL) {
+            m++;
+            interaction[i].connect[m] = thisBond->connection;
+            interaction[i].hiLimit[m] = sqrt(thisBond->dmax);
+            interaction[i].loLimit[m] = sqrt(thisBond->dmin);
+            interaction[i].length[m]  = 0.5 * (interaction[i].hiLimit[m] + interaction[i].loLimit[m]);
+            thisBond = thisBond->next;
+        }
+        
+        //transfer constrains information
+        struct ConstraintStr *thisConstr = thisThread->raw[i]->property->constr;
+        while (thisConstr != NULL) {
+            m++;
+            interaction[i].connect[m] = thisConstr->connection;
+            interaction[i].hiLimit[m] = sqrt(thisConstr->dmax);
+            interaction[i].loLimit[m] = sqrt(thisConstr->dmin);
+            interaction[i].length[m]  = 0.5 * (interaction[i].hiLimit[m] + interaction[i].loLimit[m]);
+            thisConstr = thisConstr->next;
+        }
+        
+        //transfer interaction potential information
+        for (int n = 1; n <= atomnum; n ++) {
+            direction[1] = thisThread->raw[n]->dynamic->coordinate[1] - thisThread->raw[i]->dynamic->coordinate[1];
+            direction[2] = thisThread->raw[n]->dynamic->coordinate[2] - thisThread->raw[i]->dynamic->coordinate[2];
+            direction[3] = thisThread->raw[n]->dynamic->coordinate[3] - thisThread->raw[i]->dynamic->coordinate[3];
             
-            //transfer constrains information
-            struct ConstraintStr *thisConstr = thisThread->raw[i]->property->constr;
-            while (thisConstr != NULL) {
-                m++;
-                connect[m] = thisConstr->connection;
-                hiLimit[m] = sqrt(thisConstr->dmax);
-                loLimit[m] = sqrt(thisConstr->dmin);
-                length[m] = hiLimit[m] / 2 + loLimit[m] / 2;
-                
-                thisConstr = thisConstr->next;
-            }
-            
-            //transfer interaction potential information
-            for (int n = 1; n <= atomnum; n ++) {
-                direction[1] = thisThread->raw[n]->dynamic->coordinate[1] - thisThread->raw[i]->dynamic->coordinate[1];
-                direction[2] = thisThread->raw[n]->dynamic->coordinate[2] - thisThread->raw[i]->dynamic->coordinate[2];
-                direction[3] = thisThread->raw[n]->dynamic->coordinate[3] - thisThread->raw[i]->dynamic->coordinate[3];
-                
-                length2 = DOT_PROD(direction, direction);
-                if (length2 <= 6.5 * 6.5) {
-                    connect[m + 1] = 0; //separate the current and the old lists
-                    FIND_DUPLICATED(n, connect, l, flag);
-                    if (i != n && flag == 0) {
-                        m++;
-                        connect[m] = n; //all the surrounding atoms
-                        hiLimit[m] = INFINIT; //interaction potential only has low limit
-                        
-                        int type1 = thisThread->raw[i]->property->type;
-                        int type2 = thisThread->raw[n]->property->type;
-                        
-                        if (type1 > type2) {
-                            int i = type2;
-                            type2 = type1;
-                            type1 = i;
-                        }
-                        
-                        loLimit[m] = sqrt(potentialPairCollision[type1][type2].dmin);
-                        length[m] = loLimit[m] + 0.01;
+            length2 = DOT_PROD(direction, direction);
+            if (length2 <= 144 && //radius of 12 A
+                !(connectionMap[i][n] & BOND_CONNECT) &&
+                !(connectionMap[i][n] & CONSTRAINT_CONNECT)) {
+                FIND_DUPLICATED(n, interaction[i].connect, l, flag);
+                if (i != n && flag == 0) {
+                    m++;
+                    interaction[i].connect[m] = n; //all the surrounding atoms
+                    interaction[i].hiLimit[m] = INFINIT; //interaction potential only has low limit
+                    
+                    int type1 = thisThread->raw[i]->property->type;
+                    int type2 = thisThread->raw[n]->property->type;
+                    
+                    if (type1 > type2) {
+                        int i = type2;
+                        type2 = type1;
+                        type1 = i;
                     }
+                    
+                    interaction[i].loLimit[m] = sqrt(potentialPairCollision[type1][type2].dmin);
+                    interaction[i].length[m]  = interaction[i].loLimit[m] + 0.001;
                 }
             }
-            
-            //separate list between loop
-            m++;
-            connect[m] = 0;
-            
+        }
+        
+        if (m > 510) {
+            printf("!!ERROR!! too many interacting atoms surround atom #%i, which has %i. code needs to be optimized! %s:%i\n", i, m, __FILE__, __LINE__);
+            exit(EXIT_FAILURE);
+        }
+    }
+    
+    printf("\nMinimizing the potential energy:\n");
+    while (totalCN > 0) {
+        for (int i = 1; i <= atomnum; i ++) {
             int num = 1;
-            while (connect[num] != 0) {
-                direction[1] = thisThread->raw[connect[num]]->dynamic->coordinate[1] - thisThread->raw[i]->dynamic->coordinate[1];
-                direction[2] = thisThread->raw[connect[num]]->dynamic->coordinate[2] - thisThread->raw[i]->dynamic->coordinate[2];
-                direction[3] = thisThread->raw[connect[num]]->dynamic->coordinate[3] - thisThread->raw[i]->dynamic->coordinate[3];
+            double change[4] = {0};
+            while (interaction[i].connect[num] != 0) {
+                direction[1] = interaction[interaction[i].connect[num]].coordinate[1] - interaction[i].coordinate[1];
+                direction[2] = interaction[interaction[i].connect[num]].coordinate[2] - interaction[i].coordinate[2];
+                direction[3] = interaction[interaction[i].connect[num]].coordinate[3] - interaction[i].coordinate[3];
                 
                 length2 = DOT_PROD(direction, direction);
                 length2 = sqrt(length2);
                 
-                if (length2 >= hiLimit[num] || length2 <= loLimit[num]) {
-                    diff = length[num] - length2;
-                    energy = RandomValue(0, 1) * 0.1 * diff;
+                if (length2 >= interaction[i].hiLimit[num] || length2 <= interaction[i].loLimit[num]) {
+                    diff = interaction[i].length[num] - length2;
+                    energy = RandomValue(0, 1) * factor * diff;
                     
-                    thisThread->raw[i]->dynamic->coordinate[1] -= energy * direction[1] / length2;
-                    thisThread->raw[i]->dynamic->coordinate[2] -= energy * direction[2] / length2;
-                    thisThread->raw[i]->dynamic->coordinate[3] -= energy * direction[3] / length2;
+                    change[1] -= energy * direction[1] / interaction[i].length[num];
+                    change[2] -= energy * direction[2] / interaction[i].length[num];
+                    change[3] -= energy * direction[3] / interaction[i].length[num];
                 }
                 num ++;
             }
+            
+            interaction[i].coordinate[1] += change[1];
+            interaction[i].coordinate[2] += change[2];
+            interaction[i].coordinate[3] += change[3];
         }
         
-        //here the energy is not real
-        totalE = 0;
-        for (int i = 1; i <= atomnum; ++i) {
-            totalE += TotalPotentialEnergy(i, direction, thisThread);
-        }
-        printf("step = %5li, energy = %-20.2lf\n", ++step, totalE);
-        
-        if (totalE == oldE) {
-            dupRecord ++;
-            if (dupRecord > 200) {
-                break;
+        //recheck the state/energy
+        totalCN = 0;
+        for (int i = 1; i <= atomnum; i ++) {
+            int num = 1;
+            while (interaction[i].connect[num] != 0) {
+                if (interaction[i].connect[num] < i) {
+                    num ++;
+                    continue;
+                }
+                
+                direction[1] = interaction[interaction[i].connect[num]].coordinate[1] - interaction[i].coordinate[1];
+                direction[2] = interaction[interaction[i].connect[num]].coordinate[2] - interaction[i].coordinate[2];
+                direction[3] = interaction[interaction[i].connect[num]].coordinate[3] - interaction[i].coordinate[3];
+                
+                length2 = DOT_PROD(direction, direction);
+                length2 = sqrt(length2);
+                
+                if (length2 >= interaction[i].hiLimit[num] || length2 <= interaction[i].loLimit[num]) {
+                    if (step == stepNum) {
+                        printf("atoms between %8i (%s [%4i%3s]) and %8i (%s [%4i%3s]), cur dis = %.4lf, min = %.4lf, max = %.4lf\n",
+                               i,
+                               atom[i].property->nameOfAA,
+                               atom[i].property->sequence.aminoacidNum,
+                               atom[i].property->name,
+                               interaction[i].connect[num],
+                               atom[interaction[i].connect[num]].property->nameOfAA,
+                               atom[interaction[i].connect[num]].property->sequence.aminoacidNum,
+                               atom[interaction[i].connect[num]].property->name,
+                               length2,
+                               interaction[i].loLimit[num],
+                               interaction[i].hiLimit[num]);
+                    }
+                    totalCN ++;
+                }
+                num ++;
             }
-        } else {
-            oldE = totalE;
-            dupRecord = 0;
+            TRANSFER_VECTOR(thisThread->raw[i]->dynamic->coordinate, interaction[i].coordinate);
         }
         
-        if (step % 100 == 0) {
-            SaveGRO(&outputFile);
-        }
-        
-        if (step > stepNum) {
-            break;
-        }
+        printf("step = %5li, total conflicts = %li\n", ++step, totalCN);
+        if (step % 1000 == 0) SaveGRO(&outputFile);
+        if (step % 1000 == 0 && factor > 0.05) factor -= 0.01;
+        if (step > stepNum) break;
     }
     
     SaveGRO(&outputFile);
+    
+    free(interaction);
     fclose(outputFile.file);
     printf("Done!\n\n");
 }
@@ -911,7 +835,7 @@ void CreateGELCoordinate(int numOnAxis)
     for (int i = 0; i < numOnAxis; ++i) {
         for (int n = 0; n < numOnAxis; ++n) {
             for (int m = 0; m < numOnAxis; ++m) {
-                fprintf(outputFile, "%5iGEL%5s%5i%8.3f%8.3f%8.3f\n", totalNum, "CA", totalNum, (m + 0.5) * 0.8, (n + 0.5) * 0.8, (i + 0.5) * 0.8);
+                fprintf(outputFile, "%5iGEL%5s%5i%8.3f%8.3f%8.3f\n", totalNum, "GEL", totalNum, (m + 0.5) * 0.8, (n + 0.5) * 0.8, (i + 0.5) * 0.8);
                 totalNum ++;
             }
         }
@@ -1011,7 +935,7 @@ void PrintConstr(int atomNum) {
 
 void PrintStep(struct StepPotenStr *thisStep) {
     while (thisStep != NULL) {
-        printf("%.4lf %.4lf ", sqrt(thisStep->d), thisStep->e);
+        printf("%10.4lf %10.4lf (%.4lf)\n", sqrt(thisStep->d), thisStep->e, thisStep->accumulated);
         thisStep = thisStep->next;
     }
     printf("\n");

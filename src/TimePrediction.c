@@ -138,7 +138,10 @@ void CollisionTime(struct AtomStr *collision_i, struct ThreadStr *thisThread) {
                 event.time = CalculateTime(&parameters);
                 
                 if (unlikely(event.time < 0 && (codeNum == 2 && thisThread->finishWork == 1))) {
-                    printf("!!ERROR!!: collision time is less than zero! %i  %i\n", targetAtom_i, targetAtom_j); //for debug and error check
+                    printf("!!ERROR!!: collision time is less than zero bewteen atoms %i and %i\n", targetAtom_i, targetAtom_j); //for debug and error check
+                    printf("           the current distance is %.4lf\n", sqrt(parameters.r_2));
+                    printf("           the min is %.4lf and the max is %.4lf\n", sqrt(parameters.shortlimit2), sqrt(parameters.longlimit2));
+                    printf("           %s:%i\n", __FILE__, __LINE__);
                 }
                 
                 JobAssign(collision_i, collision_j, &event, Coli_Event);
@@ -205,11 +208,34 @@ void BondTime(struct AtomStr *bond_i, struct ThreadStr *thisThread) {
         CalculateParameters(bond_i, bond_j, &parameters);
         
         if (unlikely(parameters.r_2 - parameters.longlimit2 > ZERO && (codeNum == 1 || (codeNum == 2 && thisThread->tid == 0)))) {
-            printf("!!ERROR!!: long-error  %4i:%4i   (%lf) %s:%i\n", targetAtom_i, targetAtom_j,
-                   parameters.r_2 - parameters.longlimit2, __FILE__, __LINE__);
+            printf("!!ERROR!!: long-error between atoms %i(%i%s) and %i(%i%s)\n",
+                   targetAtom_i, bond_i->property->sequence.aminoacidNum, bond_i->property->name,
+                   targetAtom_j, bond_j->property->sequence.aminoacidNum, bond_j->property->name);
+            printf("           the current distance is %.4lf, while the max is %.4lf\n", sqrt(parameters.r_2), sqrt(parameters.longlimit2));
+            printf("           %s:%i\n", __FILE__, __LINE__);
+            
+            if (parameters.b_ij >= 0) { //try to correct the error
+                event.subEventType = WellBounc;
+                event.time = 1e-16 * targetAtom_i * targetAtom_j;
+                JobAssign(bond_i, bond_j, &event, Bond_Event);
+                n ++;
+                continue;
+            }
+            
         } else if (unlikely(parameters.shortlimit2 - parameters.r_2 > ZERO && (codeNum == 1 || (codeNum == 2 && thisThread->tid == 0)))) {
-            printf("!!ERROR!!: short-error %4i:%4i   (%lf) %s:%i\n", targetAtom_i, targetAtom_j,
-                   parameters.shortlimit2 - parameters.r_2, __FILE__, __LINE__);
+            printf("!!ERROR!!: short-error between atoms %i(%i%s) and %i(%i%s)\n",
+                   targetAtom_i, bond_i->property->sequence.aminoacidNum, bond_i->property->name,
+                   targetAtom_j, bond_j->property->sequence.aminoacidNum, bond_j->property->name);
+            printf("           the current distance is %.4lf, while the min is %.4lf\n", sqrt(parameters.r_2), sqrt(parameters.shortlimit2));
+            printf("           %s:%i\n", __FILE__, __LINE__);
+            
+            if (parameters.b_ij < 0) { //try to correct the error
+                event.subEventType = CoreColli;
+                event.time = 1e-16 * targetAtom_i * targetAtom_j;
+                JobAssign(bond_i, bond_j, &event, Bond_Event);
+                n ++;
+                continue;
+            }
         }
         
         if (parameters.b_ij < 0 && CalculateDisc(&parameters) > 0) {
@@ -229,7 +255,8 @@ void BondTime(struct AtomStr *bond_i, struct ThreadStr *thisThread) {
         event.time = CalculateTime(&parameters);
 
         if (unlikely(event.time < 0 && (codeNum == 1 || (codeNum == 2 && thisThread->tid == 0)))) {
-            printf("!!ERROR!!: bond time is less than zero! %i %i %s:%i\n", targetAtom_i, targetAtom_j, __FILE__, __LINE__);
+            printf("!!ERROR!!: bond time is less than zero between atoms %i and %i %s:%i\n", targetAtom_i, targetAtom_j, __FILE__, __LINE__);
+            event.time = INFINIT;
         }
         
         JobAssign(bond_i, bond_j, &event, Bond_Event);
@@ -318,7 +345,8 @@ void HBTime(struct AtomStr *HB_i, struct ThreadStr *thisThread) {
         event.time = CalculateTime(&parameters);
         
         if (unlikely(event.time < 0 && (thisThread->finishWork == 1 || (codeNum == 2 && thisThread->getWork == 0)))) {
-            printf("!!ERROR!!: HB time is less than zero!\n");
+            printf("!!ERROR!!: HB time is less than zero between atoms %i and %i! %s:%i\n", targetAtom_i, targetAtom_j, __FILE__, __LINE__);
+            event.time = INFINIT;
         }
         
         JobAssign(HB_i, HB_j, &event, HB_Event);
@@ -390,7 +418,8 @@ void HBTime(struct AtomStr *HB_i, struct ThreadStr *thisThread) {
                     event.time = CalculateTime(&parameters);
                     
                     if (unlikely(event.time < 0)) {
-                        printf("!!ERROR!!: HB time is less than zero!\n");
+                        printf("!!ERROR!!: HB time is less than zero bewteen atoms %i and %i! %s:%i\n", targetAtom_i, targetAtom_j, __FILE__, __LINE__);
+                        event.time = INFINIT;
                     }
                     
                     JobAssign(HB_i, HB_j, &event, HB_Event);
@@ -484,7 +513,8 @@ void HBNeighborTime(struct AtomStr *neighbor_i, struct ThreadStr *thisThread) {
         
         event.time = CalculateTime(&parameters);
         if (unlikely(event.time < 0)) {
-            printf("!!ERROR!!: HB neighbor time is less than zero! %s:%i\n", __FILE__, __LINE__);
+            printf("!!ERROR!!: HB neighbor time is less than zero between atoms %i and %i! %s:%i\n", targetAtom_i, targetAtom_j, __FILE__, __LINE__);
+            event.time = INFINIT;
         }
         
         if (JobAssign(neighbor_i, neighbor_j, &event, HBNe_Event)) {
@@ -540,7 +570,7 @@ void PBCandCrossCellTime (struct AtomStr *targetAtom) {
                 event.time = shortertime;
             }
         } else {
-            printf("PCC speed is equal to zero?!\n");
+            printf("PCC speed is equal to zero?! %s:%i\n", __FILE__, __LINE__);
         }
     }
     
@@ -643,6 +673,7 @@ ReCal:
         event.time = CalculateTime(&parameters);
         if (unlikely(event.time < 0)) {
             printf("!!ERROR!!: wall time is less than zero, atom #%i! %s:%i\n", atomNum, __FILE__, __LINE__);
+            event.time = INFINIT;
         }
         
         JobAssign(targetAtom, NULL, &event, Wall_Event);
@@ -836,6 +867,7 @@ void TunnelTime(struct AtomStr *targetAtom) {
         
         if (unlikely(event.time < 0)) {
             printf("!!ERROR!!: wall time is less than zero, atom #%i! %s:%i\n", atomNum, __FILE__, __LINE__);
+            event.time = INFINIT;
         }
         
         if (JobAssign(targetAtom, NULL, &event, Tunl_Event)) {
@@ -922,7 +954,8 @@ void ChargeTime(struct AtomStr *targetAtom) {
         
         event.time = CalculateTime(&parameters);
         if (unlikely(event.time < 0)) {
-            printf("!!ERROR!!: charge interaction time is less than zero! %i  %i\n", targetAtom->property->num, chargeNum); //for debug and error check
+            printf("!!ERROR!!: charge interaction time is less than zero between atom %i and charge %i! %s:%i\n", targetAtom->property->num, chargeNum, __FILE__, __LINE__); //for debug and error check
+            event.time = INFINIT;
         }
         
         if (JobAssign(targetAtom, NULL, &event, Chrg_Event))

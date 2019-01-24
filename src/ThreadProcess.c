@@ -73,7 +73,7 @@ void FirstRun(struct ThreadStr *thisThread) {
     int tmpList[3] = {1, 0, 0};
     
 #ifndef GEL
-    SDEnergyMin(50000, thisThread);
+    SDEnergyMin(20000, thisThread);
 #endif
     
     PBC("full", NULL, thisThread); //check if any of the coordinates would satisfy PBC
@@ -250,6 +250,7 @@ void CommitEvent(struct AtomStr **destLibrary, struct AtomStr *newTargetAtom, st
                 
                 if (unlikely(HBnumformed < alphaHBformed)) {
                     printf("!WARNING!: total HB number is smaller than the alpha HB number! %s:%i\n", __FILE__, __LINE__);
+                    warningsum ++;
                 }
             }
             HBeventsum ++;
