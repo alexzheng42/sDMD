@@ -1,0 +1,6 @@
+RESIDUE ALA
+   ATOM N      NZB    14.0  N N
+   ATOM CA     CA2    12.0  N N
+   ATOM C      CRB    12.0  N N
+   ATOM O      OZB    16.0  N N
+   ATOM H      HB     12.0  N N

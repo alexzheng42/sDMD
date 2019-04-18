@@ -1,0 +1,164 @@
+Installation:
+
+In folder "src", please use,
+	$make sDMD
+to build the main simulation executable "sDMD". If users also would like to perform a replica-exchange molecular dynamics (REMD) simulation, please use,
+	$make all
+to build the all three executables "sDMD", "sREMD" and "sServer".
+
+In folder "analysis", please use,
+	$make
+to build the analysis executable "sAnalysis".
+
+
+
+
+Execution:
+
+To perform a regular DMD simulation, please use,
+	$./sDMD [args]
+The supported arguments and their descriptions can be shown by,
+	$./sDMD -h
+
+To perform a REMD simulation, please place the three executables "sDMD", "sREMD" and "sServer" in the same directory and use,
+	$./sREMD [args]
+The supported arguments and their descriptions can be shown by,
+	$./sREMD -h
+
+To perform an analysis, please use,
+	$./sAnalysis [args]
+The supported arguments and their descriptions can be shown by,
+	$./sAnalysis -h
+
+
+
+
+File List:
+
+	analysis (folder of the source files of the analysis executable)
+	|-	*.c
+	|-	*.h
+		source files for the executable "sAnalysis".
+	|-	Makefile
+		Makefile to compile and build the executable.
+
+	demo (folder of the outputs and analyzed results of the two illustrative examples)
+	|-	Folding (folder of an example of a folding simulation)
+		|-	analysis (folder containing the analyzed results)
+			|-	Energy.txt
+				energy related results.
+			|-	HBInfo.txt
+				hydrogen bond related results.
+			|-	HBNum.pdb
+				plot of alpha hydrogen bond number vs simulation time.
+			|-	PE.pdb
+				plot of potential energy vs simulation time.
+			|-	Plot*.txt
+				scripts for "gnuplot" to plot the results.
+			|-	ref_*.gro
+				reference structures of the poly-alanine to perform RMSD calculations.
+			|-	RG.pdb
+				plot of radius of gyration vs simulation time.
+			|-	RG.txt
+				radius of gyration results.
+			|-	RMSD.pdb
+				plot of RMSD with respect to the native structure of the poly-alanine vs simulation time.
+			|-	RMSD.txt
+				RMSD related results.
+		|-	output (folder containing the dumping data)
+			|-	out_cnt*.txt
+				dumping data of connection information.
+			|-	out_log*.txt
+				dumping data of simulation log.
+			|-	out_trj*.txt
+				dumping data of trajectory.
+			|-	savedData*.dat
+				break point data files for the extended simulations.
+			|-	SysInfo.dat
+				information of the simulated system (for analysis).
+			|-	timeEvaluation.dat
+				data file for the time-cost prediction of the next simulation.
+		|-	ala10.gro
+			coordinate input file of a poly-alanine in its native structure.
+		|-	fold.bash
+			bash script to perform the entire folding simulation.
+		|-	parameter.txt
+			configuration file to perform the simulation.
+	|-	REMD (folder of the example of REMD simulation)
+		|-	analysis (folder containing the analyzed results)
+			|-	CombinedPotMap.txt
+				combined data of the potential energy surface of all the replicas.
+			|-	CvPotT.txt
+				average potential energy and heat capacity vs simualtion temperature.
+			|-	Energy*.txt
+				energy related results of each replica.
+			|-	FreeEnergy.txt
+				potential of mean force at different temperature vs reaction coordinate.
+			|-	FT.pdb
+				plot of the heat capacity (reduced) of the poly-alanine vs simulation temperature.
+			|-	HBInfo*.txt
+				hydrogen bond related results of each replica.
+			|-	PESurface.pdb
+				plot of the combined potential energy surface with respect to the reaction coordinates.
+			|-	Plot*.txt
+				scripts for "gnuplot" to plot the results.
+			|-	PMFMap_T*.txt
+				potential of mean force surface with respect to the reaction coordinates of each temperature.
+			|-	PotMap_T*.txt
+				potential energy surface with respect to the reaction coordinates of each temperature.
+			|-	PotMap*.txt
+				potential energy surface with respect to the reaction coordinates of each replica.
+			|-	Probability.txt
+				probability distributions of the reaction coordinate values at different temperature.
+			|-	ref_*.gro
+				reference structures of the poly-alanine to perform RMSD calculations.
+			|-	RMSD*.txt
+				RMSD related results of each replica.
+		|-	output (folder containing the dumping data)
+			|-	out_cnt*.txt
+				dumping data of connection information.
+			|-	out_log*.txt
+				dumping data of simulation log.
+			|-	out_REMD*.txt
+				dumping data of REMD simulation information.
+			|-	out_trj*.txt
+				dumping data of trajectory.
+			|-	savedData*.dat
+				break point data files for the extended simulations.
+			|-	SysInfo*.dat
+				information of the simulated systems (for analysis).
+			|-	timeEvaluation.dat
+				data file for the time-cost prediction of the next simulation.
+		|-	ala10.gro
+			coordinate input file of the native poly-alanine.
+		|-	parameter.txt
+			configuration file to perform the simulation.
+		|-	REMD.bash
+			bash script to perform the REMD simulation.
+		|-	REMDConfig.txt
+			configuration file to perform the REMD simulation.
+
+	input (folder of the model library and the configuration files)
+	|-	Library_Ding
+		|-	AA (folder of the amino acid model)
+			|-	*.txt
+				model file of each amino acid.
+		|-	HBPotentialTable.txt
+			potential table for hydrogen bonding calculation.
+		|-	InteractionPotentialTable.txt
+			potential table for non-bonded and bonded interactions.
+		|-	Wall.txt
+			parameters of wall/surface.
+	|-	ala10.gro
+		coordinate input file of a poly-alanine in its native structure.
+	|-	parameter.txt
+		configuration file to perform the simulation.
+	|-	REMDConfig.txt
+		configuration file to perform the REMD simulation.
+
+	src (folder of the source files of the simulation executables)
+	|-	*.c
+	|-	*.h
+		source files for the executables "sDMD", "sREMD" and "sServer".
+	|-	Makefile
+		Makefile to compile and build the executables.

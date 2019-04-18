@@ -1,0 +1,7 @@
+set term postscript eps enhanced "Arial" 18
+set output "PE.eps"
+set xlabel "t"
+set xrange [0:205000]
+set format x "%.1t*10^{%T}"
+set ylabel "E (kcal/mol)"
+plot 'Energy.txt' u 1:4 w l notitle

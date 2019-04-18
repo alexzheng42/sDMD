@@ -1,0 +1,8 @@
+set term postscript eps enhanced "Arial" 18
+set output "HBNum.eps"
+set xlabel "t"
+set xrange [0:205000]
+set format x "%.1t*10^{%T}"
+set ylabel "n_{HB}"
+set yrange [0:10]
+plot 'HBInfo.txt' u 1:2 w l notitle

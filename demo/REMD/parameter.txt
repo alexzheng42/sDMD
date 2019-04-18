@@ -1,0 +1,17 @@
+Continue?          new
+Time               200000
+T(reduced)         no
+Dump_Rate          50
+CutOff_R(A)        9.0
+Force_Field        Ding
+Thermostat         Andersen
+Thermo_Freq        6.0
+sDMD_Method        1
+ThreadNo           1
+WallExist?         no
+WallType           no
+WallDyn            no
+Flow               no
+Obstruct?          no
+Tunnel?            no
+SphObst?           no

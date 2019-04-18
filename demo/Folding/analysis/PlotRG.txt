@@ -1,0 +1,7 @@
+set term postscript eps enhanced "Arial" 18
+set output "RG.eps"
+set xlabel "t"
+set xrange [0:205000]
+set format x "%.1t*10^{%T}"
+set ylabel "Rg (nm)"
+plot 'RG.txt' u 1:2 w l notitle

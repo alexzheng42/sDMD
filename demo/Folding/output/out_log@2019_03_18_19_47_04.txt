@@ -1,0 +1,39 @@
+#Log file at 2019_03_18_19_42_42
+System:
+Protein Num         = 1
+Protein Seq         = 
+                      ALA  ALA  ALA  ALA  ALA  ALA  ALA  ALA  ALA  ALA
+OldTime             = 104950.00
+TargetTime          = 125000.00
+TargetTemperature   = 0.60 
+OutputRate          = 50.00
+CutOffR             = 9.00 
+Method              = Ding
+ThermostatType      = Andersen
+ThermostatParameter = 6.000
+DMDMethod           = 1    
+ThreadNo            = 1    
+CGModel             = no, no
+WallExist           = no
+WallType            = no
+WallDyn             = no
+WallDynSize         = 0.00 
+WallDynRate         = 0.00 
+OrigBoxSize         = CurtBoxSize
+CurtBoxSize         = 150.00  150.00  150.00  
+FlowType            = 0    
+                      No flow.
+Obstruct            = 0    
+                      No obstruction.
+Tunnel              = 0    
+                      No tunnel.
+ColumnObstacles     = 0    
+                      No column.
+RandomSeed          = 1552908167
+REMDPortNum         = -1
+REMDTemperature     = -1.00
+REMDTempSeq         = -1
+REMDOutputRate      = 1000
+REMDServerName      = 
+REMDExtraName       = 
+

@@ -1,0 +1,11 @@
+set term postscript eps enhanced color "Arial" 18
+set output "PESurface.eps"
+set dgrid3d 20,20
+set dgrid3d gauss 0.1,0.15
+set contour
+set cntrparam levels 10
+set pm3d
+set xlabel "{/Symbol a}-helix"
+set ylabel "{/Symbol b}-hairpin"
+set view 60,225
+splot "CombinedPotMap.txt" u 1:2:3 w l notitle
