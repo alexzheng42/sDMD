@@ -18,13 +18,13 @@
 #define h_addr h_addr_list[0] /* for backward compatibility */
 
 int client_open(char *serverName, int port_number);
-void ReplicaExchange(double *E, double *T, char *serverName, int *port_number);
+void ReplicaExchange(double *E, struct REMDTempStr *T, char *serverName, int *port_number);
 void REMDRun(struct ThreadInfoStr *threadInfo, int outputRate, char *serverName, int *port_number);
 
 
 void REMD(void) {
-    if (REMDInfo.REMD_T > 0) {
-        targetTemperature = REMDInfo.REMD_T;
+    if (REMDInfo.REMD_Temperature.T > 0) {
+        targetTemperature = REMDInfo.REMD_Temperature.T;
     }
     
     thread = (struct ThreadStr **)calloc(1, sizeof(struct ThreadStr *));
@@ -68,6 +68,7 @@ void REMDRun(struct ThreadInfoStr *threadInfo, int outputRate, char *serverName,
         if (hazardType < 0) {
             threadRenewList[0] = 1;
             threadRenewList[2] = 0;
+            threadRenewList[3] = 0;
             
             AssignThread(threadRenewList, thisThread);
             Predict(threadRenewList, thisThread);
@@ -91,10 +92,10 @@ void REMDRun(struct ThreadInfoStr *threadInfo, int outputRate, char *serverName,
             frame++;
             
             CommitEvent(thisThread->raw,
-                        *newTarget, (threadRenewList[2] > 0 ? *newPartner : NULL),
-                        oldTarget, (threadRenewList[2] > 0 ?  oldPartner : NULL),
+                        *newTarget, (threadRenewList[0] == 2 ? *newPartner : NULL),
+                        oldTarget, (threadRenewList[0] == 2 ?  oldPartner : NULL),
                         thisThread->listPtr[oldTarget->dynamic->HB.neighbor],
-                        (threadRenewList[2] > 0 ? thisThread->listPtr[oldPartner->dynamic->HB.neighbor] : NULL));
+                        (threadRenewList[0] == 2 ? thisThread->listPtr[oldPartner->dynamic->HB.neighbor] : NULL), thisThread, threadRenewList);
             
             UpdateCBT(threadRenewList);
             processratio = (currenttime - oldcurrenttime) / (timestep - oldcurrenttime) * 100;
@@ -119,7 +120,8 @@ void REMDRun(struct ThreadInfoStr *threadInfo, int outputRate, char *serverName,
             
             if (currenttime >= rate) {
                 double potenEnergy = CalPotenE(thisThread);
-                ReplicaExchange(&potenEnergy, &targetTemperature, serverName, port_number);
+                ReplicaExchange(&potenEnergy, &REMDInfo.REMD_Temperature, serverName, port_number);
+                targetTemperature = REMDInfo.REMD_Temperature.T;
                 SaveData(RE, thisThread);
                 
                 rate += outputRate;
@@ -131,7 +133,8 @@ void REMDRun(struct ThreadInfoStr *threadInfo, int outputRate, char *serverName,
     }
     
     tmpDouble = 0.0;
-    ReplicaExchange(&tmpDouble, &tmpDouble, serverName, port_number);
+    REMDInfo.REMD_Temperature.T = 0.0;
+    ReplicaExchange(&tmpDouble, &REMDInfo.REMD_Temperature, serverName, port_number);
     
     return;
 }
@@ -143,9 +146,10 @@ void REMDRun(struct ThreadInfoStr *threadInfo, int outputRate, char *serverName,
  *T through the server of name *serverName
  and port number given by *port_number
  */
-void ReplicaExchange(double *E, double *T, char *serverName, int *port_number) {
+void ReplicaExchange(double *E, struct REMDTempStr *T, char *serverName, int *port_number) {
     long len;
-    double energy, temperature;
+    double energy;
+    struct REMDTempStr thisT;
     
     static int is_initialized = 0;
     static int sock;
@@ -162,7 +166,7 @@ void ReplicaExchange(double *E, double *T, char *serverName, int *port_number) {
      communicate with the server: write
      *- - - - - - - - - - - - - - - - - - - - - - - - -*/
     energy = *E;
-    temperature = *T;
+    thisT = *T;
     
     len = write(sock, &energy, sizeof(double));
     if (unlikely(len != sizeof(double))) {
@@ -170,8 +174,8 @@ void ReplicaExchange(double *E, double *T, char *serverName, int *port_number) {
         exit(1);
     }
     
-    len = write(sock, &temperature, sizeof(double));
-    if (unlikely(len != sizeof(double))) {
+    len = write(sock, &thisT, sizeof(struct REMDTempStr));
+    if (unlikely(len != sizeof(struct REMDTempStr))) {
         perror("send");
         exit(1);
     }
@@ -179,20 +183,20 @@ void ReplicaExchange(double *E, double *T, char *serverName, int *port_number) {
     /*- - - - - - - - - - - - - - - - - - - - - - - - - - - -*
      if energy=temperature=0 close socket
      *- - - - - - - - - - - - - - - - - - - - - - - - - - - -*/
-    if (unlikely(*E == 0 && *T == 0)) {close(sock); return;};
+    if (unlikely(*E == 0 && (*T).T == 0)) {close(sock); return;};
     
     /*- - - - - - - - - - - - - - - - - - - - - - - - - - - -*
      receive new temperature
      *- - - - - - - - - - - - - - - - - - - - - - - - - - - -*/
-    temperature = 0;
-    len = read(sock, &temperature, sizeof(double));
-    if (unlikely(len != sizeof(double))) {
+    thisT.T = 0;
+    len = read(sock, &thisT, sizeof(struct REMDTempStr));
+    if (unlikely(len != sizeof(struct REMDTempStr))) {
         perror("recv");
         printf("%s:%i\n", __FILE__, __LINE__);
         exit(1);
     }
     
-    *T = temperature;
+    *T = thisT;
     
     return;
 }

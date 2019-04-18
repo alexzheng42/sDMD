@@ -238,6 +238,8 @@ void SaveSysInfo(struct FileStr *file) {
             }
             thisConstr = thisConstr->next;
         }
+        
+        fwrite(&atom[i].dynamic->HB, sizeof(struct HBStr), 1, SysInfoFile);
     }
     
     fwrite(&HBPotential, sizeof(struct HBPotentialStr), 1, SysInfoFile);
@@ -290,7 +292,7 @@ void SaveLog(struct FileStr *file) {
     for (int i = 1; i <= numofprotein; i++) {
     fprintf(Logfile, "                    ");
         for (int n = protein[i].startAANum; n <= protein[i].endAANum; n++) {
-            fprintf(Logfile, "%5s", aminoacid[n].nameOfAA);
+            fprintf(Logfile, "%5s", aminoacid[n].nameofAA);
         }
         fprintf(Logfile, "\n");
     }
@@ -319,7 +321,7 @@ void SaveLog(struct FileStr *file) {
     
     fprintf(Logfile, "FlowType            = %-5i\n", flow.mark);
     if (!flow.mark) {
-        fprintf(Logfile, "                      No flow applied\n");
+        fprintf(Logfile, "                      No flow.\n");
     } else if (flow.mark == 1) {
         fprintf(Logfile, "ConstV(x,y,z)       = %-8.2lf%-8.2lf%-8.2lf\n", flow.constV.v[1], flow.constV.v[2], flow.constV.v[3]);
     } else if (flow.mark == 2) {
@@ -391,7 +393,8 @@ void SaveLog(struct FileStr *file) {
     fprintf(Logfile, "RandomSeed          = %i\n", seed);
     
     fprintf(Logfile, "REMDPortNum         = %i\n",    REMDInfo.REMD_PortNum);
-    fprintf(Logfile, "REMDTemperature     = %.2lf\n", REMDInfo.REMD_T);
+    fprintf(Logfile, "REMDTemperature     = %.2lf\n", REMDInfo.REMD_Temperature.T);
+    fprintf(Logfile, "REMDTempSeq         = %i\n",    REMDInfo.REMD_Temperature.num);
     fprintf(Logfile, "REMDOutputRate      = %i\n",    REMDInfo.REMD_OutputRate);
     fprintf(Logfile, "REMDServerName      = %s\n",    REMDInfo.REMD_ServerName);
     fprintf(Logfile, "REMDExtraName       = %s\n",    REMDInfo.REMD_ExtraName);
@@ -539,7 +542,7 @@ void SavePDB(struct FileStr *file) {
     
     for (int i = 1; i <= atomnum; i ++) {
         fprintf(saveFile, "ATOM  %5i  %-4s%3s %c%4i    %8.3lf%8.3lf%8.3lf%6.2lf%6.2lf           %c\n",
-                i, atom[i].property->name, atom[i].property->nameOfAA,
+                i, atom[i].property->name, atom[i].property->nameofAA,
                 atom[i].property->sequence.proteinNum + 'A' - '1' + '0',
                 atom[i].property->sequence.aminoacidNum,
                 atom[i].dynamic->coordinate[1], atom[i].dynamic->coordinate[2], atom[i].dynamic->coordinate[3],
@@ -566,7 +569,7 @@ void SaveGRO(struct FileStr *file) {
     
     for (int i = 1; i <= atomnum; i++) {
         fprintf(saveFile, "%5i%-5s%5s%5i%8.3f%8.3f%8.3f%10.4f%10.4f%10.4f\n",
-                atom[i].property->sequence.aminoacidNum, atom[i].property->nameOfAA, atom[i].property->name, i,
+                atom[i].property->sequence.aminoacidNum, atom[i].property->nameofAA, atom[i].property->name, i,
                 atom[i].dynamic->coordinate[1] / 10,
                 atom[i].dynamic->coordinate[2] / 10,
                 atom[i].dynamic->coordinate[3] / 10,
@@ -632,7 +635,7 @@ void SaveRE(struct FileStr *file) {
     }
     FILE *output = file->file;
     
-    fprintf(output, "%5.2f    %8.4lf\n", currenttime, targetTemperature);
+    fprintf(output, "%5.2f %8.4lf %2i\n", currenttime, REMDInfo.REMD_Temperature.T, REMDInfo.REMD_Temperature.num);
     fflush(output);
     return;
 }

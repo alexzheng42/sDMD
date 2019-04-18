@@ -1,16 +1,17 @@
 Continue?          new
-Time               1000
-T(reduced)         0.5
+Time               5000
+T(reduced)         0.6
 Dump_Rate          10
 CutOff_R(A)        9.0
 Force_Field        Ding
 Thermostat         Andersen
+Thermo_Freq        6.0
 sDMD_Method        1
 ThreadNo           1
 WallExist?         no
-WallType           cylinder
+WallType           no
 WallDyn            no
-Flow               no charge 1, 120 75 75 0.216 5.0
-Obstruct?          no 2, x 60.0, x 120.0
-Tunnel?            no 1, 60 120 75 75 25
-SphObst?           no 1, 40 75 75 20
+Flow               no
+Obstruct?          no
+Tunnel?            no
+SphObst?           no

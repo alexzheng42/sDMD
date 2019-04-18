@@ -53,7 +53,7 @@ void AdjustPBC(int id)
                 dim = 1;
         }
         
-        totalFrame = (sectInfo[sectNum].oldTime + sectInfo[sectNum].frameCount) / sectInfo[sectNum].outputRate;
+        totalFrame = (sectInfo[sectNum].oldTime + sectInfo[sectNum].frameCount) / sectInfo[sectNum].outputRate + 1;
         for (frameCount = sectInfo[sectNum].oldTime / sectInfo[sectNum].outputRate; frameCount < totalFrame; frameCount ++) {
             if (ReadGro(positionInput)) break;
             
@@ -122,7 +122,7 @@ int ReadGro(FILE *inputFile) { //per frame
         fgets(line, sizeof(line), inputFile);
         
         int pos = 0;
-        sscanf(line, "%s%s%s%lf%lf%lf%n", buffer, buffer, buffer,
+        sscanf(line, "%s%5c%5c%s%lf%lf%lf%n", buffer, buffer, buffer, buffer,
                &atom[i].dynamic->coordinate[1],
                &atom[i].dynamic->coordinate[2],
                &atom[i].dynamic->coordinate[3],
@@ -157,7 +157,7 @@ void SaveGROMono(FILE *saveFile) {
     
     for (int i = protein[nPP].startAtomNum; i <= protein[nPP].endAtomNum; i++) {
         fprintf(saveFile, "%5i%-5s%5s%5i%8.3f%8.3f%8.3f%10.4f%10.4f%10.4f\n",
-                atom[i].property->sequence.aminoacidNum, atom[i].property->nameOfAA, atom[i].property->name, i,
+                atom[i].property->sequence.aminoacidNum, atom[i].property->nameofAA, atom[i].property->name, i,
                 atom[i].dynamic->coordinate[1] / 10,
                 atom[i].dynamic->coordinate[2] / 10,
                 atom[i].dynamic->coordinate[3] / 10,
@@ -180,7 +180,7 @@ void SaveGRO(FILE *saveFile) {
 
 	for (int i = 1; i <= atomnum; i++) {
 		fprintf(saveFile, "%5i%-5s%5s%5i%8.3f%8.3f%8.3f%10.4f%10.4f%10.4f\n",
-                atom[i].property->sequence.aminoacidNum, atom[i].property->nameOfAA, atom[i].property->name, i,
+                atom[i].property->sequence.aminoacidNum, atom[i].property->nameofAA, atom[i].property->name, i,
                 atom[i].dynamic->coordinate[1] / 10,
                 atom[i].dynamic->coordinate[2] / 10,
                 atom[i].dynamic->coordinate[3] / 10,

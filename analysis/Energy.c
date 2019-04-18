@@ -17,6 +17,7 @@ static double CalPoEnergy(void);
 static double CalWlEnergy(struct SectionStr *sect);
 static double CalTemp(double TKE);
 static double FindPair (struct AtomStr *atom1, struct AtomStr *atom2, char *type, void *obstInfo);
+static double HBBarrier(struct AtomStr *atom1, struct AtomStr *atom2);
 static struct ConstraintStr *RightPair(int type1, int type2, int flag);
 
 
@@ -78,7 +79,7 @@ void EnergyInfo(int id) {
             exit(EXIT_FAILURE);
         }
         
-        totalFrame = (sectInfo[sectNum].oldTime + sectInfo[sectNum].frameCount) / sectInfo[sectNum].outputRate;
+        totalFrame = (sectInfo[sectNum].oldTime + sectInfo[sectNum].frameCount) / sectInfo[sectNum].outputRate + 1;
         for (step = sectInfo[sectNum].oldTime / sectInfo[sectNum].outputRate; step < totalFrame; step ++) {
             if (ReadGro(TrjInputFile) || ReadConnectionMap(CntInputFile)) break;
             
@@ -139,9 +140,9 @@ double CalPoEnergy(void) { //per frame
     
 
     for (int i = 1; i <= atomnum; i ++) {
-        atom[i].property->type = AtomTypeChange(atom[i].property->type, 0);
+        atom[i].property->typeofAtom = AtomTypeChange(atom[i].property->typeofAtom, 0);
         if (CheckHBConnection(i)) {
-            atom[i].property->type = AtomTypeChange(atom[i].property->type, 1);
+            atom[i].property->typeofAtom = AtomTypeChange(atom[i].property->typeofAtom, 1);
         }
     }
     
@@ -210,9 +211,9 @@ double CalWlEnergy(struct SectionStr *sect) { //per frame
     double TWE = 0;
     
     for (int i = 1; i <= atomnum; i ++) {
-        atom[i].property->type = AtomTypeChange(atom[i].property->type, 0);
+        atom[i].property->typeofAtom = AtomTypeChange(atom[i].property->typeofAtom, 0);
         if (CheckHBConnection(i)) {
-            atom[i].property->type = AtomTypeChange(atom[i].property->type, 1);
+            atom[i].property->typeofAtom = AtomTypeChange(atom[i].property->typeofAtom, 1);
         }
     }
     
@@ -305,12 +306,8 @@ double FindPair (struct AtomStr *atom1, struct AtomStr *atom2, char *type, void 
         tolerance = direction * floatzero;
         
         if (connectionMap[atom_i][atom_j] & HBConnect) {
+            PE -= HBBarrier(atom1, atom2);
             type1 = HBModel(atom1, atom2);
-            if (type1 == 1) {
-                PE -= HBPotential.BB;
-            } else {
-                PE -= HBPotential.BS;
-            }
             
             thisConstr = &potentialPairHB[type1][0][0];
         } else if (connectionMap[atom_i][atom_j] & constraintConnect) {
@@ -323,19 +320,19 @@ double FindPair (struct AtomStr *atom1, struct AtomStr *atom2, char *type, void 
             
             if ((HBPartner = CheckHBConnection(atom_i)) > 0 && atom[HBPartner].dynamic->HB.neighbor == atom_j) {
                 typeNum = HBModel(atom1, &atom[HBPartner]);
-                type1 = AtomTypeChange(atom2->property->type, 0);
-                type2 = AtomTypeChange(atom1->property->type, 0);
+                type1 = AtomTypeChange(atom2->property->typeofAtom, 0);
+                type2 = AtomTypeChange(atom1->property->typeofAtom, 0);
             } else {
                 HBPartner = CheckHBConnection(atom_j);
                 typeNum = HBModel(atom2, &atom[HBPartner]);
-                type1 = AtomTypeChange(atom1->property->type, 0);
-                type2 = AtomTypeChange(atom2->property->type, 0);
+                type1 = AtomTypeChange(atom1->property->typeofAtom, 0);
+                type2 = AtomTypeChange(atom2->property->typeofAtom, 0);
             }
             
             thisConstr = &potentialPairHB[typeNum][type1][type2];
         } else {
-            type1 = atom1->property->type;
-            type2 = atom2->property->type;
+            type1 = atom1->property->typeofAtom;
+            type2 = atom2->property->typeofAtom;
             thisConstr = RightPair(type1, type2, 0);
         }
         
@@ -355,49 +352,106 @@ double FindPair (struct AtomStr *atom1, struct AtomStr *atom2, char *type, void 
 int HBModel(struct AtomStr *atom1, struct AtomStr *atom2) {
     struct AtomStr *switcher;
     
-    if (atom1->dynamic->HB.role == 'A') { //atom1 -> donator, atom2 -> acceptor
+    if (atom1->dynamic->HB.role == 'A' ||
+        atom1->dynamic->HB.role == 'S') { //atom1 -> donator, atom2 -> acceptor
         switcher = atom1;
         atom1 = atom2;
         atom2 = switcher;
     }
     
-    if (AtomTypeChange(atom1->property->type, 0) == 2 /*HB*/ &&
-        AtomTypeChange(atom2->property->type, 0) == 26 /*OZB*/) {
+    int atom1_OrigType = AtomTypeChange(atom1->property->typeofAtom, 0);
+    int atom2_OrigType = AtomTypeChange(atom2->property->typeofAtom, 0);
+    
+    if (atom1_OrigType == 2 /*HB*/ &&
+        atom2_OrigType == 26 /*OZB*/) {
         return 1;
-    } else if (AtomTypeChange(atom1->property->type, 0) == 2) {
-        if (strcmp(atom2->property->nameOfAA, "ASP") == 0 ||
-            strcmp(atom2->property->nameOfAA, "GLU") == 0 ||
-            strcmp(atom2->property->nameOfAA, "GLN") == 0 ||
-            strcmp(atom2->property->nameOfAA, "ASN") == 0) {
-            return 2;
-        } else if (strcmp(atom2->property->nameOfAA, "HIS") == 0 ||
-                   strcmp(atom2->property->nameOfAA, "TRP") == 0) {
-            return 4;
-        } else if (AtomTypeChange(atom2->property->type, 0) == 31) {
-            return 10;
-        } else {
-            return 3;
+    } else if (atom1_OrigType == 2) { //backbone H, HB
+        switch (atom2->property->typeofAA) {
+            case 4:  //ASP
+            case 7:  //GLU
+                return 2;
+                break;
+                
+            case 16: //SER
+            case 17: //THR
+            case 19: //TYR
+                return 3;
+                
+            case 9:  //HIS
+                return 4;
+                
+            case 5: //CYS
+                return 10;
+                
+            case 3: //ASN
+            case 6: //GLN
+                //no HB between ASN/GLN and backbone H
+                return -1;
+                
+            default:
+                break;
         }
-    } else if (AtomTypeChange(atom2->property->type, 0) == 26) {
+    } else if (atom2_OrigType == 26) { //backbone O, OZB
         return 5;
-    } else if (AtomTypeChange(atom1->property->type, 0) == 31 &&
-               AtomTypeChange(atom2->property->type, 0) == 31) {
+    } else if (atom1_OrigType == 31 &&
+               atom2_OrigType == 31) { //SG
         return 9;
-    } else {
-        if (strcmp(atom2->property->nameOfAA, "ASP") == 0 ||
-            strcmp(atom2->property->nameOfAA, "GLU") == 0 ||
-            strcmp(atom2->property->nameOfAA, "GLN") == 0 ||
-            strcmp(atom2->property->nameOfAA, "ASN") == 0) {
-            return 6;
-        } else if (strcmp(atom2->property->nameOfAA, "HIS") == 0 ||
-                   strcmp(atom2->property->nameOfAA, "TRP") == 0) {
-            return 8;
-        } else {
-            return 7;
+    } else if (atom1_OrigType == 1) { //sidechain H
+        switch (atom2->property->typeofAA) {
+            case 4:  //ASP
+            case 7:  //GLU
+                return 6;
+                break;
+                
+            case 16: //SER
+            case 17: //THR
+            case 19: //TYR
+                return 7;
+                
+            case 9:  //HIS
+                return 8;
+                
+            case 3:  //ASN
+            case 6:  //GLN
+                return 11;
+                
+            default:
+                break;
         }
     }
     
+    printf("!!ERROR!!: cannot find the matched HB pair for atom %2i(%2i%2s) and atom %2i(%2i%2s)!\n",
+           atom1->property->num, atom1->property->sequence.aminoacidNum, atom1->property->name,
+           atom2->property->num, atom2->property->sequence.aminoacidNum, atom2->property->name);
+    printf("           %s:%i\n", __FILE__, __LINE__);
+    exit(EXIT_FAILURE);
+    
     return -1;
+}
+
+
+double HBBarrier(struct AtomStr *atom1, struct AtomStr *atom2) {
+    struct AtomStr *switcher;
+    
+    if (atom1->dynamic->HB.role == 'A' ||
+        atom1->dynamic->HB.role == 'S') { //atom1 -> donator, atom2 -> acceptor
+        switcher = atom1;
+        atom1 = atom2;
+        atom2 = switcher;
+    }
+    
+    int atom1_OrigType = AtomTypeChange(atom1->property->typeofAtom, 0);
+    int atom2_OrigType = AtomTypeChange(atom2->property->typeofAtom, 0);
+    
+    if (atom1_OrigType == 2 /*HB*/ &&
+        atom2_OrigType == 26 /*OZB*/) {
+        return HBPotential.BB_v;
+    } else if (atom1_OrigType != 2 &&
+               atom2_OrigType != 26) {
+        return HBPotential.SS_v;
+    } else {
+        return HBPotential.BS_v;
+    }
 }
 
 

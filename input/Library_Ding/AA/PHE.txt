@@ -4,7 +4,7 @@ RESIDUE PHE
    ATOM C      CRB    12.0  N N
    ATOM O      OZB    16.0  N N
    ATOM CB     CA2    12.0  N N     
-   ATOM CG     CA     12.0  N N 
+   ATOM CG     CRNP   12.0  N N 
    ATOM CD1    CM1    13.0  N N
    ATOM CD2    CM1    13.0  N N
    ATOM CE1    CM1    13.0  N N

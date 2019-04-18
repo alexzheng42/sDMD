@@ -347,6 +347,7 @@ void VisualSGThreadRun(void) {
 #endif
             threadRenewList[0] = 1;
             threadRenewList[2] = 0;
+            threadRenewList[3] = 0;
             
             AssignThread(threadRenewList, thisThread);
             Predict(threadRenewList, thisThread);
@@ -377,10 +378,10 @@ void VisualSGThreadRun(void) {
             frame++;
             
             CommitEvent(thisThread->raw,
-                        *newTarget, (threadRenewList[2] > 0 ? *newPartner : NULL),
-                        oldTarget, (threadRenewList[2] > 0 ?  oldPartner : NULL),
+                        *newTarget, (threadRenewList[0] == 2 ? *newPartner : NULL),
+                        oldTarget, (threadRenewList[0] == 2 ?  oldPartner : NULL),
                         thisThread->listPtr[oldTarget->dynamic->HB.neighbor],
-                        (threadRenewList[2] > 0 ? thisThread->listPtr[oldPartner->dynamic->HB.neighbor] : NULL));
+                        (threadRenewList[0] == 2 ? thisThread->listPtr[oldPartner->dynamic->HB.neighbor] : NULL), thisThread, threadRenewList);
             
             UpdateCBT(threadRenewList);
             processratio = (currenttime - oldcurrenttime) / (timestep - oldcurrenttime) * 100;

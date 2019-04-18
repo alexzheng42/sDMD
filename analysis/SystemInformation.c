@@ -89,6 +89,8 @@ void SystemInformationInput(int id) {
             
             nextConstr = newConstr->next;
         }
+        
+        fread(&atom[i].dynamic->HB, sizeof(struct HBStr), 1, SysInfoFile);
     }
     
     fread(&HBPotential, sizeof(struct HBPotentialStr), 1, SysInfoFile);
@@ -154,9 +156,11 @@ void SystemInformationInput(int id) {
 
 
 int ReadLog(void) {
-    char buffer[1024], sign[4];
+    int bufferSize = 1024 * 5;
+    char *buffer, sign[4];
     FILE *inputFile;
     
+    buffer = (char *)calloc(bufferSize, sizeof(char));
     for (int sectNum = 0; sectNum < fileList.count; sectNum ++) {
         sprintf(buffer, "%s%s", path, fileList.list[sectNum + 1]);
         inputFile = fopen(buffer, "r");
@@ -167,14 +171,14 @@ int ReadLog(void) {
         
         struct SectionStr *sect = &sectInfo[sectNum];
         
-        while (fgets(buffer, sizeof(buffer), inputFile) != NULL) {
+        while (fgets(buffer, bufferSize, inputFile) != NULL) {
             if (buffer[0] == '#') {
-                fgets(buffer, sizeof(buffer), inputFile);   //System
-                fgets(buffer, sizeof(buffer), inputFile);   //Protein Num
-                fgets(buffer, sizeof(buffer), inputFile);   //Protein Seq
+                fgets(buffer, bufferSize, inputFile);   //System
+                fgets(buffer, bufferSize, inputFile);   //Protein Num
+                fgets(buffer, bufferSize, inputFile);   //Protein Seq
                 
                 for (int i = 0; i < numofprotein; i ++) {
-                    fgets(buffer, sizeof(buffer), inputFile);
+                    fgets(buffer, bufferSize, inputFile);
                 }
                 
                 fscanf(inputFile, "%s%s%lf\n", buffer, sign, &sect->oldTime);
@@ -186,15 +190,15 @@ int ReadLog(void) {
                 if (sectNum == 0) {
                     fscanf(inputFile, "%s%s%lf\n", buffer, sign, &cutoffr); //cut off radius cannot change between sections
                 } else {
-                    fgets(buffer, sizeof(buffer), inputFile);
+                    fgets(buffer, bufferSize, inputFile);
                 }
                 
                 fscanf(inputFile, "%s%s%s\n",  buffer, sign, sect->methodType);
                 
-                fgets(buffer, sizeof(buffer), inputFile);   //ThermostatType
-                fgets(buffer, sizeof(buffer), inputFile);   //ThermostatParameter
-                fgets(buffer, sizeof(buffer), inputFile);   //DMDMethod
-                fgets(buffer, sizeof(buffer), inputFile);   //ThreadNo
+                fgets(buffer, bufferSize, inputFile);   //ThermostatType
+                fgets(buffer, bufferSize, inputFile);   //ThermostatParameter
+                fgets(buffer, bufferSize, inputFile);   //DMDMethod
+                fgets(buffer, bufferSize, inputFile);   //ThreadNo
                 
                 fscanf(inputFile, "%s%s%s\n",  buffer, sign, sect->wallObj.wallExist);
                 fscanf(inputFile, "%s%s%s\n",  buffer, sign, sect->wallObj.wallType);
@@ -213,17 +217,17 @@ int ReadLog(void) {
                                &boxOrigDim[1],
                                &boxOrigDim[2],
                                &boxOrigDim[3]);
-                        fgets(buffer, sizeof(buffer), inputFile);
+                        fgets(buffer, bufferSize, inputFile);
                     } else {
-                        fgets(buffer, sizeof(buffer), inputFile);
+                        fgets(buffer, bufferSize, inputFile);
                         fscanf(inputFile, "%s%s%lf%lf%lf\n", buffer, sign,
                                &boxOrigDim[1],
                                &boxOrigDim[2],
                                &boxOrigDim[3]);
                     }
                 } else {
-                    fgets(buffer, sizeof(buffer), inputFile);
-                    fgets(buffer, sizeof(buffer), inputFile);
+                    fgets(buffer, bufferSize, inputFile);
+                    fgets(buffer, bufferSize, inputFile);
                 }
                 
                 fscanf(inputFile, "%s%s%i\n",  buffer, sign, &sect->flow.mark);
@@ -255,9 +259,9 @@ int ReadLog(void) {
                                &sect->flow.charge.gap[i],
                                sign);
                     }
-                    fgets(buffer, sizeof(buffer), inputFile);   //the last \n
+                    fgets(buffer, bufferSize, inputFile);   //the last \n
                 } else {
-                    fgets(buffer, sizeof(buffer), inputFile);
+                    fgets(buffer, bufferSize, inputFile);
                 }
                 
                 fscanf(inputFile, "%s%s%i\n", buffer, sign, &sect->obstObj.num);
@@ -277,9 +281,9 @@ int ReadLog(void) {
                         
                         ReadObst(&sect->obstObj.obst[i], "Obst");
                     }
-                    fgets(buffer, sizeof(buffer), inputFile);   //the last \n
+                    fgets(buffer, bufferSize, inputFile);   //the last \n
                 } else {
-                    fgets(buffer, sizeof(buffer), inputFile);
+                    fgets(buffer, bufferSize, inputFile);
                 }
                 
                 fscanf(inputFile, "%s%s%i\n", buffer, sign, &sect->tunlObj.mark);
@@ -291,7 +295,7 @@ int ReadLog(void) {
                     
                     ReadObst(&sect->tunlObj.tunnel, "Tunl");                    
                 } else {
-                    fgets(buffer, sizeof(buffer), inputFile);
+                    fgets(buffer, bufferSize, inputFile);
                 }
             }
         }
@@ -326,6 +330,7 @@ int ReadLog(void) {
         }
     }
     
+    free(buffer);
     return 1;
 }
 
@@ -341,6 +346,7 @@ void ReadObst(struct AtomStr *obst, char *type) {
     if (inputFile == NULL) {
         printf("!!ERROR!!: cannot find the obstruction info file at %s!\n", directory);
         printf("           you may need to use flag -obs to provide the path to the obstruction info file!\n");
+        printf("           %s:%i\n", __FILE__, __LINE__);
         exit(EXIT_FAILURE);
     }
     
@@ -359,8 +365,8 @@ void ReadObst(struct AtomStr *obst, char *type) {
            obst->property->extraProperty[0],
            obst->property->extraProperty[1]);
     
-    obst->property->type = AtomModel(rName);
-    sprintf(obst->property->nameOfAA, "%s", type);
+    obst->property->typeofAtom = AtomModel(rName);
+    sprintf(obst->property->nameofAA, "%s", type);
     
     obst->dynamic->event.partner      = INVALID;
     obst->dynamic->event.subEventType = Invalid;

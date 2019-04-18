@@ -3,7 +3,7 @@ RESIDUE CYS
    ATOM CA     CA1    12.0  N N
    ATOM C      CRB    12.0  N N
    ATOM O      OZB    16.0  N N
-   ATOM CB     CA2P   12.0  N N        
+   ATOM CB     CA2    12.0  N N        
    ATOM SG     SG     32.0  N N
    ATOM H      HB     12.0  N N
    ATOM HG1    HS     12.0  N N

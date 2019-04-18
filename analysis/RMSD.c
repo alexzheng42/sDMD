@@ -96,7 +96,7 @@ void RMSDInfo(int id) {
     }
     
     for (int sectNum = 0; sectNum < fileList.count; sectNum ++) {
-        totalFrame = (sectInfo[sectNum].frameCount + sectInfo[sectNum].oldTime) / sectInfo[sectNum].outputRate;
+        totalFrame = (sectInfo[sectNum].frameCount + sectInfo[sectNum].oldTime) / sectInfo[sectNum].outputRate + 1;
         for (step = sectInfo[sectNum].oldTime / sectInfo[sectNum].outputRate; step < totalFrame; step ++) {
             if (ReadGro(inputTrjFile)) break;
             
@@ -133,6 +133,12 @@ void PESurfaceInfo(int id) {
     
     printf("Analyzing potential energy surface... ");
     fflush(stdout);
+    
+    if (RMSDFile.count == 1) {
+        printf("!!ERROR!!: calculate energy surface would need TWO reference structures. please provide the second one! ");
+        printf("%s:%i \n", __FILE__, __LINE__);
+        exit(EXIT_FAILURE);
+    }
     
     InitializeVariables();
     
@@ -174,7 +180,7 @@ void PESurfaceInfo(int id) {
             exit(EXIT_FAILURE);
         }
         
-        totalFrame = (sectInfo[sectNum].frameCount + sectInfo[sectNum].oldTime) / sectInfo[sectNum].outputRate;
+        totalFrame = (sectInfo[sectNum].frameCount + sectInfo[sectNum].oldTime) / sectInfo[sectNum].outputRate + 1;
         for (step = sectInfo[sectNum].oldTime / sectInfo[sectNum].outputRate; step < totalFrame; step ++) {
             if (ReadGro(inputTrjFile) || ReadConnectionMap(inputCntFile) || ReadEnergyFile(inputPotFile, &energy)) break;
             
@@ -230,6 +236,157 @@ void PESurfaceInfo(int id) {
     return;
 }
 
+void PESurfaceInfoPerT(void) {
+    int num;
+    int place[2];
+    long step = 0, totalFrame;
+    double thisRMSD[2], thisPE;
+    double gap = RMSDRG / RMSDGRID;
+    char directory[512], buffer[512];
+    struct SectionStr *sect;
+    struct PESurStr ***gridPerT;
+    FILE *inputTrjFile, *inputCntFile, *inputPotFile, *inputREMDTFile;
+    FILE *outputEnSurFile;
+    
+    printf("Analyzing potential energy surface per temperature... ");
+    fflush(stdout);
+    
+    if (RMSDFile.count == 1) {
+        printf("!!ERROR!!: calculate energy surface would need TWO reference structures. please provide the second one! ");
+        printf("%s:%i \n", __FILE__, __LINE__);
+        exit(EXIT_FAILURE);
+    }
+    
+    gridPerT = (struct PESurStr ***)calloc(RE.numReplica, sizeof(struct PESurStr **));
+    for (int m = 0; m < RE.numReplica; m ++) {
+        gridPerT[m] = (struct PESurStr **)calloc(RMSDGRID, sizeof(struct PESurStr *));
+        gridPerT[m][0] = (struct PESurStr *)calloc(RMSDGRID * RMSDGRID, sizeof(struct PESurStr));
+        for (int n = 1; n < RMSDGRID; n ++) gridPerT[m][n] = gridPerT[m][0] + n * RMSDGRID;
+        for (int i = 0; i < RMSDGRID; i ++) {
+            for (int j = 0; j < RMSDGRID; j ++) {
+                gridPerT[m][i][j].count = 0;
+                gridPerT[m][i][j].PE = 0;
+            }
+        }
+    }
+    
+    for (int id = 0; id < RE.numReplica; id ++) {
+        
+        InitializeVariables();
+        
+        //there would be multiple reference structures
+        for (int i = 0; i < RMSDFile.count; i ++) {
+            ReadRef(RMSDFile.list[i], DIM, nRow, refCoor[i]);
+        }
+        
+        //start to read the coordinates from each frame and calculate RMSD
+        sprintf(directory, "%s%s", path, files[outTrj][id].name);
+        inputTrjFile = fopen(directory, "r");
+        if (inputTrjFile == NULL) {
+            printf("!!ERROR!!: cannot find file %s in directory %s. make sure the input path is correct and the file does exist! %s:%i\n", files[outTrj][id].name, path, __FILE__, __LINE__);
+            printf("           You may need to execute -rPBC first to generate the required file!\n");
+            exit(EXIT_FAILURE);
+        }
+        
+        sprintf(directory, "%s%s", path, files[outEne][id].name);
+        inputPotFile = fopen(directory, "r");
+        if (inputPotFile == NULL) {
+            printf("!!ERROR!!: cannot find file %s in directory %s. make sure the input path is correct and the file does exist! %s:%i\n", files[outEne][id].name, path, __FILE__, __LINE__);
+            printf("           You may need to execute -En first to generate the required file!\n");
+            exit(EXIT_FAILURE);
+        }
+        
+        sprintf(directory, "%s%s", path, files[inREMDTemp][id].name);
+        inputREMDTFile = fopen(directory, "r");
+        if (inputREMDTFile == NULL) {
+            printf("!!ERROR!!: cannot find file %s in directory %s. make sure the input path is correct and the file does exist! %s:%i\n", files[inREMDTemp][id].name, path, __FILE__, __LINE__);
+            exit(EXIT_FAILURE);
+        }
+        
+        for (int sectNum = 0; sectNum < fileList.count; sectNum ++) {
+            
+            memset(buffer, '\0', sizeof(buffer));
+            FindTargetFile(files[inCnt][id].name, fileList.list[sectNum + 1], buffer);
+            
+            sprintf(directory, "%s%s", path, buffer);
+            inputCntFile = fopen(directory, "r");
+            if (inputCntFile == NULL) {
+                printf("!!ERROR!!: cannot find file %s in directory %s. make sure the input path is correct and the file does exist! %s:%i\n", buffer, path, __FILE__, __LINE__);
+                printf("           You may need to specify the connection information file by using -cnt flag!\n");
+                exit(EXIT_FAILURE);
+            }
+            
+            totalFrame = (sectInfo[sectNum].frameCount + sectInfo[sectNum].oldTime) / sectInfo[sectNum].outputRate + 1;
+            for (step = sectInfo[sectNum].oldTime / sectInfo[sectNum].outputRate; step < totalFrame; step ++) {
+                if (ReadGro(inputTrjFile) || ReadConnectionMap(inputCntFile) || ReadEnergyFile(inputPotFile, &energy) ||
+                    (num = ReadREMDTempFile(inputREMDTFile) - 1) < 0)
+                    break;
+                
+                thisPE = energy.PE;
+                PrintProcess(step);
+                sect = &sectInfo[sectNum];
+                
+                thisRMSD[0] = CalRMSD(DIM, nRow, refCoor[0], curCoor) / 10;
+                thisRMSD[1] = CalRMSD(DIM, nRow, refCoor[1], curCoor) / 10;
+                
+                for (int n = 0; n < RMSDGRID; n ++) {
+                    if ((thisRMSD[0] > n * gap) &&
+                        (thisRMSD[0] <= (n + 1) * gap)) {
+                        place[0] = n;
+                        break;
+                    }
+                }
+                
+                for (int n = 0; n < RMSDGRID; n ++) {
+                    if ((thisRMSD[1] > n * gap) &&
+                        (thisRMSD[1] <= (n + 1) * gap)) {
+                        place[1] = n;
+                        break;
+                    }
+                }
+                
+                gridPerT[num][place[0]][place[1]].count ++;
+                gridPerT[num][place[0]][place[1]].PE += thisPE;
+            }
+            
+            fclose(inputCntFile);
+        }
+        
+        fclose(inputTrjFile);
+        fclose(inputPotFile);
+        FreeVar();
+    }
+    
+    for (int m = 0; m < RE.numReplica; m ++) {
+        sprintf(directory, "%s%s", path, files[outPotMap_T][m].name);
+        outputEnSurFile = fopen(directory, "w");
+        
+        for (int i = 0; i < RMSDGRID; i ++) {
+            for (int n = 0; n < RMSDGRID; n ++) {
+                if (gridPerT[m][i][n].count)
+                    gridPerT[m][i][n].PE /= gridPerT[m][i][n].count;
+                fprintf(outputEnSurFile, "%15.4lf %15.4lf %15.4lf %15i\n",
+                        (i + 0.5) * gap,
+                        (n + 0.5) * gap,
+                        gridPerT[m][i][n].PE,
+                        gridPerT[m][i][n].count);
+            }
+        }
+        
+        fclose(outputEnSurFile);
+    }
+    
+    for (int i = 0; i < RE.numReplica; i ++) {
+        free(gridPerT[i][0]);
+        free(gridPerT[i]);
+    }
+    free(gridPerT);
+    
+    printf("\bDone\n");
+    fflush(stdout);
+    return;
+}
+
 void REMDPESurfaceCombine(void) {
     int thisCount;
     double thisPE;
@@ -278,7 +435,7 @@ void REMDPESurfaceCombine(void) {
             if (EnSurGrid[i][j].count) {
                 EnSurGrid[i][j].PE /= EnSurGrid[i][j].count;
             }
-            fprintf(outputFile, "%15.4lf %15.4lf %15.4lf %15i\n", RMSDRG - (i + 0.5) / RMSDGRID, RMSDRG - (j + 0.5) / RMSDGRID, EnSurGrid[i][j].PE, EnSurGrid[i][j].count);
+            fprintf(outputFile, "%15.4lf %15.4lf %15.4lf %15i\n", /*RMSDRG - */(i + 0.5) / RMSDGRID, /*RMSDRG - */(j + 0.5) / RMSDGRID, EnSurGrid[i][j].PE, EnSurGrid[i][j].count);
             //fprintf(outputFile, "%15.4lf ", EnSurGrid[i][j].PE); //matrix form
         }
         //fprintf(outputFile, "\n");
@@ -467,7 +624,7 @@ void SaveMatrix(double **matrix, char *fileName) {
     for (int i = 1 + offSet; i <= thisAtomNum + offSet; i ++) {
         if (!CheckBackbone(i)) continue; //only consider the backbone atoms
         fprintf(saveFile, "%5i%-5s%5s%5i%8.3f%8.3f%8.3f\n",
-                atom[i].property->sequence.aminoacidNum, atom[i].property->nameOfAA, atom[i].property->name, m + 1,
+                atom[i].property->sequence.aminoacidNum, atom[i].property->nameofAA, atom[i].property->name, m + 1,
                 matrix[m][0] / 10, matrix[m][1] / 10, matrix[m][2] / 10);
         m ++;
     }
@@ -730,7 +887,7 @@ void Jacobi(double **a, int n, double d[], double **v) {
 }
 
 
-int ReadRMSDFile(FILE *RMSDInputFile, struct RMSDReadStr *thisRMSD, int tCol) {
+int ReadRMSDFile(FILE *RMSDInputFile, struct RMSDReadStr *thisRMSD) {
     char buffer[1024];
     int cur = 0, pos = 0;
     
@@ -746,12 +903,10 @@ repeat:
            &thisRMSD->step,
            &pos);
     
-    for (int i = 0; i < tCol; i ++) {
+    cur += pos;
+    int count = 0;
+    while (sscanf(buffer + cur, "%lf%n", &thisRMSD->vRMSD[count ++], &pos) != EOF && count < 2) {
         cur += pos;
-        if (sscanf(buffer + cur, "%lf%n", &thisRMSD->vRMSD, &pos) == EOF) {
-            printf("!!ERROR!!: invalid input of RMSD data. you may want to calcualte RMSD for each reference structure first! %s:%i\n", __FILE__, __LINE__);
-            exit(EXIT_FAILURE);
-        }
     }
     
     return 0;

@@ -3,13 +3,13 @@ RESIDUE TRP
    ATOM CA     CA1    12.0  N N
    ATOM C      CRB    12.0  N N
    ATOM O      OZB    16.0  N N
-   ATOM CB     CA3    12.0  N N   
-   ATOM CG     CA     12.0  N N
+   ATOM CB     CA2    12.0  N N   
+   ATOM CG     CRNP   12.0  N N
    ATOM CD1    CM1P   13.0  N N
-   ATOM NE1    NR     14.0  N N
-   ATOM CE2    CA     12.0  N N
+   ATOM NE1    NZ     14.0  N N
+   ATOM CE2    CRNP   12.0  N N
    ATOM CE3    CM1P   13.0  N N
-   ATOM CD2    CA     12.0  N N
+   ATOM CD2    CRNP   12.0  N N
    ATOM CZ2    CM1P   13.0  N N
    ATOM CZ3    CM1P   13.0  N N
    ATOM CH2    CM1P   13.0  N N

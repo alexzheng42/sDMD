@@ -4,10 +4,10 @@ RESIDUE HIS
    ATOM C      CRB    12.0  N N
    ATOM O      OZB    16.0  N N
    ATOM CB     CA2    12.0  N N       
-   ATOM CG     CA     12.0  N N
-   ATOM ND1    NR     14.0  N N
+   ATOM CG     CRNP   12.0  N N
+   ATOM ND1    NZ     14.0  N N
    ATOM CD2    CM1    13.0  N N
-   ATOM CE1    CM1    13.0  N N
+   ATOM CE1    CM1P   13.0  N N
    ATOM NE2    NR     14.0  + N
    ATOM H      HB     12.0  N N
    ATOM HD1    HN     12.0  N N

@@ -6,7 +6,7 @@ RESIDUE GLN
    ATOM CB     CA2    12.0  N N
    ATOM CG     CA2    12.0  N N
    ATOM CD     CRN    12.0  N N
-   ATOM OE1    OC     16.0  N N
+   ATOM OE1    OZ     16.0  N N
    ATOM NE2    NZNQ   14.0  N N
    ATOM H      HB     12.0  N N
    ATOM HE21   HN     12.0  N N

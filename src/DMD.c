@@ -80,7 +80,7 @@ int nthCheck, nthNode;
 //-----------------
 //potential pair
 struct ConstraintStr potentialPairCollision[NATOMTYPE + 1][NATOMTYPE + 1];
-struct ConstraintStr potentialPairHB[11][NATOMTYPE + 1][NATOMTYPE + 1];
+struct ConstraintStr potentialPairHB[12][NATOMTYPE + 1][NATOMTYPE + 1];
 struct HBPotentialStr HBPotential;
 
 
@@ -123,12 +123,13 @@ pthread_cond_t slvThrQ = PTHREAD_COND_INITIALIZER;
 
 //-----------------
 //REMD
-struct REMDStr REMDInfo = {.flag            = 0,
-                           .REMD_PortNum    = -1,
-                           .REMD_T          = -1,
-                           .REMD_OutputRate = 1000,
-                           .REMD_ServerName = "",
-                           .REMD_ExtraName  = ""};
+struct REMDStr REMDInfo = {.flag                    = 0,
+                           .REMD_PortNum            = -1,
+                           .REMD_Temperature.T      = -1,
+                           .REMD_Temperature.num    = -1,
+                           .REMD_OutputRate         = 1000,
+                           .REMD_ServerName         = "",
+                           .REMD_ExtraName          = ""};
 
 
 //-----------------
@@ -198,19 +199,20 @@ int main(int argc, const char * argv[]) {
     oldTime = currenttime;
     printf("\n");
     printf("\n");
-    printf("--------------------------------\n");
-    printf("| Simulation configurations:   |\n");
-    printf("| currenttime=%16.2f |\n", currenttime);
-    printf("| timestep=%19.2f |\n", timestep); //timestep -> total time step to run
-    printf("| targetT=%20.2f |\n", targetTemperature);
-    printf("| OutputRate=%17.2f |\n", outputrate);
-    printf("| CutOffRadius=%15.2f |\n", cutoffr);
-    printf("| Method=%21s |\n", Methodtype);
-    printf("| Thermostat=%17s |\n", thermostatType);
-    printf("| WallExist=%18s |\n", wallExist);
-    printf("| WallType=%19s |\n", wallType);
-    printf("| boxsize=%6.1f%7.1f%7.1f |\n", boxDimension[1], boxDimension[2], boxDimension[3]);
-    printf("--------------------------------\n");
+    printf("----------------------------------------\n");
+    printf("| Simulation configurations:           |\n");
+    printf("| currenttime     %20.2f |\n", currenttime);
+    printf("| timestep        %20.2f |\n", timestep); //timestep -> total time step to run
+    printf("| targetT         %20.2f |\n", targetTemperature);
+    printf("| OutputRate      %20.2f |\n", outputrate);
+    printf("| CutOffRadius    %20.2f |\n", cutoffr);
+    printf("| Method          %20s |\n", Methodtype);
+    printf("| Thermostat      %20s |\n", thermostatType);
+	printf("| ThermostatFreq  %20.2f |\n", thermoF);
+    printf("| WallExist       %20s |\n", wallExist);
+    printf("| WallType        %20s |\n", wallType);
+    printf("| boxsize         %6.1f %6.1f %6.1f |\n", boxDimension[1], boxDimension[2], boxDimension[3]);
+    printf("----------------------------------------\n");
     printf("Please check the Log file for detail information!\n");
     printf("\n");
     
@@ -247,16 +249,16 @@ int main(int argc, const char * argv[]) {
                        pbcandcrosseventsum +
                        walleventsum;
     
-    printf("ReCalculate times   =%li\n\n", countReCal);
-    printf("collision times     =%li\n", collisioneventsum);
-    printf("bond times          =%li\n", bondeventsum);
-    printf("HB times            =%li\n", HBeventsum);
-    printf("HB Neighbor times   =%li\n", HBNeighboreventsum);
-    printf("thermostat times    =%li\n", thermostateventsum);
-    printf("PBC&CC times        =%li\n", pbcandcrosseventsum);
-    printf("Wall times          =%li\n", walleventsum);
-    printf("percentage of thermostat=%.4f%%\n\n", (float) thermostateventsum / newtotaleventsum * 100);
-    printf("total warning       =%li\n", warningsum);
+    printf("ReCalculate times        = %li\n\n", countReCal);
+    printf("collision times          = %li\n", collisioneventsum);
+    printf("bond times               = %li\n", bondeventsum);
+    printf("HB times                 = %li\n", HBeventsum);
+    printf("HB Neighbor times        = %li\n", HBNeighboreventsum);
+    printf("thermostat times         = %li\n", thermostateventsum);
+    printf("PBC&CC times             = %li\n", pbcandcrosseventsum);
+    printf("Wall times               = %li\n", walleventsum);
+    printf("percentage of thermostat = %.4f%%\n\n", (float) thermostateventsum / newtotaleventsum * 100);
+    printf("total warning            = %li\n", warningsum);
     
     et = clock();    //record the ending time
     hours = floor((double) (et - st) / CLOCKS_PER_SEC / 3600);

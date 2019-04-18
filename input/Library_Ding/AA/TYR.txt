@@ -4,13 +4,13 @@ RESIDUE TYR
    ATOM C      CRB    12.0  N N
    ATOM O      OZB    16.0  N N
    ATOM CB     CA2    12.0  N N     
-   ATOM CG     CA     12.0  N N 
+   ATOM CG     CRNP   12.0  N N 
    ATOM CD1    CM1    13.0  N N
    ATOM CD2    CM1    13.0  N N
    ATOM CE1    CM1    13.0  N N
    ATOM CE2    CM1    13.0  N N
-   ATOM CZ     CM1    12.0  N N
-   ATOM OH     OC     16.0  N N
+   ATOM CZ     CR     12.0  N N
+   ATOM OH     OZH    16.0  N N
    ATOM H      HB     12.0  N N
    ATOM HH     HO     12.0  N N
    BOND OH     HH     1.000 0.020

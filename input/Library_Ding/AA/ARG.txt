@@ -7,7 +7,7 @@ RESIDUE ARG
    ATOM CG     CA2    12.0  N N
    ATOM CD     CA2P   12.0  N N
    ATOM NE     NZ     14.0  N N
-   ATOM CZ     CA1P   12.0  N N
+   ATOM CZ     CRNP   12.0  N N
    ATOM NH1    NCR    14.0  N N
    ATOM NH2    NCR    14.0  + N
    ATOM H      HB     12.0  N N

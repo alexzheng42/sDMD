@@ -11,7 +11,6 @@ OBJ = CBT.o \
       TimePrediction.o \
       ToolFunctions.o \
       List.o \
-      MSThread.o \
       SGThread.o \
       REMD.o
 

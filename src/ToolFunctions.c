@@ -56,16 +56,16 @@ int FindPair (struct AtomStr *atom1, struct AtomStr *atom2, char *interactionTyp
     if (strncmp(interactionType, "collision", 3) == 0) {
         
         if (typeChange == 0) { //not change
-            type1 = atom1->property->type;
+            type1 = atom1->property->typeofAtom;
         } else if (typeChange == 1) { //change to _HB
-            type1 = AtomTypeChange(atom1->property->type, 1);
+            type1 = AtomTypeChange(atom1->property->typeofAtom, 1);
         } else if (typeChange == -1) { //change back to normal
-            type1 = AtomTypeChange(atom1->property->type, 0);
+            type1 = AtomTypeChange(atom1->property->typeofAtom, 0);
         } else {
             printf("!!ERROR!!: typeChange value is invalid. %s:%i\n", __FILE__, __LINE__);
             exit(EXIT_FAILURE);
         }
-        type2 = atom2->property->type;
+        type2 = atom2->property->typeofAtom;
         thisConstr = RightPair(type1, type2, 0);
         
     } else if (strncmp(interactionType, "constraint", 3) == 0) {
@@ -87,8 +87,8 @@ int FindPair (struct AtomStr *atom1, struct AtomStr *atom2, char *interactionTyp
     } else if (strncmp(interactionType, "neighbor", 1)==0) {
         
         int typeNum = HBModel(atom2, HBPartner);
-        type1 = AtomTypeChange(atom1->property->type, 0);
-        type2 = AtomTypeChange(atom2->property->type, 0);
+        type1 = AtomTypeChange(atom1->property->typeofAtom, 0);
+        type2 = AtomTypeChange(atom2->property->typeofAtom, 0);
         
         thisConstr = &potentialPairHB[typeNum][type1][type2];
         
@@ -387,8 +387,8 @@ void SDEnergyMin(long int stepNum, struct ThreadStr *thisThread) {
                     interaction[i].connect[m] = n; //all the surrounding atoms
                     interaction[i].hiLimit[m] = INFINIT; //interaction potential only has low limit
                     
-                    int type1 = thisThread->raw[i]->property->type;
-                    int type2 = thisThread->raw[n]->property->type;
+                    int type1 = thisThread->raw[i]->property->typeofAtom;
+                    int type2 = thisThread->raw[n]->property->typeofAtom;
                     
                     if (type1 > type2) {
                         int i = type2;
@@ -458,11 +458,11 @@ void SDEnergyMin(long int stepNum, struct ThreadStr *thisThread) {
                     if (step == stepNum) {
                         printf("atoms between %8i (%s [%4i%3s]) and %8i (%s [%4i%3s]), cur dis = %.4lf, min = %.4lf, max = %.4lf\n",
                                i,
-                               atom[i].property->nameOfAA,
+                               atom[i].property->nameofAA,
                                atom[i].property->sequence.aminoacidNum,
                                atom[i].property->name,
                                interaction[i].connect[num],
-                               atom[interaction[i].connect[num]].property->nameOfAA,
+                               atom[interaction[i].connect[num]].property->nameofAA,
                                atom[interaction[i].connect[num]].property->sequence.aminoacidNum,
                                atom[interaction[i].connect[num]].property->name,
                                length2,
@@ -503,7 +503,7 @@ void AtomDataCpy(struct AtomStr * dest, struct AtomStr * sour, int flag) {
 void ResetTarget(int *renewList, struct ThreadStr *thisThread) {
     struct AtomStr *target = NULL;
     
-    for (int n = 1; n <= renewList[0]; n ++) {
+    for (int n = 1; renewList[n]; n ++) {
         target = thisThread->listPtr[renewList[n]];
         
         target->dynamic->event.eventType = Invd_Event;
@@ -756,13 +756,8 @@ double CalPotenE(struct ThreadStr *thisThread) {
                         HBPartner = NULL;
                         
                         if (connectionMap[atom_i][atom_j] & HB_CONNECT) {
-                            int type = HBModel(raw[atom_i], raw[atom_j]);
-                            if (type == 1) {
-                                TPE -= HBPotential.BB;
-                            } else {
-                                TPE -= HBPotential.BS;
-                            }
                             sprintf(eventType, "HB");
+                            TPE -= HBBarrier(raw[atom_i], raw[atom_j]);
                         } else if (connectionMap[atom_i][atom_j] & CONSTRAINT_CONNECT) {
                             sprintf(eventType, "constraint");
                         } else if (connectionMap[atom_i][atom_j] & NEIGHBOR_CONNECT) {
@@ -1001,8 +996,8 @@ int EnterTunnel(double time, struct AtomStr *targetAtom) {
 }
 
 double FindPotWellWidth(struct AtomStr *atom_i, struct AtomStr *atom_j) {
-    int type_i = atom_i->property->type;
-    int type_j = atom_j->property->type;
+    int type_i = atom_i->property->typeofAtom;
+    int type_j = atom_j->property->typeofAtom;
     double width = 0;
     
     struct ConstraintStr *thisConstr = RightPair(type_i, type_j, 0);
@@ -1066,7 +1061,7 @@ void FreeConstr(struct ConstraintStr *thisConstr) {
     free(thisConstr);
 }
 
-void PrintData(int *list) {
+void PrintListData(int *list) {
     double *coordinate;
     
     for (int i = 1; i <= list[0]; i ++) {
@@ -1079,4 +1074,31 @@ void PrintData(int *list) {
                atom[targetAtom].dynamic->event.time);
         fflush(stdout);
     }
+}
+
+void PrintHBData(void) {
+    for (int i = 1; i <= atomnum; i ++) {
+        for (int n = 1; n <= atomnum; n ++) {
+            if (atom[i].dynamic->HB.bondConnection == n ||
+                atom[n].dynamic->HB.bondConnection == i ||
+                connectionMap[i][n] > 2 ||
+                connectionMap[n][i] > 2) {
+                
+                printf("#%4i ", i);
+                printf("HB: %4i, neighbors:", atom[i].dynamic->HB.bondConnection);
+                for (int m = 1; m <= 4; m ++) {
+                    printf(" %4i,", atom[i].dynamic->HBNeighbor.neighborPartner[m]);
+                }
+                printf(" record:");
+                for (int m = 1; m <= atomnum; m ++) {
+                    if (connectionMap[i][m] > 2) {
+                        printf(" %5i-%5i[%i],", i, m, connectionMap[i][m]);
+                    }
+                }
+                printf("\n");
+            }
+        }
+    }
+    
+    return;
 }

@@ -8,6 +8,18 @@
 
 #include "DMD.h"
 
+#define HBPAIR_AD(atom1, atom2) \
+(atom1->dynamic->HB.role == 'A' && atom2->dynamic->HB.role == 'D') || \
+(atom1->dynamic->HB.role == 'D' && atom2->dynamic->HB.role == 'A')
+
+#define HBPAIR_SD(atom1, atom2) \
+(atom1->dynamic->HB.role == 'S' && atom2->property->typeofAtom == 2) || \
+(atom2->dynamic->HB.role == 'S' && atom1->property->typeofAtom == 2)
+
+#define HBPAIR_SS(atom1, atom2) \
+(atom1->dynamic->HB.role == 'S' && atom2->dynamic->HB.role == 'S')
+
+
 struct ParameterStr {
     int coreorShell;
     int s_time;
@@ -22,7 +34,9 @@ struct ParameterStr {
 
 void InitializeEvent(struct InteractionEventStr *event);
 void CalculateParameters(struct AtomStr *atom_i, struct AtomStr *atom_j, struct ParameterStr *parameters);
+void CalculateVCOM(int startNum, int endNum, struct AtomStr *atomList, double *vCOM);
 int CheckDuplication(struct AtomStr *atom_i, struct AtomStr *atom_j, enum EEventType type);
+int CheckPairMatch(struct AtomStr *atom_i, struct AtomStr *atom_j, struct ThreadStr *thisThread);
 int JobAssign(struct AtomStr *atom_i, struct AtomStr *atom_j, struct InteractionEventStr *event, enum EEventType type);
 double CalculateDisc(struct ParameterStr *parameters);
 double CalculateTime(struct ParameterStr *parameters);
@@ -351,7 +365,11 @@ void HBTime(struct AtomStr *HB_i, struct ThreadStr *thisThread) {
         
         JobAssign(HB_i, HB_j, &event, HB_Event);
         
-    } else if (targetAtom_i != 0 && (HB_i->dynamic->HB.role == 'A' || HB_i->dynamic->HB.role == 'D') && HB_i->dynamic->HB.bondConnection == 0) {
+    } else if (targetAtom_i != 0 &&
+               (HB_i->dynamic->HB.role == 'A' ||
+                HB_i->dynamic->HB.role == 'D' ||
+                HB_i->dynamic->HB.role == 'S') &&
+               HB_i->dynamic->HB.bondConnection == 0) {
         
         parameters.calibratedcutoffr = cutoffr * EXTEND_RATIO;
         parameters.calibratedcutoffr *= parameters.calibratedcutoffr;
@@ -363,27 +381,18 @@ void HBTime(struct AtomStr *HB_i, struct ThreadStr *thisThread) {
             HB_j = (struct AtomStr *)elem->obj;
             targetAtom_j = HB_j->property->num;
             
-            if ((HB_j->dynamic->HB.role == 'A' || HB_j->dynamic->HB.role == 'D') &&
-                HB_j->dynamic->HB.role != HB_i->dynamic->HB.role &&
+            if ((/*normal A and D*/
+                 HBPAIR_AD(HB_i, HB_j) ||
+                 /*S and D, here D has to be in backbone*/
+                 HBPAIR_SD(HB_i, HB_j) ||
+                 /*S and S*/
+                 HBPAIR_SS(HB_i, HB_j)
+                ) &&
                 HB_j->dynamic->HB.bondConnection == 0 &&
-                
                 ((HB_i->property->sequence.proteinNum == HB_j->property->sequence.proteinNum &&
                   ABSVALUE((HB_i->property->sequence.aminoacidNum - HB_j->property->sequence.aminoacidNum)) >= 4) ||
                 (HB_i->property->sequence.proteinNum != HB_j->property->sequence.proteinNum)))
             {
-                
-                /*
-                 atom type 23: NR
-                 atom type 28: OC
-                 lack of neighbor interaction data of OX - NR, OX - OC
-                 OX: target HB atom of oxygen acceptor
-                 i.e. NR and OC cannot be the neighbor atom
-                 */
-                if ((thisThread->raw[HB_j->dynamic->HB.neighbor]->property->type == 23 || thisThread->raw[HB_i->dynamic->HB.neighbor]->property->type == 23) ||
-                    (thisThread->raw[HB_j->dynamic->HB.neighbor]->property->type == 28 || thisThread->raw[HB_i->dynamic->HB.neighbor]->property->type == 28)) {
-                    elem = listNext(atomList, elem);
-                    continue;
-                }
                 
                 if (CheckDuplication(HB_i, HB_j, HB_Event)) {
                     elem = listNext(atomList, elem);
@@ -396,6 +405,11 @@ void HBTime(struct AtomStr *HB_i, struct ThreadStr *thisThread) {
                 
                 if (parameters.r_2 <= parameters.calibratedcutoffr) { //if the distance between two atoms <= scan radius
                     
+					if (CheckPairMatch(HB_i, HB_j, thisThread) < 0) { //the pair is not in the reaction library list
+						elem = listNext(atomList, elem);
+						continue;
+					}
+
                     parameters.coreorShell = FindPair(HB_i, HB_j, "HB",
                                                       parameters.b_ij, parameters.r_2,
                                                       &parameters.shortlimit2, &parameters.longlimit2,
@@ -465,7 +479,9 @@ void HBNeighborTime(struct AtomStr *neighbor_i, struct ThreadStr *thisThread) {
         
         //==============================
         //check which atom is HOST and which atom is NEIGHBOR
-        if ((neighbor_i->dynamic->HB.role == 'A' || neighbor_i->dynamic->HB.role == 'D') &&
+        if ((neighbor_i->dynamic->HB.role == 'A' ||
+             neighbor_i->dynamic->HB.role == 'D' ||
+             neighbor_i->dynamic->HB.role == 'S') &&
             (neighbor_i->dynamic->HB.bondConnection && thisThread->listPtr[neighbor_i->dynamic->HB.bondConnection]->dynamic->HB.neighbor == targetAtom_j)) { //both could be either 'A' or 'D'
             virtualAtom[0] = neighbor_i; //host
             virtualAtom[1] = neighbor_j; //neighbor
@@ -685,11 +701,8 @@ ReCal:
 
 void ObstTime(struct AtomStr *targetAtom) {
     int atomNum = targetAtom->property->num;
-    double boxSize[4];
     struct ParameterStr parameters;
     struct InteractionEventStr event;
-    
-    TRANSFER_VECTOR(boxSize, boxDimension);
     
     for (int n = 0; n < obstObj.num; n ++) {
         InitializeEvent(&event);
@@ -761,7 +774,7 @@ void ObstTime(struct AtomStr *targetAtom) {
             
             event.time = CalculateTime(&parameters);
             if (unlikely(event.time < 0)) {
-                printf("!!ERROR!!: wall time is less than zero, atom #%i! %s:%i\n", atomNum, __FILE__, __LINE__);
+                printf("!!ERROR!!: obstacle time is less than zero, atom #%i! %s:%i\n", atomNum, __FILE__, __LINE__);
                 exit(EXIT_FAILURE);
             }
             
@@ -788,7 +801,7 @@ void TunnelTime(struct AtomStr *targetAtom) {
     struct ParameterStr parameters;
     struct InteractionEventStr event;
     struct AtomStr *thisWall = &tunlObj.tunnel;
-    struct ConstraintStr *thisConstr = RightPair(targetAtom->property->type, thisWall->property->type, 0);
+    struct ConstraintStr *thisConstr = RightPair(targetAtom->property->typeofAtom, thisWall->property->typeofAtom, 0);
     
     distanceShift2 = thisConstr->dmin;
     extraRange = sqrt(FindPotWellWidth(thisWall, targetAtom));
@@ -1065,6 +1078,27 @@ int CheckDuplication(struct AtomStr *atom_i, struct AtomStr *atom_j, enum EEvent
     return FALSE;
 }
 
+int CheckPairMatch(struct AtomStr *atom_i, struct AtomStr *atom_j, struct ThreadStr* thisThread) {
+	int type = HBModel(atom_i, atom_j);
+	if (type < 0) return -1;
+
+	//atom_i and atom_j must be their original types
+	int atom_i_type = atom_i->property->typeofAtom;
+	int atom_j_type = atom_j->property->typeofAtom;
+	if (potentialPairHB[type][atom_i_type][atom_j_type].step == NULL) {
+		return -1;
+	}
+
+	int neighbor_i_type = AtomTypeChange(thisThread->listPtr[atom_i->dynamic->HB.neighbor]->property->typeofAtom, 0);
+	int neighbor_j_type = AtomTypeChange(thisThread->listPtr[atom_j->dynamic->HB.neighbor]->property->typeofAtom, 0);
+	if (potentialPairHB[type][atom_i_type][neighbor_j_type].step == NULL ||
+		potentialPairHB[type][atom_j_type][neighbor_i_type].step == NULL) {
+		return -1;
+	}
+	
+	return 0;
+}
+
 int JobAssign(struct AtomStr *atom_i, struct AtomStr *atom_j, struct InteractionEventStr *event, enum EEventType type) {
     
     if (event->time > 0 && atom_i->dynamic->event.time > event->time) {
@@ -1085,3 +1119,21 @@ int JobAssign(struct AtomStr *atom_i, struct AtomStr *atom_j, struct Interaction
     return FALSE;
 }
 
+void CalculateVCOM(int startNum, int endNum, struct AtomStr *atomList, double *vCOM) {
+    double mass = 0;
+    
+    vCOM[1] = vCOM[2] = vCOM[3] = 0;
+
+    for (int n = startNum; n <= endNum; n ++) {
+        mass += atomList[n].property->mass;
+        for (int j = 0; j <= 3; j ++) {
+            vCOM[j] += atomList[n].dynamic->velocity[j] * atomList[n].property->mass;
+        }
+    }
+    
+    for (int j = 1; j <= 3; j ++) {
+        vCOM[j] /= mass;
+    }
+    
+    return;
+}

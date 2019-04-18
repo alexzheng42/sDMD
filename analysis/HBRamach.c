@@ -48,20 +48,15 @@ void HBInfo(int id) {
     
     sprintf(directory, "%s%s", path, files[outHBInfo][id].name);
     HBOutputFile = fopen(directory, "w");
-    fprintf(HBOutputFile, "@    xaxis label \"t\"\n");
-    fprintf(HBOutputFile, "@    yaxis label \"n\\sHB\"\n");
-    fprintf(HBOutputFile, "@    s0 legend \"\\f{Symbol}a\"\n");
-    fprintf(HBOutputFile, "@    s1 legend \"3\\s10\"\n");
-    fprintf(HBOutputFile, "@    s2 legend \"\\f{Symbol}p\"\n");
-    fprintf(HBOutputFile, "@    s3 legend \"\\f{Symbol}b\"\n");
-    /*
-     fprintf(HBOutputFile, "@    s3 legend \"\\f{Symbol}b\\f{}\\spara\"\n");
-     fprintf(HBOutputFile, "@    s4 legend \"\\f{Symbol}b\\f{}\\santi\"\n");
-     fprintf(HBOutputFile, "@    s5 legend \"\\f{Symbol}b\\f{}\\stotl\"\n");
-     */
-    fprintf(HBOutputFile, "@    s4 legend \"other\"\n");
-    fprintf(HBOutputFile, "@    s5 legend \"total\"\n");
-    fprintf(HBOutputFile, "@TYPE xy\n");
+    fprintf(HBOutputFile, "# %13s %17s %17s %17s %17s %17s %17s %17s\n",
+            "Step",
+            "alpha",
+            "3_10",
+            "pi",
+            "beta",
+            "SS",
+            "other",
+            "total");
     
     if (numofprotein == 1) {
         sprintf(directory, "%s%s", path, files[outAAMark][id].name);
@@ -134,7 +129,7 @@ void HBInfo(int id) {
             exit(EXIT_FAILURE);
         }
         
-        totalFrame = (sectInfo[sectNum].oldTime + sectInfo[sectNum].frameCount) / sectInfo[sectNum].outputRate;
+        totalFrame = (sectInfo[sectNum].oldTime + sectInfo[sectNum].frameCount) / sectInfo[sectNum].outputRate + 1;
         for (step = sectInfo[sectNum].oldTime / sectInfo[sectNum].outputRate; step < totalFrame; step ++) {
             if (ReadGro(TrjInputFile) || ReadConnectionMap(CntInputFile)) break;
             
@@ -153,41 +148,47 @@ void HBInfo(int id) {
             
             for (int i = offSet + 1; i <= offSet + thisAtomNum; i++) {
                 
-                if (atom[i].property->type == 18) {
+                if (atom[i].property->typeofAtom == 18) {
                     RamachandranPlot(i, &phi, &psi);
                     
                     if (phi != 0 && psi != 0 && analysisList[AnalyzeRamach]) {
-                        fprintf(RamachFile[atom[i].property->sequence.proteinNum - 1][FindAANum(atom[i].property->nameOfAA)], "%-10.2lf%-10.2lf\n", phi, psi);
+                        fprintf(RamachFile[atom[i].property->sequence.proteinNum - 1][FindAANum(atom[i].property->nameofAA)], "%-10.2lf%-10.2lf\n", phi, psi);
                     }
                 }
                 
                 connectAtom = CheckHBConnection(i);
-                if (connectAtom > 0 && (atom[i].property->type == 2 || atom[i].property->type == 4)) {
-                    HBSum.total ++;
-                    
-                    CheckHelixHB(i, connectAtom, phi, psi);
-                    CheckBetaHB(i, connectAtom, phi, psi);
-                    
-                    prePsi = psi;
-                    prePhi = phi;
-                    
-                    if (numofprotein == 1 && (alphaRecord != HBSum.helix_alpha || betaRecord != HBSum.beta)) {
-                        if (alphaRecord != HBSum.helix_alpha) {
-                            markAA[atom[i          ].property->sequence.aminoacidNum][0] ++;
-                            markAA[atom[connectAtom].property->sequence.aminoacidNum][0] ++;
-                        } else {
-                            markAA[atom[i          ].property->sequence.aminoacidNum][1] ++;
-                            markAA[atom[connectAtom].property->sequence.aminoacidNum][1] ++;
-                        }
-                        
-                        alphaRecord = HBSum.helix_alpha;
-                        betaRecord  = HBSum.beta;
-                    }
+                if (connectAtom > 0 ) {
+					if (connectAtom > i) { //only count once
+						HBSum.total++;
+						if (atom[i].property->typeofAtom == 31 && atom[connectAtom].property->typeofAtom == 31)
+							HBSum.SS++;
+					}
+
+					if (atom[i].property->typeofAtom == 2 || atom[i].property->typeofAtom == 4) {
+						CheckHelixHB(i, connectAtom, phi, psi);
+						CheckBetaHB(i, connectAtom, phi, psi);
+
+						prePsi = psi;
+						prePhi = phi;
+
+						if (numofprotein == 1 && (alphaRecord != HBSum.helix_alpha || betaRecord != HBSum.beta)) {
+							if (alphaRecord != HBSum.helix_alpha) {
+								markAA[atom[i].property->sequence.aminoacidNum][0] ++;
+								markAA[atom[connectAtom].property->sequence.aminoacidNum][0] ++;
+							} else {
+								markAA[atom[i].property->sequence.aminoacidNum][1] ++;
+								markAA[atom[connectAtom].property->sequence.aminoacidNum][1] ++;
+							}
+
+							alphaRecord = HBSum.helix_alpha;
+							betaRecord = HBSum.beta;
+						}
+					}
                 }
                 
                 if (analysisList[AnalyzeConMap] &&
                     atom[i].property->sequence.proteinNum == atom[connectAtom].property->sequence.proteinNum) {
-                    fprintf(ContactMapFile[atom[i].property->sequence.proteinNum - 1], "%8i%8i%10s%10s\n", i, connectAtom, atom[i].property->nameOfAA, atom[connectAtom].property->nameOfAA);
+                    fprintf(ContactMapFile[atom[i].property->sequence.proteinNum - 1], "%8i%8i%10s%10s\n", i, connectAtom, atom[i].property->nameofAA, atom[connectAtom].property->nameofAA);
                     fprintf(ContactMapAAFile[atom[i].property->sequence.proteinNum - 1], "%8i%8i\n", atom[i].property->sequence.aminoacidNum, atom[connectAtom].property->sequence.aminoacidNum);
                 }
             }
@@ -259,7 +260,7 @@ void RamachandranPlot(int atom_N, double *phi, double *psi)
     transfer_vector(position_N, atom[N].dynamic->coordinate);
     
     j = N;
-    while (j > 1 && atom[--j].property->type != 6)
+    while (j > 1 && atom[--j].property->typeofAtom != 6)
         ;
     if (j != N && atom[j].property->sequence.proteinNum == atom[N].property->sequence.proteinNum) {
         C_1 = j;
@@ -279,7 +280,7 @@ void RamachandranPlot(int atom_N, double *phi, double *psi)
     }
     
     j = N;
-    while (atom[++j].property->type != 6)
+    while (atom[++j].property->typeofAtom != 6)
         ;
     if (atom[j].property->sequence.proteinNum == atom[N].property->sequence.proteinNum) {
         C = j;
@@ -287,7 +288,7 @@ void RamachandranPlot(int atom_N, double *phi, double *psi)
     }
     
     j = N;
-    while (j < atomnum && atom[++j].property->type != 18)
+    while (j < atomnum && atom[++j].property->typeofAtom != 18)
         ;
     if (atom[j].property->sequence.proteinNum == atom[N].property->sequence.proteinNum) {
         N_1 = j;
@@ -400,7 +401,7 @@ void CheckHelixHB(int atomNum, int connectAtom, double phi, double psi) {
     int gapResidue = 0;
     //double dihedralSum;
     
-    if (!(atom[atomNum].property->type == 2 || atom[atomNum].property->type == 4)) {
+    if (!(atom[atomNum].property->typeofAtom == 2 || atom[atomNum].property->typeofAtom == 4)) {
         printf("!!ERROR!!: the target atom type has to be HB (backbone H)! %s:%i\n", __FILE__, __LINE__);
         exit(EXIT_FAILURE);
     }
@@ -425,7 +426,7 @@ void CheckHelixHB(int atomNum, int connectAtom, double phi, double psi) {
 }
 
 void CheckBetaHB(int atomNum, int connectAtom, double phi, double psi) {
-    if (!(atom[atomNum].property->type == 2 || atom[atomNum].property->type == 4)) {
+    if (!(atom[atomNum].property->typeofAtom == 2 || atom[atomNum].property->typeofAtom == 4)) {
         printf("!!ERROR!!: the target atom type has to be HB (backbone H)! %s:%i\n", __FILE__, __LINE__);
         exit(EXIT_FAILURE);
     }
@@ -458,6 +459,7 @@ void ResetHBNum(void) {
     HBSum.beta_anti = 0;
     HBSum.beta_para = 0;
      */
+    HBSum.SS          = 0;
     HBSum.other       = 0;
     HBSum.total       = 0;
     
@@ -466,18 +468,15 @@ void ResetHBNum(void) {
 
 void SaveHBInfo(struct SectionStr *sect, FILE *HBInfoFile) {
     HBSum.other = HBSum.total    - HBSum.helix_alpha - HBSum.helix_310 -
-                  HBSum.helix_pi - HBSum.beta;
+                  HBSum.helix_pi - HBSum.beta        - HBSum.SS;
     
-    fprintf(HBInfoFile, "%8.2lf%8i%8i%8i%8i%8i%8i\n", step * sect->outputRate,
+    fprintf(HBInfoFile, "%15.2lf %17i %17i %17i %17i %17i %17i %17i\n",
+            step * sect->outputRate,
             HBSum.helix_alpha,
             HBSum.helix_310,
             HBSum.helix_pi,
             HBSum.beta,
-            /*
-            HBSum.beta_para,
-            HBSum.beta_anti,
-            sum_beta,
-             */
+            HBSum.SS,
             HBSum.other,
             HBSum.total);
 }
@@ -493,14 +492,15 @@ repeat:
         goto repeat;
     }
     
-    sscanf(buffer, "%lf%i%i%i%i%i%i",
+    sscanf(buffer, "%lf%i%i%i%i%i%i%i",
            &thisHB->step,
-           &thisHB->alpha,
-           &thisHB->a310,
-           &thisHB->pi,
-           &thisHB->beta,
-           &thisHB->other,
-           &thisHB->totl);
+           &thisHB->type.helix_alpha,
+           &thisHB->type.helix_310,
+           &thisHB->type.helix_pi,
+           &thisHB->type.beta,
+           &thisHB->type.SS,
+           &thisHB->type.other,
+           &thisHB->type.total);
     
     return 0;
 }

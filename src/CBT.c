@@ -31,7 +31,7 @@ void CreateCBT(void) {
 
 
 void UpdateCBT(int *renewList) {
-    for (int i = 1; i <= renewList[0]; i ++) {
+    for (int i = 1; renewList[i]; i ++) {
         UpdateCBTRun(renewList[i]);
     }
     
@@ -40,14 +40,14 @@ void UpdateCBT(int *renewList) {
 
 
 void InsertCBT(int *renewList) {
-    for (int i = 1; i <= renewList[0]; i ++) {
+    for (int i = 1; renewList[i]; i ++) {
         InsertCBTRun(renewList[i]);
     }
 }
 
 
 void DeleteCBT(int *renewList) {
-    for (int i = 1; i <= renewList[0]; i ++) {
+    for (int i = 1; renewList[i]; i ++) {
         DeleteCBTRun(renewList[i]);
     }
 }

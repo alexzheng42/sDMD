@@ -25,6 +25,11 @@ struct REMDAnaStr {
     struct RCOptionStr option;
 };
 
+struct REMDTempStr {
+    int num;
+    double T;
+};
+
 static long **count; //[replica number/temperature number][bin number]
 static long *totCount;
 static double *temperature;
@@ -50,12 +55,10 @@ static struct REMDAnaStr REMD = {
 };
 
 
-static int FindRightElem(double value_i, double *list, int listSize);
 static int CheckCount(long **count, long *total, int repNo, int binNum);
 static int CountBin(FILE *inEnergFile, FILE *inReCorFile, char *type, int rate, long startTime, long endTime, long *thisCount, long *totCount, double *pE);
 static int CountPosition(double value, double min, double gap);
 static int CheckValidity(double);
-static double FindCurT(FILE *inputFile, long *step, long startTime, long endTime);
 static double CalBeta(double T);
 static double CalAvePoten(double tgtT, double *dos, double *pE, int binNum, int dimension);
 static double CalCv(double tgtT);
@@ -67,10 +70,12 @@ static void CalProbability(double *dos, double *f, double *pE, int replicaNo, in
 static void CalFreeEnergy(double *tgtT, int repNo, int binNum, double *dos, double *pE);
 static void CalEntropy(double *dos, int binNum);
 static void CalCvPotT(int bin, double minT, double maxT);
+static void CalPMFMap(char *type, double *tgtT, int repNo, int binNum, double *dos, double *pE);
 static void SaveProbability(int repNo, int binNum, double *tgtT);
 static void FreeVariable(void);
 static void InitializeVariables(int argc, const char *argv[]);
 static FILE *OpenInputFile(char *name);
+static struct REMDTempStr FindCurT(FILE *inputFile, long *step, long startTime, long endTime);
 void PrintCountinBin(int elem); //for debug
 void PrintDoS(void);   //for debug
 void PrintProbability(int id);  //for debug
@@ -107,9 +112,13 @@ int WHAM(int argc, const char *argv[]) {
           REMD.option.rmsd)) {
         CalCvPotT(REMD.binNum, temperature[0], temperature[REMD.replicaNo - 1]);
     }
+    
+    if (REMD.option.rmsd && analysisList[CalculatePotMap]) {
+        CalPMFMap("rmsd", temperature, REMD.replicaNo, REMD.binNum, DoS, potenE);
+        PESurfaceInfoPerT();
+    }
 
     FreeVariable();
-    printf("Done!\n");
     return 0;
 }
 
@@ -212,7 +221,7 @@ void CountReplica(long startTime, long endTime) {
     for (int id = 0; id < REMD.replicaNo; id ++) {
         int elem = -1;
         long step = startTime;
-        double curT;
+        struct REMDTempStr curT = {.T = 0, .num = 0};
         
         inEnergyFile = OpenInputFile(files[outEne    ][id].name);
         inTempFile   = OpenInputFile(files[inREMDTemp][id].name);
@@ -232,15 +241,11 @@ void CountReplica(long startTime, long endTime) {
 
         while (step <= endTime || endTime < 0) {
             curT = FindCurT(inTempFile, &step, startTime, endTime);
-            if (curT < 0) {
+            if (curT.T < 0) {
                 break; //reach the end of the file
             }
-            
-            if ((elem = FindRightElem(curT, temperature, REMD.replicaNo)) < 0) {
-                printf("!!ERROR!!: cannot find the right temperature! %s:%i\n", __FILE__, __LINE__);
-                exit(EXIT_FAILURE);
-            }
-            
+
+            elem = curT.num - 1;
             if (CountBin(inEnergyFile, inReCorFile, type, REMD.exRate, step, endTime, count[elem], &totCount[elem], potenE))
                 break;
             
@@ -261,6 +266,7 @@ void CountReplica(long startTime, long endTime) {
                 potenE[l] /= sum;
             }
         }
+        fclose(inReCorFile);
     } else {
         for (int l = 0; l < REMD.binNum; l ++) {
             potenE[l] = REMD.min_E - (l + 0.5) * REMD.gap_E;
@@ -293,9 +299,9 @@ int CountBin(FILE *inEnergFile, FILE *inReCorFile, char *type, int rate, long st
                 return -1; // end of the file
             }
             
-            if (REMD.option.aHB) HBNum = hb.alpha;
-            else if (REMD.option.bHB) HBNum = hb.beta;
-            else if (REMD.option.tHB) HBNum = hb.totl;
+            if (REMD.option.aHB) HBNum = hb.type.helix_alpha;
+            else if (REMD.option.bHB) HBNum = hb.type.beta;
+            else if (REMD.option.tHB) HBNum = hb.type.total;
             else {
                 printf("!!ERROR!!: invalid reaction coordinate option! %s:%i\n", __FILE__, __LINE__);
                 exit(EXIT_FAILURE);
@@ -311,9 +317,9 @@ int CountBin(FILE *inEnergFile, FILE *inReCorFile, char *type, int rate, long st
                 if (ReadHBFile(inReCorFile, &hb) < 0)
                     return -1; // the file could be end at the middle of calculations
                 
-                if (REMD.option.aHB) HBNum = hb.alpha;
-                else if (REMD.option.bHB) HBNum = hb.beta;
-                else if (REMD.option.tHB) HBNum = hb.totl;
+                if (REMD.option.aHB) HBNum = hb.type.helix_alpha;
+                else if (REMD.option.bHB) HBNum = hb.type.beta;
+                else if (REMD.option.tHB) HBNum = hb.type.total;
                 else {
                     printf("!!ERROR!!: invalid reaction coordinate option! %s:%i\n", __FILE__, __LINE__);
                     exit(EXIT_FAILURE);
@@ -326,13 +332,13 @@ int CountBin(FILE *inEnergFile, FILE *inReCorFile, char *type, int rate, long st
         } else if (strcmp(type, "rmsd") == 0) {
             double *curFrame_rmsd = &rmsd.step;
             
-            check = ReadRMSDFile(inReCorFile, &rmsd, REMD.option.rmsd);
-            while ((long)(*curFrame_rmsd) < startTime && (check = ReadRMSDFile(inReCorFile, &rmsd, REMD.option.rmsd)) == 0);
+            check = ReadRMSDFile(inReCorFile, &rmsd);
+            while ((long)(*curFrame_rmsd) < startTime && (check = ReadRMSDFile(inReCorFile, &rmsd)) == 0);
             if (check < 0 || (endTime > 0 && (long)(*curFrame_rmsd) > endTime)) {
                 return -1;
             }
             
-            int position = CountPosition(rmsd.vRMSD, REMD.min_RC, REMD.gap_RC);
+            int position = CountPosition(rmsd.vRMSD[REMD.option.rmsd - 1], REMD.min_RC, REMD.gap_RC);
             pE[position] += *curPotenE;
             thisCount[position] ++;
             (*totCount) ++;
@@ -340,10 +346,10 @@ int CountBin(FILE *inEnergFile, FILE *inReCorFile, char *type, int rate, long st
             for (int i = 1; i < rate ; i ++) {
                 if (ReadEnergyFile(inEnergFile, &energy) < 0)
                     return -1;
-                if (ReadRMSDFile(inReCorFile, &rmsd, REMD.option.rmsd) < 0)
+                if (ReadRMSDFile(inReCorFile, &rmsd) < 0)
                     return -1;
                 
-                position = CountPosition(rmsd.vRMSD, REMD.min_RC, REMD.gap_RC);
+                position = CountPosition(rmsd.vRMSD[REMD.option.rmsd - 1], REMD.min_RC, REMD.gap_RC);
                 pE[position] += *curPotenE;
                 thisCount[position] ++;
                 (*totCount) ++;
@@ -447,36 +453,25 @@ double CalBeta(double T) {
 }
 
 
-int FindRightElem(double value_i, double *list, int listSize) {
-    double deviation = 5;
-    
-    for (int i = 0; i < listSize; i ++) {
-        if (fabs(value_i - list[i]) < deviation) {
-            return i;
-        }
-    }
-    
-    return -1;
-}
-
-
-double FindCurT(FILE *inputFile, long *step, long startTime, long endTime) {
+struct REMDTempStr FindCurT(FILE *inputFile, long *step, long startTime, long endTime) {
     int check = 0;
     double curFrame = 0;
-    double thisT;
+    struct REMDTempStr thisT = {.T = -1, .num = -1};
     
-    check = fscanf(inputFile, "%lf%lf", &curFrame, &thisT);
-    while ((long)curFrame < startTime && (check = fscanf(inputFile, "%lf%lf", &curFrame, &thisT)) != EOF);
+    check = fscanf(inputFile, "%lf%lf%i", &curFrame, &(thisT.T), &(thisT.num));
+    while ((long)curFrame < startTime && (check = fscanf(inputFile, "%lf%lf%i", &curFrame, &(thisT.T), &(thisT.num))) != EOF);
     
-    if (check < 0 || (endTime > 0 && (long)curFrame > endTime) || thisT == 0) {
-        return -1; // end of the file
+    if (check < 0 || (endTime > 0 && (long)curFrame > endTime) || thisT.T == 0) {
+        thisT.T = thisT.num = -1;
+        return thisT; // end of the file
     }
     
     if (*step != curFrame) {
         *step = curFrame;
     }
     
-    return thisT / BOLTZMANN;
+    thisT.T /= BOLTZMANN;
+    return thisT;
 }
 
 int CountPosition(double value, double min, double gap) {
@@ -486,7 +481,7 @@ int CountPosition(double value, double min, double gap) {
         num ++;
     }
     
-    if (num > REMD.binNum) {
+    if (num >= REMD.binNum) {
         printf("!!ERROR!!: potential from input file excesses the assigned max potential! %s:%i\n", __FILE__, __LINE__);
         exit(EXIT_FAILURE);
     }
@@ -507,17 +502,22 @@ void ReadConfigFile() {
         exit(EXIT_FAILURE);
     }
     
-    fscanf(inConfigFile, "%[^\n]\n", buffer);
+    fgets(buffer, sizeof(buffer), inConfigFile);
     fscanf(inConfigFile, "%s%s%i", buffer, buffer, &num);
+    
+    if (num != RE.numReplica) {
+        printf("!!ERROR!!: the replica number does not match the configuration file! please check your arguments! %s:%i\n", __FILE__, __LINE__);
+        exit(EXIT_FAILURE);
+    }
     
     fscanf(inConfigFile, "%s%s", buffer, buffer);
     temperature = (double *)calloc(num, sizeof(double));
     for (int i = 0; i < num; i ++) {
         fscanf(inConfigFile, "%lf", &temperature[i]);
     }
-    
     fscanf(inConfigFile, "\n");
-    fscanf(inConfigFile, "%[^\n]\n", buffer);
+    
+    fgets(buffer, sizeof(buffer), inConfigFile);
     fscanf(inConfigFile, "%s%s%i", buffer, buffer, &REMD.exRate);
     REMD.exRate /= REMD.dumpRate;
     
@@ -616,6 +616,7 @@ int CheckCount(long **count, long *total, int repNo, int binNum) {
 
 void CalFreeEnergy(double *tgtT, int repNo, int binNum, double *dos, double *pE) {
     double x, y;
+    double offSet = FindOffSet(dos, binNum);
     char directory[1024];
     FILE *outputFile;
     
@@ -642,7 +643,7 @@ void CalFreeEnergy(double *tgtT, int repNo, int binNum, double *dos, double *pE)
         
         for (int i = 0; i < repNo; i ++) {
             if (dos[l] != 0 && pE[l] != 0) {
-                y = pE[l] - (log(dos[l]) - FindOffSet(dos, binNum)) / CalBeta(tgtT[i]);
+                y = pE[l] - (log(dos[l]) - offSet) / CalBeta(tgtT[i]);
                 fprintf(outputFile, "%20.4e ", y);
             } else {
                 fprintf(outputFile, "%20.4e ", 0.0);
@@ -659,6 +660,7 @@ void CalFreeEnergy(double *tgtT, int repNo, int binNum, double *dos, double *pE)
 void CalEntropy(double *dos, int binNum) {
     char directory[1024];
     double x, y;
+    double offSet = FindOffSet(dos, binNum);
     FILE *outputFile;
     
     sprintf(directory, "%sEntropy.txt", path);
@@ -674,7 +676,7 @@ void CalEntropy(double *dos, int binNum) {
             x = potenE[l];
         }
         
-        y = log(dos[l]) - FindOffSet(dos, binNum); //unit of kB
+        y = log(dos[l]) - offSet; //unit of kB
         
         if (CheckValidity(y)) {
             fprintf(outputFile, "%10.4lf%20.4e\n", x, y);
@@ -736,6 +738,71 @@ double CalCv(double tgtT) {
 }
 
 
+void CalPMFMap(char *type, double *tgtT, int repNo, int binNum, double *dos, double *pE) {
+    int seq;
+    double offSet = FindOffSet(dos, binNum);
+    char directory[1024];
+    FILE  **outputFile = (FILE **)calloc(repNo, sizeof(FILE *));
+    FILE **inReCorFile = (FILE **)calloc(repNo, sizeof(FILE *));
+    FILE  **inTempFile = (FILE **)calloc(repNo, sizeof(FILE *));
+    
+    for (int i = 0; i < repNo; i ++) {
+        inTempFile[i] = OpenInputFile(files[inREMDTemp][i].name);
+    }
+    
+    if (strcmp(type, "rmsd") == 0) {
+        
+        printf("\nAnalyzing PMF per temperature corresponding to RMSD... ");
+        fflush(stdout);
+        
+        for (int i = 0; i < repNo; i ++) {
+            inReCorFile[i] = OpenInputFile(files[outRMSD][i].name);
+            sprintf(directory, "%s%s", path, files[outPMFMap_T][i].name);
+            outputFile[i] = fopen(directory, "w");
+        }
+        
+        int count = 0;
+        while (1) {
+            for (int tempNum = 0; tempNum < repNo; tempNum ++) {
+                if ((seq = ReadREMDTempFile(inTempFile[tempNum])) > 0 &&
+                    ReadRMSDFile(inReCorFile[tempNum], &rmsd) == 0) {
+                    
+                    seq --;
+                    fprintf(outputFile[seq], "%15.4lf %15.4lf ", rmsd.vRMSD[0], rmsd.vRMSD[1]);
+                    
+                    int pos = CountPosition(rmsd.vRMSD[0], REMD.min_RC, REMD.gap_RC);
+                    if (dos[pos] != 0 && pE[pos] != 0) {
+                        fprintf(outputFile[seq], "%20.4e\n", pE[pos] - (log(dos[pos]) - offSet) / CalBeta(tgtT[seq]));
+                    } else {
+                        fprintf(outputFile[seq], "%20.4e\n", 0.0);
+                    }
+                } else {
+                    count ++;
+                }
+            }
+            
+            if (count == repNo) {
+                break;
+            }
+        }
+    }
+
+    
+    for (int i = 0; i < repNo; i ++) {
+        if (inTempFile[i])  fclose(inTempFile[i]);
+        if (outputFile[i])  fclose(outputFile[i]);
+        if (inReCorFile[i]) fclose(inReCorFile[i]);
+    }
+    free(inTempFile);
+    free(outputFile);
+    free(inReCorFile);
+    
+    printf("Done!\n");
+    
+    return;
+}
+
+
 //To calculate Cv & U vs T, it has to count bins of potential energy
 void CalCvPotT(int bin, double minT, double maxT) {
     double gapT, tgtT;
@@ -781,3 +848,20 @@ int CheckValidity(double value) {
 }
 
 
+int ReadREMDTempFile(FILE *REMDTempFile) {
+    char buffer[1024];
+    int seq;
+    double tmp;
+    
+repeat:
+    if (fgets(buffer, sizeof(buffer), REMDTempFile) == NULL)
+        return -1;
+    
+    if (buffer[0] == '@' || buffer[0] == '#') {
+        goto repeat;
+    }
+    
+    sscanf(buffer, "%lf%lf%i", &tmp, &tmp, &seq);
+    
+    return seq;
+}

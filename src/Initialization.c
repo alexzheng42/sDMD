@@ -181,18 +181,25 @@ void InputData(int argc, const char * argv[]) {
                     }
                     
                     if (i + 3 >= argc || argv[i + 3][0] == '-') {
-                        printf("!!ERROR!!: Please provide a valid temperature for this replica!\n\n");
+                        printf("!!ERROR!!: Please provide a valid temperature value for this replica!\n\n");
                         goto help;
                     } else {
-                        REMDInfo.REMD_T = atof(argv[i + 3]);
+                        REMDInfo.REMD_Temperature.T = atof(argv[i + 3]);
                     }
                     
-                    if (!(i + 4 >= argc || argv[i + 4][0] == '-')) {
-                        REMDInfo.REMD_OutputRate = atoi(argv[i + 4]);
+                    if (i + 4 >= argc || argv[i + 4][0] == '-') {
+                        printf("!!ERROR!!: Please provide a valid temperature sequence for this replica!\n\n");
+                        goto help;
+                    } else {
+                        REMDInfo.REMD_Temperature.num = atoi(argv[i + 4]);
+                    }
+                    
+                    if (!(i + 5 >= argc || argv[i + 5][0] == '-')) {
+                        REMDInfo.REMD_OutputRate = atoi(argv[i + 5]);
                     }
                         
-                    if (!(i + 5 >= argc || argv[i + 5][0] == '-')) {
-                        sprintf(REMDInfo.REMD_ExtraName, "%s", argv[i + 5]);
+                    if (!(i + 6 >= argc || argv[i + 6][0] == '-')) {
+                        sprintf(REMDInfo.REMD_ExtraName, "%s", argv[i + 6]);
                         sprintf(saveDataFileName, "savedData%s.dat", REMDInfo.REMD_ExtraName);
                     }
                 } else if (strcmp(argv[i], "-visual") == 0) {
@@ -208,15 +215,15 @@ void InputData(int argc, const char * argv[]) {
                     printf(" -cnt: (optional) follow the file name of the output connection map\n");
                     printf(" -log: (optional) follow the file name of the output Log file\n");
                     printf(" -sys: (optional) follow the file name of the output SysInfo file\n");
-                    printf(" -pot: (optional) output potential energy, follow the file name, otherwise will use the default name\n");
-                    printf(" -kin: (optional) output kinetic energy, follow the file name, otherwise will use the default name\n");
-                    printf(" -tem: (optional) output temperature, follow the file name, otherwise will use the default name\n");
-                    printf(" -HBn: (optional) output hydrogen bond number, follow the file name, otherwise will use the default name\n");
-                    printf(" -xyz: (optional) output xyz trajectory, follow the file name, otherwise will use the default name\n");
-                    printf(" -pdb: (optional) output pdb trajectory, follow the file name, otherwise will use the default name\n");
+                    printf(" -pot: (optional) dump potential energy, followed by the file name, otherwise will use the default name\n");
+                    printf(" -kin: (optional) dump kinetic energy, followed by the file name, otherwise will use the default name\n");
+                    printf(" -tem: (optional) dump temperature, followed by the file name, otherwise will use the default name\n");
+                    printf(" -HBn: (optional) dump hydrogen bond number, followed by the file name, otherwise will use the default name\n");
+                    printf(" -xyz: (optional) dump xyz trajectory, followed by the file name, otherwise will use the default name\n");
+                    printf(" -pdb: (optional) dump pdb trajectory, followed by the file name, otherwise will use the default name\n");
                     printf(" -box: (required only if the coordinate file is a .PDB file) the simulation box dimensions, x, y, z\n");
-                    printf(" -Wsz: (required only if WallDyn is assigned) follow the maximum changing size of the wall, default 5 A\n");
-                    printf(" -Wrt: (required only if WallDyn is assigned) follow the total time needed for the size change, default 200\n\n");
+                    printf(" -Wsz: (required only if WallDyn is assigned) followed by the maximum changing size of the wall, default 5 A\n");
+                    printf(" -Wrt: (required only if WallDyn is assigned) followed by the total time needed for the size change, default 200\n\n");
                     
                     printf(" -ter: (optional) interactive termini selection, instead of charged (default)\n");
                     printf(" -arg: (optional) interactive arginine selection, instead of charged (default)\n");
@@ -231,7 +238,8 @@ void InputData(int argc, const char * argv[]) {
                     
                     printf(" -REMD: only use during REMD, follow the server name, \n");
                     printf("                                     the port number, \n");
-                    printf("                                     the temperature, \n");
+                    printf("                                     the temperature value, \n");
+                    printf("                                     the temperature sequence, \n"); // the position of such temperature in the replica sequence
                     printf("                                     the exchange rate, and\n");
                     printf("                                     the suffix name of saving files\n");
                     
@@ -507,15 +515,10 @@ void ReadParameter() {
     fscanf(input_file, "%s%s",        statement, Methodtype);
     
     fscanf(input_file, "%s%s",        statement, thermostatType);
-    if (strcmp(thermostatType, "Andersen") == 0) {
-        thermoF = THERMO_AND;
-    }
-#ifdef GEL
-    thermoF = THERMO_GEL;
-#endif
+	fscanf(input_file, "%s%lf",       statement, &thermoF);
     
     fscanf(input_file, "%s%i",        statement, &codeNum);
-    fscanf(input_file, "%s%i",        statement, &threadNum);
+    fscanf(input_file, "%s%i\n",      statement, &threadNum);
     fscanf(input_file, "%s%s",        statement, wallExist);
     fscanf(input_file, "%s%s",        statement, wallType);
     fscanf(input_file, "%s%s\n",      statement, wallDyn.mark);
@@ -785,7 +788,7 @@ void ReadPDBFile(FILE* inputFile) {
             
             if (tmpInt != rInt || strcmp(libraryType, tmpAAName)) {
                 aminoacid = (struct AAStr *)realloc(aminoacid, sizeof(struct AAStr) * (++totalAminoAcids + 1));
-                sprintf(aminoacid[totalAminoAcids].nameOfAA, "%s", libraryType);
+                sprintf(aminoacid[totalAminoAcids].nameofAA, "%s", libraryType);
                 aminoacid[totalAminoAcids].proteinNum = (strcmp(rChar, tmpChar) || numofprotein == 0 || rInt < tmpInt) ? numofprotein + 1 : numofprotein;
                 aminoacid[totalAminoAcids - 1].endAtomNum = atomnum - 1;
                 aminoacid[totalAminoAcids].startAtomNum = atomnum;
@@ -817,7 +820,7 @@ void ReadPDBFile(FILE* inputFile) {
         printf("protein %2i: %4i(%2i) -- %4i(%2i):\n", i, protein[i].startAtomNum, protein[i].startAANum, protein[i].endAtomNum, protein[i].endAANum);
         printf("        ");
         for (int n = protein[i].startAANum; n <= protein[i].endAANum; n ++) {
-            printf("%s ", aminoacid[n].nameOfAA);
+            printf("%s ", aminoacid[n].nameofAA);
         }
         printf("\n");
     }
@@ -897,10 +900,11 @@ void ReadGROFile(FILE *inputFile) {
         
         if (tmpInt != rInt || strcmp(libraryType, tmpAAName)) {
             aminoacid = (struct AAStr *)realloc(aminoacid, sizeof(struct AAStr) * (++totalAminoAcids + 1));
-            sprintf(aminoacid[totalAminoAcids].nameOfAA, "%s", libraryType);
+            sprintf(aminoacid[totalAminoAcids].nameofAA, "%s", libraryType);
             aminoacid[totalAminoAcids].proteinNum = (rInt < tmpInt || numofprotein == 0) ? numofprotein + 1 : numofprotein;
             aminoacid[totalAminoAcids - 1].endAtomNum = atomnum - 1;
             aminoacid[totalAminoAcids].startAtomNum = atomnum;
+            aminoacid[totalAminoAcids].type = AAModel(aminoacid[totalAminoAcids].nameofAA);
             
             if (rInt < tmpInt || numofprotein == 0) {
                 protein = (struct PepStr *)realloc(protein, sizeof(struct PepStr) * (++numofprotein + 1));
@@ -931,7 +935,7 @@ void ReadGROFile(FILE *inputFile) {
         printf("protein %2i: %4i(%2i) -- %4i(%2i):\n", i, protein[i].startAtomNum, protein[i].startAANum, protein[i].endAtomNum, protein[i].endAANum);
         printf("        ");
         for (int n = protein[i].startAANum; n <= protein[i].endAANum; n ++) {
-            printf("%s ", aminoacid[n].nameOfAA);
+            printf("%s ", aminoacid[n].nameofAA);
         }
         printf("\n");
     }
@@ -998,7 +1002,8 @@ void ReadCoordinate() {
         atom[i].property->sequence.atomNum = i;
         atom[i].property->sequence.aminoacidNum = AANum - protein[pepNum - 1].endAANum;
         atom[i].property->sequence.proteinNum = pepNum;
-        strcpy(atom[i].property->nameOfAA, aminoacid[AANum].nameOfAA);
+        strcpy(atom[i].property->nameofAA, aminoacid[AANum].nameofAA);
+        atom[i].property->typeofAA = AAModel(atom[i].property->nameofAA);
     }
     
     fclose(input_file);
@@ -1025,18 +1030,17 @@ void ReadModel() {
     for (int i = 1; i <= totalAminoAcids; i++) {
         ScanAA(i, 0); //first, every amino acid read its own data file. GLY read the data file of ALA
         
-        if (strcmp(aminoacid[i].nameOfAA, "GEL") == 0) {
+        if (strcmp(aminoacid[i].nameofAA, "GEL") == 0) {
             continue;
         } else {
             //every other AA (except for PRO) shares the same backbone of ALA/GLY
-            if (strcmp(aminoacid[i].nameOfAA, "ALA") &&
-                strcmp(aminoacid[i].nameOfAA, "GLY") &&
-                strcmp(aminoacid[i].nameOfAA, "PRO")) { //if NOT ALA or GLY or PRO
+            if (strcmp(aminoacid[i].nameofAA, "ALA") &&
+                strcmp(aminoacid[i].nameofAA, "PRO")) { //if NOT ALA or GLY or PRO
                 
                 ScanAA(i, 1); //read the shared info from the data file of ALA
             }
             
-            if (strcmp(aminoacid[i + 1].nameOfAA, "PRO") == 0) { //if the next amino acid is PRO, more/modified constraints would be required
+            if (strcmp(aminoacid[i + 1].nameofAA, "PRO") == 0) { //if the next amino acid is PRO, more/modified constraints would be required
                 ScanAA(i, 2);
             }
         }
@@ -1055,16 +1059,21 @@ void ScanAA(int AANum, int type) {
     if (type == 2) {
         //re-assign pre-PRO amino acid INTER
         sprintf(AAName, "%s", "PRO_INTER");
-    } else if (type == 1 || strcmp(aminoacid[AANum].nameOfAA, "GLY") == 0) {
+    } else if (type == 1) {
         sprintf(AAName, "%s", "ALA");
     } else {
-        sprintf(AAName, "%s", aminoacid[AANum].nameOfAA);
+        sprintf(AAName, "%s", aminoacid[AANum].nameofAA);
     }
     
     sprintf(directory, "%s/Library_%s/AA/%s.txt", datadir, Methodtype, AAName);
     inputFile = fopen(directory, "r");
+	if (!inputFile) {
+		printf("!!ERROR!!: cannot find the parameter file for amino acid %s in %s!\n", AAName, directory);
+		printf("           %s:%i\n", __FILE__, __LINE__);
+		exit(EXIT_FAILURE);
+	}
+
     fgets(buffer, sizeof(buffer), inputFile);
-    
     while (fscanf(inputFile, "%s", buffer) != EOF) {
         
         if (strcmp(buffer, "ATOM") == 0) {
@@ -1074,7 +1083,7 @@ void ScanAA(int AANum, int type) {
                 fscanf(inputFile, "%s", rName);
                 num = FindTargetAtom(AANum, rName);
                 fscanf(inputFile, "%s%lf%s%s", rName, &atom[num].property->mass, atom[num].property->extraProperty[0], atom[num].property->extraProperty[1]);
-                atom[num].property->type = AtomModel(rName);
+                atom[num].property->typeofAtom = AtomModel(rName);
                 
                 /*
                  change the mass of hydrogen back to 1?
@@ -1100,9 +1109,9 @@ void ScanAA(int AANum, int type) {
                 if (tmpInt == FALSE) {
                     //if it is a light hydrogen
                     if (strncmp(rName, "H", 1) == 0 ||
-                        (strcmp(aminoacid[AANum + 1].nameOfAA, "GLY") == 0 && strcmp(rName, "+CB") == 0) ||
-                        (strcmp(aminoacid[AANum].nameOfAA, "GLY") == 0 && strcmp(rName, "CB") == 0) ||
-                        (strcmp(aminoacid[AANum + 1].nameOfAA, "PRO") == 0 && strcmp(rName, "+H") == 0)) {
+                        (strcmp(aminoacid[AANum + 1].nameofAA, "GLY") == 0 && strcmp(rName, "+CB") == 0) ||
+                        (strcmp(aminoacid[AANum].nameofAA, "GLY") == 0 && strcmp(rName, "CB") == 0) ||
+                        (strcmp(aminoacid[AANum + 1].nameofAA, "PRO") == 0 && strcmp(rName, "+H") == 0)) {
                         continue;
                     }
                     printf("!!ERROR!!: protein #%i AA #%i cannot find atom %s in itself or the next AA! check the model library or the coordinate file! %s:%i\n", aminoacid[AANum].proteinNum, AANum - protein[aminoacid[AANum].proteinNum - 1].endAANum, rName, __FILE__, __LINE__);
@@ -1130,7 +1139,7 @@ void ScanAA(int AANum, int type) {
                     warningsum ++;
                     continue;
                 }
-                if (strcmp(rName, "CB") == 0 && strcmp(aminoacid[AANum].nameOfAA, "GLY") == 0) { //GLY has no CB
+                if (strcmp(rName, "CB") == 0 && strcmp(aminoacid[AANum].nameofAA, "GLY") == 0) { //GLY has no CB
                     fgets(buffer, sizeof(buffer), inputFile);
                     continue;
                 }
@@ -1142,7 +1151,7 @@ void ScanAA(int AANum, int type) {
             fscanf(inputFile, "%s%s", rName, buffer);
             num = FindTargetAtom(AANum, rName);
             if (num <= 0) { //GLY has no CB
-                if (!(strcmp(aminoacid[AANum].nameOfAA, "GLY") == 0 && strcmp(rName, "CB") == 0)) {
+                if (!(strcmp(aminoacid[AANum].nameofAA, "GLY") == 0 && strcmp(rName, "CB") == 0)) {
                     printf("!!ERROR!!: cannot find atom %s between %i and %i! check the model library or the coordinate file! %s:%i\n", rName, aminoacid[AANum].startAtomNum, aminoacid[AANum].endAtomNum, __FILE__, __LINE__);
                     exit(EXIT_FAILURE);
                 }
@@ -1211,8 +1220,8 @@ int FindNextBondList(int targetAtom, struct PropertyStr *property, double dmin, 
         if (thisBond->connection == targetAtom) {
             if (thisBond->dmin != dmin ||
                 thisBond->dmax != dmax) {
-                if (strcmp(property->nameOfAA, "PRO") &&
-                    strcmp(atom[targetAtom].property->nameOfAA, "PRO")) {
+                if (strcmp(property->nameofAA, "PRO") &&
+                    strcmp(atom[targetAtom].property->nameofAA, "PRO")) {
                     printf("\n!WARNING!: bond info assignment has something wrong! only PRO will reach here! %i - %i %s:%i\n", targetAtom, property->num, __FILE__, __LINE__);
                     warningsum ++;
                     return 0;
@@ -1476,6 +1485,8 @@ void CreatePotentialMatrix() {
         }
         fclose(input_file);
     }
+    
+    return;
 }
 
 
@@ -1483,14 +1494,22 @@ void CalculateMass() {
     for (int i = 1; i <= totalAminoAcids; i++) {
         aminoacid[i].mass = 0;
         for (int n = aminoacid[i].startAtomNum; n <= aminoacid[i].endAtomNum; n++) {
-            aminoacid[i].mass += atom[n].property->mass;
+            if (strncmp(atom[n].property->name, "H", 1) == 0) {
+                aminoacid[i].mass ++;
+            } else {
+                aminoacid[i].mass += atom[n].property->mass;
+            }
         }
     }
     
     for (int i = 1; i <= numofprotein; i++) {
         protein[i].mass = 0;
         for (int n = protein[i].startAtomNum; n <= protein[i].endAtomNum; n++) {
-            protein[i].mass += atom[n].property->mass;
+            if (strncmp(atom[n].property->name, "H", 1) == 0) {
+                protein[i].mass ++;
+            } else {
+                protein[i].mass += atom[n].property->mass;
+            }
         }
     }
 }
@@ -1517,9 +1536,9 @@ void ReadHB() {
         }
         
         fgets(buffer, sizeof(buffer), input_file);
-        fscanf(input_file, "%s%lf", buffer, &HBPotential.BB);
-        fscanf(input_file, "%s%lf", buffer, &HBPotential.BS);
-        fscanf(input_file, "%s%lf", buffer, &HBPotential.SS);
+        fscanf(input_file, "%s%lf%lf", buffer, &HBPotential.BB_r, &HBPotential.BB_v);
+        fscanf(input_file, "%s%lf%lf", buffer, &HBPotential.BS_r, &HBPotential.BS_v);
+        fscanf(input_file, "%s%lf%lf", buffer, &HBPotential.SS_r, &HBPotential.SS_v);
         fscanf(input_file, "\n");
         
         while (fgets(buffer, sizeof(buffer), input_file)) {
@@ -1553,12 +1572,12 @@ void ReadHB() {
                     struct StepPotenStr *newStep = calloc(1, sizeof(struct StepPotenStr));
                     newStep->d = value[0];
                     newStep->d *= newStep->d;
-                    if (typeNum == 1 || typeNum == 10) {
-                        newStep->e = value[1];
-                    } else if (typeNum <= 5) {
-                        newStep->e = value[1];
-                    } else if (typeNum <= 9) {
-                        newStep->e = value[1];
+                    if (typeNum == 1) {
+                        newStep->e = value[1] * HBPotential.BB_r;
+                    } else if (typeNum <= 5 || typeNum == 10) {
+                        newStep->e = value[1] * HBPotential.BS_r;
+                    } else {
+                        newStep->e = value[1] * HBPotential.SS_r;
                     }
                     
                     if (tmp == 1) {
@@ -1592,20 +1611,22 @@ void ReadHB() {
 
 
 void HBNeighborAssign(int num) {
-    int targetAtom = num;
+    int targetAtom = aminoacid[protein[atom[num].property->sequence.proteinNum - 1].endAANum + atom[num].property->sequence.aminoacidNum].endAtomNum + 1;
+					 //start from the end of the amino acid, so never miss the target
     
-    if (atom[num].property->type == 2) {
+    if (atom[num].property->typeofAtom == 2) {
         
-        while (atom[--targetAtom].property->type != 18);
+        while (atom[--targetAtom].property->typeofAtom != 18);
         atom[num].dynamic->HB.neighbor = targetAtom;
         atom[num].dynamic->HB.role = 'D';
         
-    } else if (atom[num].property->type == 26) {
+    } else if (atom[num].property->typeofAtom == 26) {
         
-        atom[num].dynamic->HB.neighbor = num - 1;
+        while (atom[--targetAtom].property->typeofAtom != 6);
+        atom[num].dynamic->HB.neighbor = targetAtom;
         atom[num].dynamic->HB.role = 'A';
         
-    } else if (strcmp(atom[num].property->nameOfAA, "HIS") == 0) {
+    } else if (strcmp(atom[num].property->nameofAA, "HIS") == 0) {
         
         if (strcmp(atom[num].property->name, "HD1") == 0) {
             while (strcmp(atom[--targetAtom].property->name, "ND1"));
@@ -1615,23 +1636,25 @@ void HBNeighborAssign(int num) {
             while (strcmp(atom[--targetAtom].property->name, "NE2"));
             atom[num].dynamic->HB.neighbor = targetAtom;
             atom[num].dynamic->HB.role = 'D';
-        } /*else if (strcmp(atom[num].property->name, "NE2") == 0) {
-            atom[num].dynamic->HB.neighbor = num - 1;
+        } else if (strcmp(atom[num].property->name, "NE2") == 0) {
+            while (strcmp(atom[--targetAtom].property->name, "CD2"));
+            atom[num].dynamic->HB.neighbor = targetAtom;
             atom[num].dynamic->HB.role = 'A';
-        }*/
+        }
         
-    } else if (strcmp(atom[num].property->nameOfAA, "TYR") == 0) {
+    } else if (strcmp(atom[num].property->nameofAA, "TYR") == 0) {
         
         if (strcmp(atom[num].property->name, "HH") == 0) {
             while (strcmp(atom[--targetAtom].property->name, "OH"));
             atom[num].dynamic->HB.neighbor = targetAtom;
             atom[num].dynamic->HB.role = 'D';
-        } /*else if (strcmp(atom[num].property->name, "OH") == 0) {
-            atom[num].dynamic->HB.neighbor = num - 1;
+        } else if (strcmp(atom[num].property->name, "OH") == 0) {
+            while (strcmp(atom[--targetAtom].property->name, "CZ"));
+            atom[num].dynamic->HB.neighbor = targetAtom;
             atom[num].dynamic->HB.role = 'A';
-        }*/
+        }
         
-    } else if (strcmp(atom[num].property->nameOfAA, "TRP") == 0) {
+    } else if (strcmp(atom[num].property->nameofAA, "TRP") == 0) {
         
         if (strcmp(atom[num].property->name, "HE1") == 0) {
             while (strcmp(atom[--targetAtom].property->name, "NE1"));
@@ -1639,113 +1662,111 @@ void HBNeighborAssign(int num) {
             atom[num].dynamic->HB.role = 'D';
         }
         
-    } else if (strcmp(atom[num].property->nameOfAA, "SER") == 0) {
+    } else if (strcmp(atom[num].property->nameofAA, "SER") == 0) {
         
         if (strcmp(atom[num].property->name, "HG") == 0) {
             while (strcmp(atom[--targetAtom].property->name, "OG"));
             atom[num].dynamic->HB.neighbor = targetAtom;
             atom[num].dynamic->HB.role = 'D';
-        } /*else if (strcmp(atom[num].property->name, "OG") == 0) {
-            atom[num].dynamic->HB.neighbor = num - 1;
+        } else if (strcmp(atom[num].property->name, "OG") == 0) {
+            while (strcmp(atom[--targetAtom].property->name, "CB"));
+            atom[num].dynamic->HB.neighbor = targetAtom;
             atom[num].dynamic->HB.role = 'A';
-        }*/
+        }
         
-    } else if (strcmp(atom[num].property->nameOfAA, "THR") == 0) {
+    } else if (strcmp(atom[num].property->nameofAA, "THR") == 0) {
         
         if (strcmp(atom[num].property->name, "HG1") == 0) {
             while (strcmp(atom[--targetAtom].property->name, "OG1"));
             atom[num].dynamic->HB.neighbor = targetAtom;
             atom[num].dynamic->HB.role = 'D';
-        } /*else if (strcmp(atom[num].property->name, "OG1") == 0) {
-            atom[num].dynamic->HB.neighbor = num - 1;
-            atom[num].dynamic->HB.role = 'A';
-        }*/
-        
-    } else if (strcmp(atom[num].property->nameOfAA, "ASN") == 0) {
-        
-        if (strcmp(atom[num].property->name, "HD21") == 0) {
-            while (strcmp(atom[--targetAtom].property->name, "ND2"));
+        } else if (strcmp(atom[num].property->name, "OG1") == 0) {
+            while (strcmp(atom[--targetAtom].property->name, "CB"));
             atom[num].dynamic->HB.neighbor = targetAtom;
-            atom[num].dynamic->HB.role = 'D';
-        } else if (strcmp(atom[num].property->name, "HD22") == 0) {
+            atom[num].dynamic->HB.role = 'A';
+        }
+        
+    } else if (strcmp(atom[num].property->nameofAA, "ASN") == 0) {
+        
+        if (strcmp(atom[num].property->name, "HD21") == 0 ||
+            strcmp(atom[num].property->name, "HD22") == 0) {
             while (strcmp(atom[--targetAtom].property->name, "ND2"));
             atom[num].dynamic->HB.neighbor = targetAtom;
             atom[num].dynamic->HB.role = 'D';
         } else if (strcmp(atom[num].property->name, "OD1") == 0) {
-            atom[num].dynamic->HB.neighbor = num - 1;
+            while (strcmp(atom[--targetAtom].property->name, "CG"));
+            atom[num].dynamic->HB.neighbor = targetAtom;
             atom[num].dynamic->HB.role = 'A';
         }
         
-    } else if (strcmp(atom[num].property->nameOfAA, "GLN") == 0) {
+    } else if (strcmp(atom[num].property->nameofAA, "GLN") == 0) {
         
-        if (strcmp(atom[num].property->name, "HE21") == 0) {
-            while (strcmp(atom[--targetAtom].property->name, "NE2"));
-            atom[num].dynamic->HB.neighbor = targetAtom;
-            atom[num].dynamic->HB.role = 'D';
-        } else if (strcmp(atom[num].property->name, "HE22") == 0) {
+        if (strcmp(atom[num].property->name, "HE21") == 0 ||
+            strcmp(atom[num].property->name, "HE22") == 0) {
             while (strcmp(atom[--targetAtom].property->name, "NE2"));
             atom[num].dynamic->HB.neighbor = targetAtom;
             atom[num].dynamic->HB.role = 'D';
         } else if (strcmp(atom[num].property->name, "OE1") == 0) {
-            atom[num].dynamic->HB.neighbor = num - 1;
+            while (strcmp(atom[--targetAtom].property->name, "CD"));
+            atom[num].dynamic->HB.neighbor = targetAtom;
             atom[num].dynamic->HB.role = 'A';
         }
         
-    } else if (strcmp(atom[num].property->nameOfAA, "LYS") == 0) {
+    } else if (strcmp(atom[num].property->nameofAA, "LYS") == 0) {
         
-        if (strcmp(atom[num].property->name, "HZ1") == 0) {
-            while (strcmp(atom[--targetAtom].property->name, "NZ"));
-            atom[num].dynamic->HB.neighbor = targetAtom;
-            atom[num].dynamic->HB.role = 'D';
-        } else if (strcmp(atom[num].property->name, "HZ2") == 0) {
-            while (strcmp(atom[--targetAtom].property->name, "NZ"));
-            atom[num].dynamic->HB.neighbor = targetAtom;
-            atom[num].dynamic->HB.role = 'D';
-        } else if (strcmp(atom[num].property->name, "HZ3") == 0) {
+        if (strcmp(atom[num].property->name, "HZ1") == 0 ||
+            strcmp(atom[num].property->name, "HZ2") == 0 ||
+            strcmp(atom[num].property->name, "HZ3") == 0) {
             while (strcmp(atom[--targetAtom].property->name, "NZ"));
             atom[num].dynamic->HB.neighbor = targetAtom;
             atom[num].dynamic->HB.role = 'D';
         }
         
-    } else if (strcmp(atom[num].property->nameOfAA, "ARG") == 0) {
+    } else if (strcmp(atom[num].property->nameofAA, "ARG") == 0) {
         
         if (strcmp(atom[num].property->name, "HE") == 0) {
             while (strcmp(atom[--targetAtom].property->name, "NE"));
             atom[num].dynamic->HB.neighbor = targetAtom;
             atom[num].dynamic->HB.role = 'D';
-        } else if (strcmp(atom[num].property->name, "HH11") == 0) {
+        } else if (strcmp(atom[num].property->name, "HH11") == 0 ||
+                   strcmp(atom[num].property->name, "HH12") == 0) {
             while (strcmp(atom[--targetAtom].property->name, "NH1"));
             atom[num].dynamic->HB.neighbor = targetAtom;
             atom[num].dynamic->HB.role = 'D';
-        } else if (strcmp(atom[num].property->name, "HH12") == 0) {
-            while (strcmp(atom[--targetAtom].property->name, "NH1"));
-            atom[num].dynamic->HB.neighbor = targetAtom;
-            atom[num].dynamic->HB.role = 'D';
-        } else if (strcmp(atom[num].property->name, "HH21") == 0) {
-            while (strcmp(atom[--targetAtom].property->name, "NH2"));
-            atom[num].dynamic->HB.neighbor = targetAtom;
-            atom[num].dynamic->HB.role = 'D';
-        } else if (strcmp(atom[num].property->name, "HH22") == 0) {
+        } else if (strcmp(atom[num].property->name, "HH21") == 0 ||
+                   strcmp(atom[num].property->name, "HH22") == 0) {
             while (strcmp(atom[--targetAtom].property->name, "NH2"));
             atom[num].dynamic->HB.neighbor = targetAtom;
             atom[num].dynamic->HB.role = 'D';
         }
         
-    } else if (strcmp(atom[num].property->nameOfAA, "ASP") == 0) {
+    } else if (strcmp(atom[num].property->nameofAA, "ASP") == 0) {
         
-        if (strcmp(atom[num].property->name, "OD1") == 0) {
-            atom[num].dynamic->HB.neighbor = num - 1;
+        if (strcmp(atom[num].property->name, "OD1") == 0 ||
+            strcmp(atom[num].property->name, "OD2") == 0) {
+            while (strcmp(atom[--targetAtom].property->name, "CG"));
+            atom[num].dynamic->HB.neighbor = targetAtom;
             atom[num].dynamic->HB.role = 'A';
         }
         
-    } else if (strcmp(atom[num].property->nameOfAA, "GLU") == 0) {
+    } else if (strcmp(atom[num].property->nameofAA, "GLU") == 0) {
         
-        if (strcmp(atom[num].property->name, "OE1") == 0) {
-            atom[num].dynamic->HB.neighbor = num - 1;
+        if (strcmp(atom[num].property->name, "OE1") == 0 ||
+            strcmp(atom[num].property->name, "OE2") == 0) {
+            while (strcmp(atom[--targetAtom].property->name, "CD"));
+            atom[num].dynamic->HB.neighbor = targetAtom;
             atom[num].dynamic->HB.role = 'A';
         }
         
-    } else if (strcmp(atom[num].property->nameOfAA, "SOL") == 0) {
+    } else if (strcmp(atom[num].property->nameofAA, "CYS") == 0) {
+        
+        if (strcmp(atom[num].property->name, "SG") == 0) {
+            while (strcmp(atom[--targetAtom].property->name, "CB"));
+            atom[num].dynamic->HB.neighbor = targetAtom;
+            atom[num].dynamic->HB.role = 'S';
+        }
+        
+    } else if (strcmp(atom[num].property->nameofAA, "SOL") == 0) {
         
         if (strcmp(atom[num].property->name, "OW") == 0) {
             atom[num].dynamic->HB.neighbor = num;
@@ -1757,6 +1778,12 @@ void HBNeighborAssign(int num) {
             atom[num].dynamic->HB.neighbor = num - 2;
             atom[num].dynamic->HB.role = 'D';
         }
+    }
+    
+    if (targetAtom < aminoacid[atom[num].property->sequence.aminoacidNum].startAtomNum) {
+        printf("!!ERROR!!: atom %2i(%2i%2s) cannot find its neighbor!\n", num, atom[num].property->sequence.aminoacidNum, atom[num].property->name);
+        printf("           %s:%i\n", __FILE__, __LINE__);
+        exit(EXIT_FAILURE);
     }
 }
 
@@ -1834,8 +1861,8 @@ void ReadWall(void) {
                wall[0].property->extraProperty[0],
                wall[0].property->extraProperty[1]);
         
-        wall[0].property->type = AtomModel(rName);
-        sprintf(wall[0].property->nameOfAA, "Wall");
+        wall[0].property->typeofAtom = AtomModel(rName);
+        sprintf(wall[0].property->nameofAA, "Wall");
         
         wall[0].dynamic->coordinate[1] = boxDimension[1] / 2;
         wall[0].dynamic->coordinate[2] = boxDimension[2] / 2;
@@ -1911,8 +1938,8 @@ void ReadWall(void) {
                    obstObj.obst[i].property->extraProperty[0],
                    obstObj.obst[i].property->extraProperty[1]);
             
-            obstObj.obst[i].property->type = AtomModel(rName);
-            sprintf(obstObj.obst[i].property->nameOfAA, "Wall");
+            obstObj.obst[i].property->typeofAtom = AtomModel(rName);
+            sprintf(obstObj.obst[i].property->nameofAA, "Wall");
             
             obstObj.obst[i].dynamic->coordinate[1] = obstObj.position[i][1];
             obstObj.obst[i].dynamic->coordinate[2] = obstObj.position[i][2];
@@ -1937,8 +1964,8 @@ void ReadWall(void) {
                tunlObj.tunnel.property->extraProperty[0],
                tunlObj.tunnel.property->extraProperty[1]);
         
-        tunlObj.tunnel.property->type = AtomModel(rName);
-        sprintf(tunlObj.tunnel.property->nameOfAA, "Wall");
+        tunlObj.tunnel.property->typeofAtom = AtomModel(rName);
+        sprintf(tunlObj.tunnel.property->nameofAA, "Wall");
         
         tunlObj.tunnel.dynamic->coordinate[1] = 0;
         tunlObj.tunnel.dynamic->coordinate[2] = boxDimension[2] / 2;
@@ -1985,15 +2012,15 @@ int ChargeAACheck(char *AAName) {
     int modelNum = AAModel(AAName);
     
     switch (modelNum) {
-        case 17:
+        case 2:
             return chargeAA[ARG];
-        case 9:
+        case 4:
             return chargeAA[ASP];
-        case 10:
+        case 7:
             return chargeAA[GLU];
-        case 12:
+        case 9:
             return chargeAA[HIS];
-        case 13:
+        case 12:
             return chargeAA[LYS];
         default:
             return -1;
@@ -2003,9 +2030,9 @@ int ChargeAACheck(char *AAName) {
 
 void InitializeCharge(void) {
     for (int i = 1; i <= atomnum; i ++) {
-        if (!strcmp(atom[i].property->extraProperty[0], "+") && !ChargeAACheck(atom[i].property->nameOfAA)) {
+        if (!strcmp(atom[i].property->extraProperty[0], "+") && !ChargeAACheck(atom[i].property->nameofAA)) {
             atom[i].property->charge = 1;
-        } else if (!strcmp(atom[i].property->extraProperty[0], "-") && !ChargeAACheck(atom[i].property->nameOfAA)) {
+        } else if (!strcmp(atom[i].property->extraProperty[0], "-") && !ChargeAACheck(atom[i].property->nameofAA)) {
             atom[i].property->charge = -1;
         }
     }
@@ -2013,14 +2040,14 @@ void InitializeCharge(void) {
     if (!chargeAA[TER]) {
         for (int i = 1; i <= numofprotein; i ++) {
             for (int n = protein[i].startAtomNum; n <= protein[i].endAtomNum; n ++) {
-                if (atom[n].property->type == 18) {
+                if (atom[n].property->typeofAtom == 18) {
                     atom[n].property->charge = 1;
                     break;
                 }
             }
             
             for (int n = protein[i].endAtomNum; n >= protein[i].startAtomNum; n --) {
-                if (atom[n].property->type == 26) {
+                if (atom[n].property->typeofAtom == 26) {
                     atom[n].property->charge = -1;
                     break;
                 }

@@ -79,7 +79,7 @@ void CalCluster(int id) {
             exit(EXIT_FAILURE);
         }
         
-        totalFrame = (sectInfo[sectNum].frameCount + sectInfo[sectNum].oldTime) / sectInfo[sectNum].outputRate;
+        totalFrame = (sectInfo[sectNum].frameCount + sectInfo[sectNum].oldTime) / sectInfo[sectNum].outputRate + 1;
         for (step = sectInfo[sectNum].oldTime / sectInfo[sectNum].outputRate; step < totalFrame; step ++) {
             if (ReadGro(inputTrjFile) || ReadConnectionMap(inputCntFile)) break;
             

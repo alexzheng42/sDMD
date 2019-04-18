@@ -18,13 +18,18 @@
 
 #define min(x, y) (x < y) ? x : y
 
+struct REMDTempStr {
+    int num;
+    double T;
+};
+
 double **probability;
 
 void server(int *socket, int number_of_connects);
-void collect(int *sockets, double *Epot, double *T, int number_of_connects);
-void rearrange(double *Epot, double *T, int number_of_connects);
-void swap(double *x, double *y);
-void distribute(int *sockets, double *T, int number_of_connects);
+void collect(int *sockets, double *Epot, struct REMDTempStr *T, int number_of_connects);
+void rearrange(double *Epot, struct REMDTempStr *T, int number_of_connects);
+void swap(struct REMDTempStr *x, struct REMDTempStr *y);
+void distribute(int *sockets, struct REMDTempStr *T, int number_of_connects);
 int open_connections(int *sockets, int connects_wanted, int port_number, int timeout);
 int close_connections(int *sockets, int connections_open);
 
@@ -43,7 +48,7 @@ int main(int argc, char *argv[]) {
 	long seed;
 
 	if (argc != 4) {
-		fprintf(stderr, "!usage: %s port_number #_of_connections seed\n", argv[0]);
+		fprintf(stderr, "!usage: %s [port_number] [#_of_connections] [seed]\n", argv[0]);
 		exit(0);
 	}
 
@@ -85,20 +90,21 @@ int main(int argc, char *argv[]) {
 }
 
 void server(int *sockets, int number_of_connects) {
-	double *Epot, *T;
+	double *Epot;
+    struct REMDTempStr *T;
 
 	if ((Epot = calloc(number_of_connects, sizeof(double))) == 0) {
 		perror("calloc");
 		exit(1);
 	}
 
-	if ((T = calloc(number_of_connects, sizeof(double))) == 0) {
+	if ((T = calloc(number_of_connects, sizeof(struct REMDTempStr))) == 0) {
 		perror("calloc");
 		exit(1);
 	}
 
 	collect(sockets, Epot, T, number_of_connects);
-	while (T[0] != 0.0) {
+	while (T[0].T != 0.0) {
 		rearrange(Epot, T, number_of_connects);
 		distribute(sockets, T, number_of_connects);
 		collect(sockets, Epot, T, number_of_connects);
@@ -109,7 +115,7 @@ void server(int *sockets, int number_of_connects) {
 	free(T);
 }
 
-void collect(int *sockets, double *Epot, double *T, int number_of_connects) {
+void collect(int *sockets, double *Epot, struct REMDTempStr *T, int number_of_connects) {
 	static int i;
 	static long recv_size;
 
@@ -123,8 +129,8 @@ void collect(int *sockets, double *Epot, double *T, int number_of_connects) {
 	}
 
 	for (i = 0; i < number_of_connects; i++) {
-		recv_size = read(sockets[i], &T[i], sizeof(double));
-		if (recv_size != sizeof(double)) {
+		recv_size = read(sockets[i], &T[i], sizeof(struct REMDTempStr));
+		if (recv_size != sizeof(struct REMDTempStr)) {
 			perror("recv");
 			printf("%s:%i\n", __FILE__, __LINE__);
 			exit(1);
@@ -132,7 +138,7 @@ void collect(int *sockets, double *Epot, double *T, int number_of_connects) {
 	}
 }
 
-void rearrange(double *Epot, double *T, int number_of_connects) {
+void rearrange(double *Epot, struct REMDTempStr *T, int number_of_connects) {
 	static int i;
 	static int first, second;
 	static double dE;
@@ -146,8 +152,8 @@ void rearrange(double *Epot, double *T, int number_of_connects) {
             continue;
         }
         
-        beta1 = 1 / T[first];
-        beta2 = 1 / T[second];
+        beta1 = 1 / T[first].T;
+        beta2 = 1 / T[second].T;
         
 		dE = (beta2 - beta1) * (Epot[first] - Epot[second]);
 
@@ -186,19 +192,19 @@ void rearrange(double *Epot, double *T, int number_of_connects) {
 #endif
 }
 
-void swap(double *x, double *y) {
-	static double z;
+void swap(struct REMDTempStr *x, struct REMDTempStr *y) {
+	static struct REMDTempStr z;
 	z = *x;
 	*x = *y;
 	*y = z;
 }
 
-void distribute(int *sockets, double *T, int number_of_connects) {
+void distribute(int *sockets, struct REMDTempStr *T, int number_of_connects) {
 	static int i;
 	static long size;
 
 	for (i = 0; i < number_of_connects; i++) {
-		if ((size = write(sockets[i], &T[i], sizeof(double))) != sizeof(double)) {
+		if ((size = write(sockets[i], &T[i], sizeof(struct REMDTempStr))) != sizeof(struct REMDTempStr)) {
 			perror("send");
 			exit(1);
 		}

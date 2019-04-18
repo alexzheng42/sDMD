@@ -235,8 +235,8 @@ int HBEvent(struct AtomStr **atomLibrary, struct AtomStr *HB_i, struct AtomStr *
         HB_i->dynamic->HB.bondConnection = targetAtom_j;
         HB_j->dynamic->HB.bondConnection = targetAtom_i;
         
-        HB_i->property->type = AtomTypeChange(HB_i->property->type, 1);
-        HB_j->property->type = AtomTypeChange(HB_j->property->type, 1);
+        HB_i->property->typeofAtom = AtomTypeChange(HB_i->property->typeofAtom, 1);
+        HB_j->property->typeofAtom = AtomTypeChange(HB_j->property->typeofAtom, 1);
         
 #ifdef VIS
         if (visual) {
@@ -265,8 +265,8 @@ int HBEvent(struct AtomStr **atomLibrary, struct AtomStr *HB_i, struct AtomStr *
         HB_i->dynamic->HB.bondConnection = 0;
         HB_j->dynamic->HB.bondConnection = 0;
         
-        HB_i->property->type = AtomTypeChange(HB_i->property->type, 0);
-        HB_j->property->type = AtomTypeChange(HB_j->property->type, 0);
+        HB_i->property->typeofAtom = AtomTypeChange(HB_i->property->typeofAtom, 0);
+        HB_j->property->typeofAtom = AtomTypeChange(HB_j->property->typeofAtom, 0);
         
 #ifdef VIS
         if (visual) {
@@ -327,22 +327,25 @@ void WallEvent(struct AtomStr *targetAtom) {
     double v_ij[4];
     double b_ij, d_ij2, r_ij[4], term[4];
     double phi, potential, reducedMass;
-    double *speed_i = NULL, *speed_j = NULL;
+    double *targetSpeed = targetAtom->dynamic->velocity;
+    double speed_i[4] = {0}, speed_j[4] = {0};
     double position_i[4] = {0}, position_j[4] = {0};
     struct AtomStr *thisWall = NULL;
     
     TRANSFER_VECTOR(position_i, targetAtom->dynamic->coordinate);
-    speed_i = targetAtom->dynamic->velocity;
+    TRANSFER_VECTOR(speed_i, targetAtom->dynamic->velocity);
     
     if (strcmp(wallExist, "smooth") == 0) {
         thisWall = &wall[0];
         TRANSFER_VECTOR(position_j, thisWall->dynamic->coordinate);
-        speed_j = thisWall->dynamic->velocity;
+        TRANSFER_VECTOR(speed_j, thisWall->dynamic->velocity);
         
         if (strncmp(wallType, "parallel", 1) == 0) {
             position_i[1] = position_i[3] = 0;
+               speed_i[1] =    speed_i[3] = 0;
         } else if (strncmp(wallType, "cylinder", 1) == 0) {
             position_i[1] = 0;
+               speed_i[1] = 0;
         }
     }
     
@@ -392,7 +395,7 @@ void WallEvent(struct AtomStr *targetAtom) {
     }
     
     FACTOR_PROD(phi, r_ij, term);
-    DOT_PLUS(speed_i, term, targetAtom->dynamic->velocity);
+    DOT_PLUS(targetSpeed, term, targetAtom->dynamic->velocity);
 
     return;
 }
@@ -444,22 +447,23 @@ void ObstEvent(struct AtomStr *targetAtom) {
     double v_ij[4];
     double b_ij, d_ij2, r_ij[4], term[4];
     double phi, potential, reducedMass;
-    double *speed_i = NULL, *speed_j = NULL;
+    double *targetSpeed = targetAtom->dynamic->velocity;
+    double speed_i[4] = {0}, speed_j[4] = {0};
     double position_i[4] = {0}, position_j[4] = {0};
     struct AtomStr *thisWall = &obstObj.obst[targetAtom->dynamic->event.partner / -10];
     
     int dim = (targetAtom->dynamic->event.partner * -1) % 10;
     
     TRANSFER_VECTOR(position_i, targetAtom->dynamic->coordinate);
-    TRANSFER_VECTOR(position_j,   thisWall->dynamic->coordinate);
+    TRANSFER_VECTOR(speed_i,    targetAtom->dynamic->velocity);
 
-    speed_i = targetAtom->dynamic->velocity;
-    speed_j =   thisWall->dynamic->velocity;
+    TRANSFER_VECTOR(position_j,   thisWall->dynamic->coordinate);
+    TRANSFER_VECTOR(speed_j,      thisWall->dynamic->velocity);
     
     for (int i = 1; i <= 3; i ++) {
         if (dim != i) {
-            position_i[i] = 0;
-            position_j[i] = 0;
+            position_i[i] = 0; speed_i[i] = 0;
+            position_j[i] = 0; speed_j[i] = 0;
         }
     }
     
@@ -509,7 +513,7 @@ void ObstEvent(struct AtomStr *targetAtom) {
     }
     
     FACTOR_PROD(phi, r_ij, term);
-    DOT_PLUS(speed_i, term, targetAtom->dynamic->velocity);
+    DOT_PLUS(targetSpeed, term, targetAtom->dynamic->velocity);
     
     return;
 }
@@ -520,16 +524,19 @@ void TunnelEvent(struct AtomStr *targetAtom) {
     double v_ij[4];
     double b_ij, d_ij2, r_ij[4], term[4];
     double phi, potential, reducedMass;
-    double *speed_i = NULL, *speed_j = NULL;
+    double *targetSpeed = targetAtom->dynamic->velocity;
+    double speed_i[4] = {0}, speed_j[4] = {0};
     double position_i[4] = {0}, position_j[4] = {0};
     struct AtomStr *thisWall = &tunlObj.tunnel;
     
     int num = targetAtom->dynamic->event.partner / -10000;
     TRANSFER_VECTOR(position_i, targetAtom->dynamic->coordinate);
     TRANSFER_VECTOR(position_j, tunlObj.position[num]);
-    speed_i = targetAtom->dynamic->velocity;
-    speed_j =   thisWall->dynamic->velocity;
+    TRANSFER_VECTOR(speed_i, targetAtom->dynamic->velocity);
+    TRANSFER_VECTOR(speed_j,   thisWall->dynamic->velocity);
+
     position_i[1] = position_j[1]; //end position
+       speed_i[1] =    speed_j[1] = 0;
 
     DOT_MINUS(position_i, position_j, r_ij);
     DOT_MINUS(speed_i, speed_j, v_ij);
@@ -577,7 +584,7 @@ void TunnelEvent(struct AtomStr *targetAtom) {
     }
     
     FACTOR_PROD(phi, r_ij, term);
-    DOT_PLUS(speed_i, term, targetAtom->dynamic->velocity);
+    DOT_PLUS(targetSpeed, term, targetAtom->dynamic->velocity);
     
     return;
 }
@@ -733,6 +740,14 @@ void InteractionEvent (struct AtomStr *targetAtom, struct AtomStr *partner, stru
         double r_c12_neighbor_j[4], r_neighbor_j2;
         double accumPoten[6], tmp = 0;
         
+        //the HB neighbors cannot be occupied before the HB forms
+        if ((connectionMap[targetAtom->property->num][HBNeighbor_j->property->num] & NEIGHBOR_CONNECT ||
+             connectionMap[   partner->property->num][HBNeighbor_i->property->num] & NEIGHBOR_CONNECT) &&
+            targetAtom->dynamic->event.subEventType == TBDHBForm) {
+            targetAtom->dynamic->HB.interactionType = HBSkip;
+            return;
+        }
+        
         //-------------------------
         //adjust neighbor PBC
         TRANSFER_VECTOR(position_neighbor_i, HBNeighbor_i->dynamic->coordinate);
@@ -780,10 +795,10 @@ void InteractionEvent (struct AtomStr *targetAtom, struct AtomStr *partner, stru
         FindPair(HBNeighbor_i, partner,    "neighbor", tmp, r_neighbor_j2, &temp, &temp, &neighborLowerPotential, &neighborUpperPotential, &accumPoten[5], targetAtom, 0);
         
         if (targetAtom->dynamic->event.subEventType == TBDHBForm) { //form
-            potential -= (HBModel(targetAtom, partner) == 1) ? HBPotential.BB : HBPotential.BS;
+			potential -= HBBarrier(targetAtom, partner); //HB barrier
             potential += (accumPoten[2] - accumPoten[0] + accumPoten[3] - accumPoten[1] + accumPoten[4] + accumPoten[5]);
         } else if (targetAtom->dynamic->event.subEventType == TBDHBBrik) { //break
-            potential += (HBModel(targetAtom, partner) == 1) ? HBPotential.BB : HBPotential.BS;
+            potential += HBBarrier(targetAtom, partner); //HB barrier
             potential += (accumPoten[0] - accumPoten[2] + accumPoten[1] - accumPoten[3] - accumPoten[4] - accumPoten[5]);
         } else {
             printf("!ERROR!: HB event type has something wrong!\n");
@@ -954,4 +969,28 @@ double HBEnergyChange(struct AtomStr *targetAtom, int skipAtom, char *type, list
     }
     
     return energyChange;
+}
+
+double HBBarrier(struct AtomStr *atom1, struct AtomStr *atom2) {
+    struct AtomStr *switcher;
+    
+    if (atom1->dynamic->HB.role == 'A' ||
+        atom1->dynamic->HB.role == 'S') { //atom1 -> donator, atom2 -> acceptor
+        switcher = atom1;
+        atom1 = atom2;
+        atom2 = switcher;
+    }
+    
+    int atom1_OrigType = AtomTypeChange(atom1->property->typeofAtom, 0);
+    int atom2_OrigType = AtomTypeChange(atom2->property->typeofAtom, 0);
+    
+    if (atom1_OrigType == 2 /*HB*/ &&
+        atom2_OrigType == 26 /*OZB*/) {
+        return HBPotential.BB_v;
+    } else if (atom1_OrigType != 2 &&
+               atom2_OrigType != 26) {
+        return HBPotential.SS_v;
+    } else {
+        return HBPotential.BS_v;
+    }
 }

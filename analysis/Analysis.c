@@ -23,7 +23,7 @@ double cellNum[4] = {0};
 double cellSize[4] = {0};
 
 char path[1024];
-char names[NumofFileType][256] = {"SysInfo.dat", "", "", "out_log.txt", "out_REMD.txt", "rPBCGRO.gro", "Energy.txt", "HBInfo.txt", "AAMark.txt", "AggNum.txt", "RG.txt", "RMSD.txt", "PotMap.txt"};
+char names[NumofFileType][256] = {"SysInfo.dat", "", "", "out_log.txt", "out_REMD.txt", "rPBCGRO.gro", "Energy.txt", "HBInfo.txt", "AAMark.txt", "AggNum.txt", "RG.txt", "RMSD.txt", "PotMap.txt", "PotMap_T.txt", "PMFMap_T.txt"};
 char obstDir[1024] = "NUll";
 char targetPeptideNum[16] = "";
 
@@ -31,8 +31,8 @@ struct FileStr **files;
 struct AAStr *aminoacid;
 struct PepStr *protein;
 struct AtomStr *atom;
-struct ConstraintStr potentialPairCollision[32][32];
-struct ConstraintStr potentialPairHB[11][32][32];
+struct ConstraintStr potentialPairCollision[NATOMTYPE + 1][NATOMTYPE + 1];
+struct ConstraintStr potentialPairHB[12][NATOMTYPE + 1][NATOMTYPE + 1];
 struct HBPotentialStr HBPotential;
 struct REMDStr RE = {.mark = 0, .numReplica = -1};
 struct FileListStr fileList = {.count = 0};
@@ -138,6 +138,7 @@ void Initialization(int argc, const char *argv[]) {
                 printf("-RG         calculate radius of gyration\n");
                 printf("-MSD        calculate MSD\n");
                 printf("-RMSD       (require -ref) calculate root-mean-square deviation\n");
+                printf("-PotMap     (require -ref) calculate PE surface WRT RMSD (need 2x refs)\n");
                 printf("-Ramach     (require -HB)  plot Ramachandran plots for each amino acid\n");
                 printf("-ConMap     (require -HB)  plot contact maps for atoms and amino acids\n");
                 printf("-REMD       analyze REMD data. follow the flags below:\n");
@@ -146,8 +147,11 @@ void Initialization(int argc, const char *argv[]) {
                 printf("  -aHB      (optional) use alpha HB number as the reaction coordinate\n");
                 printf("  -bHB      (optional) use beta HB number as the reaction coordinate\n");
                 printf("  -tHB      (optional) use total HB number as the reaction coordinate\n");
+                printf("  -rmsd     (optional) use RMSD as the reaction coordinate (require -RMSD & -ref)\n");
                 printf("  -maxE     (optional) max value of potential energy (most negative). default -150\n");
                 printf("  -minE     (optional) min value of potential energy (least negative). default 0\n");
+                printf("  -maxRC    (optional) max value of reaction coordinate. default 10\n");
+                printf("  -minRC    (optional) min value of reaction coordinate. default 0\n");
                 printf("  -rate     (optional) data dumping rate, unit is time. default 10\n");
                 printf("  -temp     (optional) target temperature. default 300\n");
                 printf("  -st       (optional) start frame of analyzing. default 0\n");

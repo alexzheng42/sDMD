@@ -17,6 +17,7 @@
 #define TRUE      1
 #define FALSE     0
 #define INVALID  -111
+#define NATOMTYPE 32
 #define BOLTZMANN 0.0019872041 //kcal / mol / K
 
 #define bondConnect             0b00001
@@ -130,6 +131,8 @@ enum EFileType {
     outRG,
     outRMSD,
     outPotMap,
+    outPotMap_T,
+    outPMFMap_T,
     NumofFileType
 };
 
@@ -196,9 +199,9 @@ struct HBStr {
 
 struct HBPotentialStr //B: Backbone, S: Sidechain
 {
-    double BB;
-    double SS;
-    double BS;
+    double BB_r, BB_v;
+    double SS_r, SS_v;
+    double BS_r, BS_v;
 };
 
 struct HBNeighborStr{
@@ -218,11 +221,12 @@ struct InteractionEventStr {
 };
 
 struct PropertyStr {
-    char name[5];
-    char extraProperty[2][10];
-    char nameOfAA[5];
+    char name[8];
+    char extraProperty[2][16];
+    char nameofAA[8];
     int num;
-    int type;
+    int typeofAtom;
+	int typeofAA;
     double charge;
     double mass;
     double color[3];
@@ -246,7 +250,8 @@ struct AtomStr {
 };
 
 struct AAStr {
-    char nameOfAA[5];
+    char nameofAA[5];
+	int type;
     int startAtomNum;
     int endAtomNum;
     int proteinNum;
@@ -266,6 +271,7 @@ struct HBType {
     int helix_310;
     int helix_pi;
     int beta;
+    int SS;
     int other;
     int total;
 };
@@ -379,17 +385,12 @@ struct EnergyReadStr {
 
 struct HBReadStr {
     double step;
-    int alpha;
-    int a310;
-    int pi;
-    int beta;
-    int other;
-    int totl;
+    struct HBType type;
 };
 
 struct RMSDReadStr {
     double step;
-    double vRMSD;
+    double vRMSD[2];
 };
 
 
@@ -418,8 +419,8 @@ extern struct AAStr *aminoacid;
 extern struct PepStr *protein;
 extern struct AtomStr *atom;
 extern struct HBType HBSum;
-extern struct ConstraintStr potentialPairCollision[32][32];
-extern struct ConstraintStr potentialPairHB[11][32][32];
+extern struct ConstraintStr potentialPairCollision[NATOMTYPE + 1][NATOMTYPE + 1];
+extern struct ConstraintStr potentialPairHB[12][NATOMTYPE + 1][NATOMTYPE + 1];
 extern struct HBPotentialStr HBPotential;
 extern struct REMDStr RE;
 extern struct FileListStr fileList;
@@ -439,6 +440,7 @@ void EnergyInfo(int id);
 void RGInfo(int id);
 void RMSDInfo(int id);
 void PESurfaceInfo(int id);
+void PESurfaceInfoPerT(void);
 void EstCell(void);
 void LinkList(void);
 void PrintProcess(long step);
@@ -453,5 +455,6 @@ int CheckHBConnection(int thisAtomNum);
 int AtomModel(char *type);
 int ReadEnergyFile(FILE *EnergyInputFile, struct EnergyReadStr *thisE);
 int ReadHBFile(FILE *HBInputFile, struct HBReadStr *thisHB);
-int ReadRMSDFile(FILE *RMSDInputFile, struct RMSDReadStr *thisRMSD, int tCol);
+int ReadRMSDFile(FILE *RMSDInputFile, struct RMSDReadStr *thisRMSD);
+int ReadREMDTempFile(FILE *REMDTempFile);
 double absvalue_vector(double * vector);

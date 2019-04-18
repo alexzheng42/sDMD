@@ -30,15 +30,12 @@
 #define NATOMTYPE     32
 #define EXTEND_RATIO  0.95 //make sure the cut off radius is less than the subcell length
 
-#define THERMO_AND    6.0 //keep the frequency about 1%
-#define THERMO_GEL    5.0
-
 #ifndef M_PI
 #define M_PI 3.14159265358979323846264338327950288
 #endif
 
 #ifdef DEBUG_RANDOM
-#define RANDOM_SEED 1547620899
+#define RANDOM_SEED 1551619393
 #endif
 
 /*
@@ -275,9 +272,9 @@ enum FileType {
 
 struct HBPotentialStr //B: Backbone, S: Sidechain
 {
-    double BB;
-    double SS;
-    double BS;
+    double BB_r, BB_v;
+    double SS_r, SS_v;
+    double BS_r, BS_v;
 };
 
 struct AtomSeqStr {
@@ -325,11 +322,12 @@ struct InteractionEventStr {
 };
 
 struct PropertyStr {
-    char name[5];
-    char extraProperty[2][10];
-    char nameOfAA[5];
+    char name[8];
+    char extraProperty[2][16];
+    char nameofAA[8];
     int num;
-    int type;
+    int typeofAtom;
+	int typeofAA;
     double charge;
     double mass;
     double color[3];
@@ -360,7 +358,8 @@ struct AtomStr {
 };
 
 struct AAStr {
-    char nameOfAA[5];
+    char nameofAA[5];
+    int type;
     int startAtomNum;
     int endAtomNum;
     int proteinNum;
@@ -408,8 +407,14 @@ struct ThreadInfoStr {
 
 struct PreCalObjStr {
     int eventStatus;
-    int renewList[4];
+    int renewList[64];
     struct ThreadStr *data;
+};
+
+
+struct REMDTempStr {
+    int num;
+    double T;
 };
 
 
@@ -417,9 +422,9 @@ struct REMDStr {
     int flag;
     int REMD_PortNum;
     int REMD_OutputRate;
-    double REMD_T;
     char REMD_ServerName[50];
     char REMD_ExtraName[50];
+    struct REMDTempStr REMD_Temperature;
 };
 
 
@@ -569,7 +574,7 @@ extern int nthCheck, nthNode;
 //-----------------
 //potential pair
 extern struct ConstraintStr potentialPairCollision[NATOMTYPE + 1][NATOMTYPE + 1];
-extern struct ConstraintStr potentialPairHB[11][NATOMTYPE + 1][NATOMTYPE + 1];
+extern struct ConstraintStr potentialPairHB[12][NATOMTYPE + 1][NATOMTYPE + 1];
 extern struct HBPotentialStr HBPotential;
 
 
@@ -657,10 +662,12 @@ void InputData(int argc, const char * argv[]);
 //---------------------------------------------
 //models
 //---------------------------------------------
+int FindNumInAA(char *);
 int AAModel(char *);
 int AtomModel(char *);
 int HBModel(struct AtomStr *, struct AtomStr *);
 int NeighborModel(char *, char *);
+double HBBarrier(struct AtomStr *atom1, struct AtomStr *atom2);
 //---------------------------------------------
 
 
@@ -688,7 +695,7 @@ int ProcessEvent(int *threadRenewList, struct ThreadStr *thisThread);
 int ThreadProcess(void);
 int DoEvent(struct ThreadStr *thisThread);
 int HazardCheck(struct AtomStr *oldTargetAtom, struct AtomStr *oldPartner, struct AtomStr *oldTargetNeighbor, struct AtomStr *oldPartnerNeighbor, struct ThreadStr *thisThread);
-void CommitEvent(struct AtomStr **destLibrary, struct AtomStr *newTargetAtom, struct AtomStr *newPartnerAtom, struct AtomStr *oldTargetAtom, struct AtomStr *oldPartnerAtom, struct AtomStr *oldTargetNeighbor, struct AtomStr *oldPartnerNeighbor);
+void CommitEvent(struct AtomStr **destLibrary, struct AtomStr *newTargetAtom, struct AtomStr *newPartnerAtom, struct AtomStr *oldTargetAtom, struct AtomStr *oldPartnerAtom, struct AtomStr *oldTargetNeighbor, struct AtomStr *oldPartnerNeighbor, struct ThreadStr *thisThread, int *renewList);
 void Predict(int *renewList, struct ThreadStr *thisThread);
 void AssignJob(int *list, struct ThreadStr *thisThread);
 void AssignThread(int *renewList, struct ThreadStr *thisThread);
@@ -701,7 +708,7 @@ struct ThreadStr* InitializeThread(int tid, struct AtomStr *atomList);
 //---------------------------------------------
 //Simulation Method
 //---------------------------------------------
-void MSThread(void);
+//void MSThread(void);
 void SingleThread(void);
 void REMD(void);
 //---------------------------------------------
@@ -751,7 +758,8 @@ void PrintCollisionPotentialTable(void);
 void PrintHBPotentialTable(int HBTypeNum);
 void CalAccumulatedPoten(struct StepPotenStr *startPoint);
 void FreeConstr(struct ConstraintStr *thisConstr);
-void PrintData(int *list);
+void PrintListData(int *list);
+void PrintHBData(void);
 void CalCOMV(int proteinNum, double *netV);
 void ChangeColor(int type, double *color);
 int AtomTypeChange(int originalType, int direct);

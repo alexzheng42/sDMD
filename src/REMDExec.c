@@ -15,7 +15,16 @@
 #include <sys/stat.h>
 #include <sys/wait.h>
 
-#define boltzmann 0.0019872041 //kcal / mol / K
+#define CHAR_LENGTH 1024
+#define BOLTZMANN 0.0019872041 //kcal / mol / K
+
+#define CHAR_LOC(name) \
+        name = (char *)calloc(CHAR_LENGTH, sizeof(char));
+
+struct REMDTempStr {
+    int num;
+    double T;
+};
 
 int main (int argc, char *argv[]) {
     pid_t child_pid, wpid;
@@ -23,18 +32,24 @@ int main (int argc, char *argv[]) {
     int status = 0;
     int replicaNum = 0;
     int distStatus = 1;
-    char portNo[20], exRate[20], inputT[20], exName[20];
-    char buffer[1024], execClient[1024], execServer[1024];
-    char directory[1024];
-    char *command[50];
-    double *T, thisT;
+    char portNo[32], exRate[32];
+    char *buffer, *execClient, *execServer;
+    char *directory;
+    char *command[32];
+    struct REMDTempStr thisT;
+    struct REMDTempStr *REMD_T;
     FILE *configFile;
     
-    if (getcwd(directory, sizeof(directory)) == NULL)
+    CHAR_LOC(buffer);
+    CHAR_LOC(execClient);
+    CHAR_LOC(execServer);
+    CHAR_LOC(directory);
+    
+    if (getcwd(directory, CHAR_LENGTH) == NULL)
         perror("!!ERROR!!");
     
-    for (int n = 0; n < 50; n ++) {
-        command[n] = (char *)calloc(50, sizeof(char));
+    for (int n = 0; n < 32; n ++) {
+        command[n] = (char *)calloc(64, sizeof(char));
     }
     
     for (int n = 1; n < argc; n ++) {
@@ -70,24 +85,25 @@ int main (int argc, char *argv[]) {
         printf("!!ERROR!!: cannot find the configuration file at %s\n", buffer);
         exit(EXIT_FAILURE);
     }
-    fscanf(configFile, "%[^\n]\n", buffer);
+    fgets(buffer, CHAR_LENGTH, configFile);
     fscanf(configFile, "%s%s%i\n", buffer, buffer, &replicaNum);
     
     int pos = 0, cur = 0;
-    T = (double *)calloc(replicaNum, sizeof(double));
-    fscanf(configFile, "%[^\n]\n", buffer);
+    REMD_T = (struct REMDTempStr *)calloc(replicaNum, sizeof(struct REMDTempStr));
+    fgets(buffer, CHAR_LENGTH, configFile);
     sscanf(buffer, "%s%s%n", directory, directory, &cur);
     pos += cur;
     
     for (int i = 0; i < replicaNum; i ++) {
-        if (sscanf(buffer + pos, "%lf%n", &T[i], &cur) == EOF) {
+        if (sscanf(buffer + pos, "%lf%n", &REMD_T[i].T, &cur) == EOF) {
             printf("!!ERROR!!: the number of temperatures provided is less than the number of replica!\n");
             exit(EXIT_FAILURE);
         }
-        T[i] *= boltzmann;
+        REMD_T[i].T *= BOLTZMANN;
+        REMD_T[i].num = i + 1;
         pos += cur;
     }
-    if (sscanf(buffer + pos, "%lf", &thisT) != EOF) {
+    if (sscanf(buffer + pos, "%lf", &(thisT.T)) != EOF) {
         printf("!!ERROR!!: the number of temperatures provided is larger than the number of replica!\n");
         exit(EXIT_FAILURE);
     }
@@ -98,28 +114,27 @@ int main (int argc, char *argv[]) {
     
     for (int id = 0; id < replicaNum; id++) {
         if (distStatus) {
-            thisT = T[id];
+            thisT = REMD_T[id];
         } else {
-            thisT = 0;
+            thisT.T = 0;
+            thisT.num = 0;
         }
-        
-        sprintf(inputT, "%lf", thisT);
-        sprintf(exName, "%i", id);
         
         if (next < 0) goto help;
         sprintf(command[next],     "-REMD");
         sprintf(command[next + 1], "localhost");
-        sprintf(command[next + 2], "%s", portNo);
-        sprintf(command[next + 3], "%s", inputT);
-        sprintf(command[next + 4], "%s", exRate);
-        sprintf(command[next + 5], "%s", exName);
-        command[next + 6] = (char *)0;
+        sprintf(command[next + 2], "%s" , portNo);
+        sprintf(command[next + 3], "%lf", thisT.T);
+        sprintf(command[next + 4], "%i" , thisT.num);
+        sprintf(command[next + 5], "%s" , exRate);
+        sprintf(command[next + 6], "%i" , id);
+        command[next + 7] = (char *)0;
         
         if ((child_pid = fork()) == 0) {
             
             //direct the stdout of execv() to file outputData
-            char outputData[50];
-            sprintf(outputData, "outputData_%s.txt", exName);
+            char outputData[64];
+            sprintf(outputData, "outputData_%i.txt", id);
             int fd = open(outputData, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
             dup2(fd, 1);
             close(fd);
@@ -139,6 +154,16 @@ int main (int argc, char *argv[]) {
     
     while ((wpid = wait(&status)) > 0);
     
+    free(buffer);
+    free(execClient);
+    free(execServer);
+    free(directory);
+    
+    for (int n = 0; n < 32; n ++) {
+        free(command[n]);
+    }
+    
+    free(REMD_T);
     return 0;
 }
 

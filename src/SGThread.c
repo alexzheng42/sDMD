@@ -65,6 +65,7 @@ void SingleThreadRun(struct ThreadInfoStr *threadInfo) {
 #endif
             threadRenewList[0] = 1;
             threadRenewList[2] = 0;
+            threadRenewList[3] = 0;
             
             AssignThread(threadRenewList, thisThread);
             Predict(threadRenewList, thisThread);
@@ -95,10 +96,11 @@ void SingleThreadRun(struct ThreadInfoStr *threadInfo) {
             frame++;
 
             CommitEvent(thisThread->raw,
-                        *newTarget, (threadRenewList[2] > 0 ? *newPartner : NULL),
-                        oldTarget, (threadRenewList[2] > 0 ?  oldPartner : NULL),
+                        *newTarget, (threadRenewList[0] == 2 ? *newPartner : NULL),
+                        oldTarget, (threadRenewList[0] == 2 ?  oldPartner : NULL),
                         thisThread->listPtr[oldTarget->dynamic->HB.neighbor],
-                        (threadRenewList[2] > 0 ? thisThread->listPtr[oldPartner->dynamic->HB.neighbor] : NULL));
+                        (threadRenewList[0] == 2 ? thisThread->listPtr[oldPartner->dynamic->HB.neighbor] : NULL),
+                        thisThread, threadRenewList);
             
             UpdateCBT(threadRenewList);
             processratio = (currenttime - oldcurrenttime) / (timestep - oldcurrenttime) * 100;
@@ -138,6 +140,7 @@ void AssignJob(int *renewList, struct ThreadStr *thisThread) {
     renewList[0] = 1;
     renewList[1] = 0;
     renewList[2] = 0;
+    renewList[3] = 0;
     
     thisThread->atomNum = CBT.node[1];
     renewList[1] = thisThread->atomNum;
@@ -155,7 +158,7 @@ void AssignThread(int *renewList, struct ThreadStr *thisThread) {
     int cell_neighbor[4], cellIndex;
     int neighborAtom;
     int count = 0;
-    int checkedCell[55] = {0}, num, flag;
+    int checkedCell[64] = {0}, num, flag;
     int *sourCellList = celllist;
     list *atomList = &thisThread->atomList;
     listElem *elem = (atomList->num_members == 0) ? NULL : listFirst(atomList);
@@ -167,7 +170,7 @@ void AssignThread(int *renewList, struct ThreadStr *thisThread) {
     signed int y[27] = {0, 0, 1, 0, 1, 0, 1, 1,  0, -1,  0, -1,  0, -1, -1, -1,  1,  0,  0, -1,  1, -1,  1, -1,  1, -1,  1};
     signed int z[27] = {0, 0, 0, 1, 1, 1, 0, 1,  0,  0, -1, -1, -1,  0, -1,  1, -1, -1,  1,  0,  0,  1, -1, -1, -1,  1,  1};
     
-    for (int n = 1; n <= renewList[0]; n ++) {
+    for (int n = 1; renewList[n]; n ++) {
         targetAtom = sourLibrary[renewList[n]];
         for (int i = 0; i < 27; ++i) {
             //scan the neighborhood 27 subcells, include the target subcell itself
@@ -225,7 +228,7 @@ void AssignThread(int *renewList, struct ThreadStr *thisThread) {
     thisThread->newTarget = destLibrary[renewList[1]];
     AtomDataCpy(&thisThread->oldTarget, sourLibrary[renewList[1]], 2);
     
-    if (renewList[2] > 0) {
+    if (renewList[0] == 2) {
         thisThread->newPartner = destLibrary[renewList[2]];
         AtomDataCpy(&thisThread->oldPartner, sourLibrary[renewList[2]], 2);
     } else {
@@ -235,8 +238,8 @@ void AssignThread(int *renewList, struct ThreadStr *thisThread) {
     
     atomList->num_members = count;
     
-    if (unlikely(checkedCell[46] != 0)) {
-        printf("!!ERROR!!: checkedCell list overflows!\n");
+    if (unlikely(checkedCell[60] != 0)) {
+        printf("!!ERROR!!: checkedCell list overflows! %s:%i\n", __FILE__, __LINE__);
     }
     
     return;

@@ -84,7 +84,8 @@ void AssignFileList(int id) {
             strcpy(fileList.list[++fileList.count], fileList.list[0]);
         }
     } else {
-        strcpy(fileList.list[++fileList.count], files[inLog][id].name);
+        fileList.count = 1;
+        strcpy(fileList.list[fileList.count], files[inLog][id].name);
     }
     
     if (fileList.count == 0) {

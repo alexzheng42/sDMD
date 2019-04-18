@@ -16,9 +16,11 @@ int ThreadProcess(void) {
     thrInfo = (struct ThreadInfoStr*)malloc(threadNum * sizeof(struct ThreadInfoStr));
     for (int i = 0; i < threadNum; i ++) {
         thrInfo[i].threadID = i;
-        thrInfo[i].threadRenewList = (int *)calloc(5, sizeof(int));
+        thrInfo[i].threadRenewList = (int *)calloc(128, sizeof(int));
         thrInfo[i].threadRenewList[0] = 1;
         thrInfo[i].threadRenewList[1] = 0;
+        thrInfo[i].threadRenewList[2] = 0;
+        thrInfo[i].threadRenewList[3] = 0;
     }
     
     if (REMDInfo.flag  == 1) { //REMD is requested
@@ -33,7 +35,8 @@ int ThreadProcess(void) {
             SingleThread();
         }
     } else if (codeNum == 2 && threadNum > 1) { //multiple threads - one master, one or more slaves
-        MSThread();
+        printf("!!ERROR!!: parallel computing is not available right now.\n");
+        exit(EXIT_FAILURE);
     } else {
         printf("!!ERROR!!: the combination of sDMD method and thread number is invalid! %s:%i\n", __FILE__, __LINE__);
     }
@@ -108,7 +111,7 @@ void FirstRun(struct ThreadStr *thisThread) {
             WallTime(thisThread->newTarget);
         }
         
-        if (obstObj.mark) {
+        if (obstObj.mark) { // not CG surface; every atom will calculate the time
             ObstTime(thisThread->newTarget);
         }
         
@@ -146,8 +149,8 @@ int ProcessEvent(int *threadRenewList, struct ThreadStr *thisThread) {
     //if newPartner = NULL, it means in this event there is no partner associate with the target atom
     //then all the pointers related to "partner" will be NULL
     //we can also by checking if threadRenewList[2] > 0 to find if there would be a partner in this event
-    if (unlikely(!(newPartner == NULL && threadRenewList[2] == 0) &&
-                 !(newPartner != NULL && threadRenewList[2] > 0))) {
+    if (unlikely(!(newPartner == NULL && threadRenewList[0] == 1) &&
+                 !(newPartner != NULL && threadRenewList[0] == 2))) {
         printf("!!ERROR!!: partner state is invalid! %s:%i\n", __FILE__, __LINE__);
     }
     
@@ -163,9 +166,8 @@ int ProcessEvent(int *threadRenewList, struct ThreadStr *thisThread) {
         oldTarget->dynamic->HB.interactionType = DoEvent(thisThread); //calculate the after-event velocities
         
         newTarget->dynamic->event.counter ++;
-        if (threadRenewList[2] > 0) {
+        if (threadRenewList[0] == 2)
             newPartner->dynamic->event.counter ++;
-        }
         
         Predict(threadRenewList, thisThread); //pre-predict the after-event event
     }
@@ -174,15 +176,13 @@ int ProcessEvent(int *threadRenewList, struct ThreadStr *thisThread) {
 }
 
 
-void CommitEvent(struct AtomStr **destLibrary, struct AtomStr *newTargetAtom, struct AtomStr *newPartnerAtom, struct AtomStr *oldTargetAtom, struct AtomStr *oldPartnerAtom, struct AtomStr *oldTargetNeighbor, struct AtomStr *oldPartnerNeighbor) {
-    int typeNum;
+void CommitEvent(struct AtomStr **destLibrary, struct AtomStr *newTargetAtom, struct AtomStr *newPartnerAtom, struct AtomStr *oldTargetAtom, struct AtomStr *oldPartnerAtom, struct AtomStr *oldTargetNeighbor, struct AtomStr *oldPartnerNeighbor, struct ThreadStr *thisThread, int *renewList) {
+    int typeNum = oldTargetAtom->dynamic->event.eventType;
     struct AtomStr *HB_i, *HB_j;
     
     AtomDataCpy(destLibrary[newTargetAtom->property->num], newTargetAtom, 0);
     if (newPartnerAtom)
         AtomDataCpy(destLibrary[newPartnerAtom->property->num], newPartnerAtom, 0);
-    
-    typeNum = oldTargetAtom->dynamic->event.eventType;
     
     switch (typeNum) {
         case Coli_Event:
@@ -286,7 +286,7 @@ void Predict(int *renewList, struct ThreadStr *thisThread) {
     struct AtomStr *targetAtom = NULL;
     
     ResetTarget(renewList, thisThread);
-    for (int n = 1; n <= renewList[0]; n ++) {
+    for (int n = 1; renewList[n]; n ++) {
         targetAtom = thisThread->listPtr[renewList[n]];
         
 #ifndef GEL
@@ -306,8 +306,8 @@ void Predict(int *renewList, struct ThreadStr *thisThread) {
             WallTime(targetAtom);
         }
         
-        if (obstObj.mark) {
-            ObstTime(targetAtom);
+        if (obstObj.mark) { // no CG, every atom will calculate the time
+            ObstTime(targetAtom); 
         }
         
         if (tunlObj.mark) {
