@@ -31,7 +31,6 @@ int main (int argc, char *argv[]) {
     int next = 0;
     int status = 0;
     int replicaNum = 0;
-    int distStatus = 1;
     char portNo[32], exRate[32];
     char *buffer, *execClient, *execServer;
     char *directory;
@@ -57,12 +56,9 @@ int main (int argc, char *argv[]) {
             if (strcmp(argv[n], "-h") == 0 || strcmp(argv[n], "-help") == 0) {
             help:
                 printf("Usage: %s [distribute T or not] -f [configuration file] -args [args of executable without flag -REMD]\n\n", argv[0]);
-                printf("       -nodist: [yes] default is yes. will distribute temperature to each replica.\n");
                 printf("            -f: provide the configuration file.\n");
                 printf("         -args: provide the flags and info for sDMD without -REMD, end with \"-end\"\n");
                 exit(EXIT_SUCCESS);
-            } else if (strcmp(argv[n], "-nodist") == 0) {
-                distStatus = 0;
             } else if (strcmp(argv[n], "-f") == 0) {
                 sprintf(buffer, "%s", argv[n + 1]);
             } else if (strcmp(argv[n], "-args") == 0) {
@@ -113,12 +109,7 @@ int main (int argc, char *argv[]) {
     fclose(configFile);
     
     for (int id = 0; id < replicaNum; id++) {
-        if (distStatus) {
-            thisT = REMD_T[id];
-        } else {
-            thisT.T = 0;
-            thisT.num = 0;
-        }
+        thisT = REMD_T[id];
         
         if (next < 0) goto help;
         sprintf(command[next],     "-REMD");

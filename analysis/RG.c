@@ -71,7 +71,7 @@ void CalRGMono(int id) //IUPAC Definition
         exit(EXIT_FAILURE);
     }
     
-    for (int sectNum = 0; sectNum < fileList.count; sectNum ++) {
+    for (int sectNum = 0; sectNum < fileList[id].count; sectNum ++) {
         
         totalFrame = (sectInfo[sectNum].frameCount + sectInfo[sectNum].oldTime) / sectInfo[sectNum].outputRate + 1;
         for (step = sectInfo[sectNum].oldTime / sectInfo[sectNum].outputRate; step < totalFrame; step ++) {

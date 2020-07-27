@@ -8,8 +8,6 @@
 
 #include "Analysis.h"
 
-static void ReadObst(struct AtomStr *obst, char *type);
-
 
 void SystemInformationInput(int id) {
     char directory[256];
@@ -95,8 +93,8 @@ void SystemInformationInput(int id) {
     
     fread(&HBPotential, sizeof(struct HBPotentialStr), 1, SysInfoFile);
     
-    for (int i = 0; i < 32; i ++) {
-        for (int n = 0; n < 32; n ++) {
+    for (int i = 0; i < NATOMTYPE; i ++) {
+        for (int n = 0; n < NATOMTYPE; n ++) {
             fread(&potentialPairCollision[i][n], sizeof(struct ConstraintStr), 1, SysInfoFile);
             struct StepPotenStr *thisStep = NULL;
             struct StepPotenStr *nextStep = potentialPairCollision[i][n].step;
@@ -121,8 +119,8 @@ void SystemInformationInput(int id) {
     }
     
     for (int type = 0; type < 11; type ++) {
-        for (int i = 0; i < 32; i ++) {
-            for (int n = 0; n < 32; n ++) {
+        for (int i = 0; i < NATOMTYPE; i ++) {
+            for (int n = 0; n < NATOMTYPE; n ++) {
                 fread(&potentialPairHB[type][i][n], sizeof(struct ConstraintStr), 1, SysInfoFile);
                 struct StepPotenStr *thisStep = NULL;
                 struct StepPotenStr *nextStep = potentialPairHB[type][i][n].step;
@@ -155,17 +153,17 @@ void SystemInformationInput(int id) {
 }
 
 
-int ReadLog(void) {
-    int bufferSize = 1024 * 5;
+int ReadLog(int id) {
+    int bufferSize = 1024 * 50;
     char *buffer, sign[4];
     FILE *inputFile;
     
     buffer = (char *)calloc(bufferSize, sizeof(char));
-    for (int sectNum = 0; sectNum < fileList.count; sectNum ++) {
-        sprintf(buffer, "%s%s", path, fileList.list[sectNum + 1]);
+    for (int sectNum = 0; sectNum < fileList[id].count; sectNum ++) {
+        sprintf(buffer, "%s%s", path, fileList[id].list[sectNum + 1]);
         inputFile = fopen(buffer, "r");
         if (inputFile == NULL) {
-            printf("!!ERROR!!: cannot find file %s in directory %s. make sure the input path is correct and the file does exist! %s:%i\n", fileList.list[sectNum + 1], path, __FILE__, __LINE__);
+            printf("!!ERROR!!: cannot find file %s in directory %s. make sure the input path is correct and the file does exist! %s:%i\n", fileList[id].list[sectNum + 1], path, __FILE__, __LINE__);
             exit(EXIT_FAILURE);
         }
         
@@ -197,14 +195,26 @@ int ReadLog(void) {
                 
                 fgets(buffer, bufferSize, inputFile);   //ThermostatType
                 fgets(buffer, bufferSize, inputFile);   //ThermostatParameter
-                fgets(buffer, bufferSize, inputFile);   //DMDMethod
-                fgets(buffer, bufferSize, inputFile);   //ThreadNo
                 
-                fscanf(inputFile, "%s%s%s\n",  buffer, sign, sect->wallObj.wallExist);
+                fgets(buffer, bufferSize, inputFile);   //considering the compatibility
+                if (strncmp(buffer, "DMDMethod", 9) == 0) {
+                    fgets(buffer, bufferSize, inputFile);
+                    fgets(buffer, bufferSize, inputFile);
+                }
+                
+                if (strncmp(buffer, "CGModel", 7) == 0) { //considering the compatibility
+                    char tmp[1024] = { 0 };
+                    sscanf(buffer, "%s%s%s%s\n", tmp, sign, CG.type[0], CG.type[1]);
+                    if (strncmp(CG.type[0], "no", 2)) CG.mark = 1;
+                    fgets(buffer, bufferSize, inputFile);
+                }
+
+                char tmp[1024] = { 0 };
+                sscanf(buffer, "%s%s%s\n",  tmp, sign, sect->wallObj.wallExist);
                 fscanf(inputFile, "%s%s%s\n",  buffer, sign, sect->wallObj.wallType);
                 
                 if (strcmp(sect->wallObj.wallExist, "smooth") == 0) {
-                    ReadObst(&sect->wallObj.wall, "Wall");
+                    ReadWall(id, sectNum);
                 }
                 
                 fscanf(inputFile, "%s%s%s\n",  buffer, sign, sect->wallDyn.mark);
@@ -266,6 +276,7 @@ int ReadLog(void) {
                 
                 fscanf(inputFile, "%s%s%i\n", buffer, sign, &sect->obstObj.num);
                 if (sect->obstObj.num) {
+                    sect->obstObj.mark = 1;
                     DOUBLE_2CALLOC(sect->obstObj.position, sect->obstObj.num, 4);
                     sect->obstObj.obst = (struct AtomStr *)calloc(sect->obstObj.num, sizeof(struct AtomStr));
                     fscanf(inputFile, "%s%s", buffer, sign);
@@ -278,10 +289,10 @@ int ReadLog(void) {
                         if (i < sect->obstObj.num - 1) {
                             fscanf(inputFile, "%s", sign);
                         }
-                        
-                        ReadObst(&sect->obstObj.obst[i], "Obst");
                     }
                     fgets(buffer, bufferSize, inputFile);   //the last \n
+                    
+                    ReadObst(id, sectNum);
                 } else {
                     fgets(buffer, bufferSize, inputFile);
                 }
@@ -292,8 +303,7 @@ int ReadLog(void) {
                            &sect->tunlObj.startPosition,
                            &sect->tunlObj.endPosition,
                            &sect->tunlObj.diameter);
-                    
-                    ReadObst(&sect->tunlObj.tunnel, "Tunl");                    
+                    ReadWall(id, sectNum);
                 } else {
                     fgets(buffer, bufferSize, inputFile);
                 }
@@ -322,8 +332,8 @@ int ReadLog(void) {
         fclose(inputFile);
     }
     
-    for (int sectNum = 0; sectNum < fileList.count; sectNum ++) {
-        if (sectNum < fileList.count - 1) {
+    for (int sectNum = 0; sectNum < fileList[id].count; sectNum ++) {
+        if (sectNum < fileList[id].count - 1) {
             sectInfo[sectNum].frameCount = sectInfo[sectNum + 1].oldTime - sectInfo[sectNum].oldTime;
         } else {
             sectInfo[sectNum].frameCount = sectInfo[sectNum].targetTime - sectInfo[sectNum].oldTime;
@@ -335,47 +345,99 @@ int ReadLog(void) {
 }
 
 
-void ReadObst(struct AtomStr *obst, char *type) {
-    char rName[16];
-    char directory[1024], buffer[1024];
-    FILE *inputFile;
+void ReadWall(int id, int sectNum) {
+    char directory[1024];
+    FILE *WallInfoFile;
     
-    sprintf(directory, "%s", obstDir);
-    inputFile = fopen(directory, "r");
-    
-    if (inputFile == NULL) {
-        printf("!!ERROR!!: cannot find the obstruction info file at %s!\n", directory);
-        printf("           you may need to use flag -obs to provide the path to the obstruction info file!\n");
-        printf("           %s:%i\n", __FILE__, __LINE__);
-        exit(EXIT_FAILURE);
+    sprintf(directory, "%s%s", path, files[inWall][id].name);
+    WallInfoFile = fopen(directory, "rb");
+    if (WallInfoFile == NULL) {
+        return;
     }
     
-    if (obst->property == NULL) {
-        struct PropertyStr *property = calloc(1, sizeof(struct PropertyStr));
-        obst->property = property;
-    }
+    struct PropertyStr *property = calloc(1, sizeof(struct PropertyStr));
+    fread(property, sizeof(struct PropertyStr), 1, WallInfoFile);
+    sectInfo[sectNum].wallObj.wall.property = property;
     
-    if (obst->dynamic == NULL) {
-        struct DynamicStr  *dynamic  = calloc(1, sizeof(struct DynamicStr));
-        obst->dynamic  = dynamic;
-    }
+    struct DynamicStr *dynamic = calloc(1, sizeof(struct DynamicStr));
+    fread(dynamic, sizeof(struct DynamicStr), 1, WallInfoFile);
+    sectInfo[sectNum].wallObj.wall.dynamic = dynamic;
     
-    fgets(buffer, sizeof(buffer), inputFile);
-    fscanf(inputFile, "%s%s%s%lf%s%s", buffer, obst->property->name, rName, &obst->property->mass,
-           obst->property->extraProperty[0],
-           obst->property->extraProperty[1]);
-    
-    obst->property->typeofAtom = AtomModel(rName);
-    sprintf(obst->property->nameofAA, "%s", type);
-    
-    obst->dynamic->event.partner      = INVALID;
-    obst->dynamic->event.subEventType = Invalid;
-    obst->dynamic->event.eventType    = Invd_Event;
-    
-    fclose(inputFile);
+    fclose(WallInfoFile);
     return;
 }
 
+
+void ReadObst(int id, int sectNum) {
+    char directory[1024];
+    FILE *ObstInfoFile;
+    
+    sprintf(directory, "%s%s", path, files[inObst][id].name);
+    ObstInfoFile = fopen(directory, "rb");
+    if (ObstInfoFile == NULL) {
+        return;
+    }
+    
+    for (int i = 0; i < sectInfo[sectNum].obstObj.num; i ++) {
+        struct PropertyStr *property = calloc(1, sizeof(struct PropertyStr));
+        fread(property, sizeof(struct PropertyStr), 1, ObstInfoFile);
+        sectInfo[sectNum].obstObj.obst[i].property = property;
+        
+        struct DynamicStr *dynamic = calloc(1, sizeof(struct DynamicStr));
+        fread(dynamic, sizeof(struct DynamicStr), 1, ObstInfoFile);
+        sectInfo[sectNum].obstObj.obst[i].dynamic = dynamic;
+    }
+    
+    fclose(ObstInfoFile);
+    return;
+}
+
+
+void ReadCGPot(int id) {
+    char directory[1024];
+    FILE *CGInfoFile;
+    
+    printf("Collecting CG potential information...");
+    fflush(stdout);
+    
+    sprintf(directory, "%s%s", path, files[inCG][id].name);
+    CGInfoFile = fopen(directory, "rb");
+    if (CGInfoFile == NULL) {
+        printf("!!ERROR!!: cannot find file %s in directory %s. make sure the input path is correct and the file does exist! %s:%i\n", files[inCG][id].name, path, __FILE__, __LINE__);
+        exit(EXIT_FAILURE);
+    }
+    
+    for (int i = 0; i <= NATOMTYPE; i ++) {
+        for (int n = 0; n <= NATOMTYPE; n ++) {
+            fread(&potentialPairCG[i][n], sizeof(struct ConstraintStr), 1, CGInfoFile);
+            struct StepPotenStr *thisStep = NULL;
+            struct StepPotenStr *nextStep = potentialPairCG[i][n].step;
+            
+            int flag2 = 0;
+            while (nextStep) {
+                struct StepPotenStr *newStep = calloc(1, sizeof(struct StepPotenStr));
+                fread(newStep, sizeof(struct StepPotenStr), 1, CGInfoFile);
+                
+                if (flag2 == 0) {
+                    potentialPairCG[i][n].step = newStep;
+                    thisStep = newStep;
+                    flag2 = 1;
+                } else {
+                    thisStep->next = newStep;
+                    thisStep = thisStep->next;
+                }
+                
+                nextStep = newStep->next;
+            }
+        }
+    }
+    
+	printf("Done!\n");
+	fflush(stdout);
+
+    fclose(CGInfoFile);
+    return;
+}
 
 void FreeVariables(void) {
     free(aminoacid);    aminoacid = NULL;
@@ -392,6 +454,7 @@ void FreeVariables(void) {
         free(files[i]);
     }
     free(files);        files        = NULL;
+    free(fileList);     fileList     = NULL;
     free(analysisList); analysisList = NULL;
     
     _2FREE(connectionMap);

@@ -79,7 +79,7 @@ void HBInfo(int id) {
 
         for (int n = beginP - 1; n < endP; n ++) {
             for (int i = 0; i < 21; i ++) {
-                sprintf(directory, "%sRamachFile_%i_%s.txt", path, n + 1, AAName[i]);
+                sprintf(directory, "%sRamachFile_p%i_%s.txt", path, n + 1, AAName[i]);
                 RamachFile[n][i] = fopen(directory, "w");
                 fprintf(RamachFile[n][i], "%s\n", "@    view 0.150000, 0.150000, 0.850000, 0.850000");
                 fprintf(RamachFile[n][i], "%s\n", "@    xaxis  label \"\\xF\"");
@@ -101,10 +101,10 @@ void HBInfo(int id) {
         ContactMapAAFile = (FILE **)calloc(numofprotein, sizeof(FILE *));
         
         for (int i = beginP - 1; i < endP; i ++) {
-            sprintf(directory, "%sContactInfo_%i.txt", path, i + 1);
+            sprintf(directory, "%sContactInfo_p%i.txt", path, i + 1);
             ContactMapFile[i] = fopen(directory, "w");
             
-            sprintf(directory, "%sContactAAInfo_%i.txt", path, i + 1);
+            sprintf(directory, "%sContactAAInfo_p%i.txt", path, i + 1);
             ContactMapAAFile[i] = fopen(directory, "w");
         }
     }
@@ -117,9 +117,9 @@ void HBInfo(int id) {
         exit(EXIT_FAILURE);
     }
     
-    for (int sectNum = 0; sectNum < fileList.count; sectNum ++) {
+    for (int sectNum = 0; sectNum < fileList[id].count; sectNum ++) {
         memset(buffer, '\0', sizeof(buffer));
-        FindTargetFile(files[inCnt][id].name, fileList.list[sectNum + 1], buffer);
+        FindTargetFile(files[inCnt][id].name, fileList[id].list[sectNum + 1], buffer);
         
         sprintf(directory, "%s%s", path, buffer);
         CntInputFile = fopen(directory, "r");
@@ -257,14 +257,14 @@ void RamachandranPlot(int atom_N, double *phi, double *psi)
     double x,y;
     double thispi=57.29578;
     
-    transfer_vector(position_N, atom[N].dynamic->coordinate);
+    TRANSFER_VECTOR(position_N, atom[N].dynamic->coordinate);
     
     j = N;
     while (j > 1 && atom[--j].property->typeofAtom != 6)
         ;
     if (j != N && atom[j].property->sequence.proteinNum == atom[N].property->sequence.proteinNum) {
         C_1 = j;
-        transfer_vector(position_C1, atom[C_1].dynamic->coordinate);
+        TRANSFER_VECTOR(position_C1, atom[C_1].dynamic->coordinate);
     } else {
         C_1 = 0;
         flag_phi = 0;
@@ -276,7 +276,7 @@ void RamachandranPlot(int atom_N, double *phi, double *psi)
         ;
     if (atom[j].property->sequence.proteinNum == atom[N].property->sequence.proteinNum) {
         Ca = j;
-        transfer_vector(position_Ca, atom[Ca].dynamic->coordinate);
+        TRANSFER_VECTOR(position_Ca, atom[Ca].dynamic->coordinate);
     }
     
     j = N;
@@ -284,7 +284,7 @@ void RamachandranPlot(int atom_N, double *phi, double *psi)
         ;
     if (atom[j].property->sequence.proteinNum == atom[N].property->sequence.proteinNum) {
         C = j;
-        transfer_vector(position_C, atom[C].dynamic->coordinate);
+        TRANSFER_VECTOR(position_C, atom[C].dynamic->coordinate);
     }
     
     j = N;
@@ -292,7 +292,7 @@ void RamachandranPlot(int atom_N, double *phi, double *psi)
         ;
     if (atom[j].property->sequence.proteinNum == atom[N].property->sequence.proteinNum) {
         N_1 = j;
-        transfer_vector(position_N1, atom[N_1].dynamic->coordinate)
+        TRANSFER_VECTOR(position_N1, atom[N_1].dynamic->coordinate)
     } else {
         N_1 = 0;
         flag_psi = 0;
@@ -301,50 +301,50 @@ void RamachandranPlot(int atom_N, double *phi, double *psi)
     
     //--------------calculate phi and psi--------------
     if (flag_phi == 1 && flag_psi == 1) {
-        dotminus(position_N, position_C1, b1);
-        dotminus(position_Ca, position_N, b2);
-        dotminus(position_C, position_Ca, b3);
+        DOT_MINUS(position_N, position_C1, b1);
+        DOT_MINUS(position_Ca, position_N, b2);
+        DOT_MINUS(position_C, position_Ca, b3);
         
         tempValue1 = absvalue_vector(b2);
         tempValue1 *= tempValue1;
-        tempValue2 = dotprod(b1, b3);
+        tempValue2 = DOT_PROD(b1, b3);
         
         x = -1 * tempValue1 * tempValue2;
         
-        tempValue1 = dotprod(b1, b2);
-        tempValue2 = dotprod(b2, b3);
+        tempValue1 = DOT_PROD(b1, b2);
+        tempValue2 = DOT_PROD(b2, b3);
         
         x += tempValue1 * tempValue2;
         
         
         tempValue1 = absvalue_vector(b2);
-        factorprod(tempValue1, b1, tempVector1);
-        crossprod(b2, b3, tempVector2);
-        y = dotprod(tempVector1, tempVector2);
+        FACTOR_PROD(tempValue1, b1, tempVector1);
+        CROSS_PROD(b2, b3, tempVector2);
+        y = DOT_PROD(tempVector1, tempVector2);
         
         *phi = atan2(y, x) * thispi;
         
         
-        dotminus(position_Ca, position_N, b1);
-        dotminus(position_C, position_Ca, b2);
-        dotminus(position_N1, position_C, b3);
+        DOT_MINUS(position_Ca, position_N, b1);
+        DOT_MINUS(position_C, position_Ca, b2);
+        DOT_MINUS(position_N1, position_C, b3);
         
         tempValue1 = absvalue_vector(b2);
         tempValue1 *= tempValue1;
-        tempValue2 = dotprod(b1, b3);
+        tempValue2 = DOT_PROD(b1, b3);
         
         x = -1 * tempValue1 * tempValue2;
         
-        tempValue1 = dotprod(b1, b2);
-        tempValue2 = dotprod(b2, b3);
+        tempValue1 = DOT_PROD(b1, b2);
+        tempValue2 = DOT_PROD(b2, b3);
         
         x += tempValue1 * tempValue2;
         
         
         tempValue1 = absvalue_vector(b2);
-        factorprod(tempValue1, b1, tempVector1);
-        crossprod(b2, b3, tempVector2);
-        y = dotprod(tempVector1, tempVector2);
+        FACTOR_PROD(tempValue1, b1, tempVector1);
+        CROSS_PROD(b2, b3, tempVector2);
+        y = DOT_PROD(tempVector1, tempVector2);
         
         *psi = atan2(y, x) * thispi;
         
@@ -371,6 +371,9 @@ int ReadConnectionMap(FILE *inputFile) {
         return -1;
     
     for (int i = 1; i <= atomnum; i ++) {
+        if (strcmp(atom[i].property->nameofAA, "SOL") == 0) //would change later
+            continue;
+
         for (int n = 1; n <= atomnum; n ++) {
             connectionMap[i][n] = 0;
         }

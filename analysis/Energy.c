@@ -8,6 +8,7 @@
 
 #include "Analysis.h"
 
+
 struct EnergyReadStr energy;
 
 static int HBModel(struct AtomStr *atom1, struct AtomStr *atom2);
@@ -15,6 +16,7 @@ static int AtomTypeChange(int originalType, int direct);
 static double CalKeEnergy(void);
 static double CalPoEnergy(void);
 static double CalWlEnergy(struct SectionStr *sect);
+static double CalCGSurEnergy(struct SectionStr *sect);
 static double CalTemp(double TKE);
 static double FindPair (struct AtomStr *atom1, struct AtomStr *atom2, char *type, void *obstInfo);
 static double HBBarrier(struct AtomStr *atom1, struct AtomStr *atom2);
@@ -25,7 +27,7 @@ static int beginP, endP, offSet, thisAtomNum;
 
 
 void EnergyInfo(int id) {
-    double TKE = 0, TPE = 0, TWE = 0, Temp = 0;
+    double TKE = 0, TPE = 0, TWE = 0, TCGSurE = 0, Temp = 0;
     long step = 0, totalFrame;
     char directory[1024], buffer[1024];
     struct SectionStr *sect;
@@ -48,17 +50,18 @@ void EnergyInfo(int id) {
     
     sprintf(directory, "%s%s", path, files[outEne][id].name);
     EneOutputFile = fopen(directory, "w");
-    fprintf(EneOutputFile, "# %13s %17s %17s %17s %17s %17s\n",
+    fprintf(EneOutputFile, "# %13s %17s %17s %17s %17s %17s %17s\n",
             "Step",
             "Temp (K)",
             "KinE (kCal/mol)",
             "PotE (kCal/mol)",
             "WalE (kCal/mol)",
+            "CGSE (kCal/mol)",
             "TotE (kCal/mol)");
     
-    for (int sectNum = 0; sectNum < fileList.count; sectNum ++) {
+    for (int sectNum = 0; sectNum < fileList[id].count; sectNum ++) {
         memset(buffer, '\0', sizeof(buffer));
-        FindTargetFile(files[inTrj][id].name, fileList.list[sectNum + 1], buffer);
+        FindTargetFile(files[inTrj][id].name, fileList[id].list[sectNum + 1], buffer);
         
         sprintf(directory, "%s%s", path, buffer);
         TrjInputFile = fopen(directory, "r");
@@ -69,7 +72,7 @@ void EnergyInfo(int id) {
         }
         
         memset(buffer, '\0', sizeof(buffer));
-        FindTargetFile(files[inCnt][id].name, fileList.list[sectNum + 1], buffer);
+        FindTargetFile(files[inCnt][id].name, fileList[id].list[sectNum + 1], buffer);
         
         sprintf(directory, "%s%s", path, buffer);
         CntInputFile = fopen(directory, "r");
@@ -92,15 +95,19 @@ void EnergyInfo(int id) {
                 sect->tunlObj.mark) {
                 TWE = CalWlEnergy(sect);
             }
+            if (CG.mark) {
+                TCGSurE = CalCGSurEnergy(sect);
+            }
             Temp = CalTemp(TKE);
             
-            fprintf(EneOutputFile, "%15.2lf %17.4lf %17.4lf %17.4lf %17.4lf %17.4lf\n",
+            fprintf(EneOutputFile, "%15.2lf %17.4lf %17.4lf %17.4lf %17.4lf %17.4lf %17.4lf\n",
                     step * sect->outputRate,
                     Temp,
                     TKE,
-                    TPE + TWE,
+                    TPE,
                     TWE,
-                    TKE + TPE + TWE);
+                    TCGSurE,
+                    TKE + TPE + TWE + TCGSurE);
         }
         fclose(TrjInputFile);
         fclose(CntInputFile);
@@ -118,8 +125,8 @@ double CalKeEnergy(void) { //per frame
     double speed[4] = {0};
     
     for (int n = 1 + offSet; n <= thisAtomNum + offSet; n++) {
-        transfer_vector(speed, atom[n].dynamic->velocity);
-        temp = dotprod(speed, speed);
+        TRANSFER_VECTOR(speed, atom[n].dynamic->velocity);
+        temp = DOT_PROD(speed, speed);
         TKE += 0.5 * atom[n].property->mass * temp;
     }
     
@@ -147,10 +154,10 @@ double CalPoEnergy(void) { //per frame
     }
     
     LinkList();
-    pointToStruct(boxsize, boxOrigDim);
+    POINT_TO_STRUCT(boxsize, boxOrigDim);
     
     for (int i = 1 + offSet; i <= thisAtomNum + offSet; i ++) {
-        pointToStruct(atom_CellAxis, atom[i].dynamic->cellIndex);
+        POINT_TO_STRUCT(atom_CellAxis, atom[i].dynamic->cellIndex);
         
         for (int n = 0; n <= 26; n ++) {
             cell_neighbor[3] = atom_CellAxis[3] + z[n];
@@ -176,9 +183,9 @@ double CalPoEnergy(void) { //per frame
             if (!nPP) {
                 while (pair != 0) {
                     if (pair > i) {
-                        dotplus(atom[pair].dynamic->coordinate, positionshift, atom[pair].dynamic->coordinate);
+                        DOT_PLUS(atom[pair].dynamic->coordinate, positionshift, atom[pair].dynamic->coordinate);
                         TPE += FindPair(&atom[i], &atom[pair], "normal", NULL);
-                        dotminus(atom[pair].dynamic->coordinate, positionshift, atom[pair].dynamic->coordinate);
+                        DOT_MINUS(atom[pair].dynamic->coordinate, positionshift, atom[pair].dynamic->coordinate);
                     }
                     
                     pair = celllist[pair];
@@ -186,9 +193,9 @@ double CalPoEnergy(void) { //per frame
             } else {
                 while (pair != 0) {
                     if (pair != i /*&& atom[pair].property->sequence.proteinNum == atom[i].property->sequence.proteinNum*/) {
-                        dotplus(atom[pair].dynamic->coordinate, positionshift, atom[pair].dynamic->coordinate);
+                        DOT_PLUS(atom[pair].dynamic->coordinate, positionshift, atom[pair].dynamic->coordinate);
                         TPE += FindPair(&atom[i], &atom[pair], "normal", NULL) * 0.5;
-                        dotminus(atom[pair].dynamic->coordinate, positionshift, atom[pair].dynamic->coordinate);
+                        DOT_MINUS(atom[pair].dynamic->coordinate, positionshift, atom[pair].dynamic->coordinate);
                     }
                     
                     pair = celllist[pair];
@@ -235,6 +242,74 @@ double CalWlEnergy(struct SectionStr *sect) { //per frame
     return TWE;
 }
 
+double CalCGSurEnergy(struct SectionStr *sect) {
+    int atomType, surfType;
+    double TCGSurE = 0;
+	double tolerance, floatzero = 10E-8;
+    double position_i[4], position_j[4];
+	double speed_i[4], speed_j[4] = { 0 };
+    double r_ij[4], v_ij[4], direction;
+    
+    for (int n = 0; n < sect->obstObj.num; n ++) {
+        struct AtomStr *thisSurface = &sect->obstObj.obst[n];
+        for (int dim = 1; dim <= 3; dim ++) {
+            if (sect->obstObj.position[n][dim] < 0) {
+                continue;
+            }
+            
+            TRANSFER_VECTOR(position_j, sect->obstObj.position[n]);
+            for (int i = 1; i <= 3; i ++) {
+                if (i != dim) {
+                    position_j[i] = 0;
+                }
+            }
+            
+            for (int num = 1; num <= atomnum; num ++) {
+                if (strcmp(atom[num].property->extraProperty[0], "CG") == 0 &&
+					strcmp(atom[num].property->name,             "CA") == 0) {
+                    
+                    struct AtomStr *target = &atom[num];
+                    double distance2 = 0;
+                    
+                    TRANSFER_VECTOR(position_i, target->dynamic->coordinate);
+					TRANSFER_VECTOR(   speed_i, target->dynamic->velocity);
+                    for (int i = 1; i <= 3; i ++) {
+                        if (i != dim) {
+                            position_i[i] = 0;
+							   speed_i[i] = 0;
+                        }
+                    }
+                    
+                    DOT_MINUS(position_i, position_j, r_ij);
+					DOT_MINUS(   speed_i,    speed_j, v_ij);
+                    distance2 = DOT_PROD(r_ij, r_ij);
+					direction = DOT_PROD(r_ij, v_ij);
+
+					if (direction < 0)
+						direction = 1;  // -> <-
+					else
+						direction = -1; // <- ->
+					tolerance = direction * floatzero;
+                    
+                    atomType = target->property->typeofAA;
+                    surfType = AAModel(thisSurface->property->nameofAA);
+                    struct ConstraintStr *thisConstr = &potentialPairCG[surfType][atomType];
+                    
+                    struct StepPotenStr *thisStep = thisConstr->step;                    
+                    while (thisStep != NULL && thisStep->d != 0) {
+                        if (distance2 < thisStep->d + tolerance) {
+                            TCGSurE += thisStep->accumulated;
+                            break;
+                        }
+                        thisStep = thisStep->next;
+                    }
+                }
+            }
+        }
+    }
+    return TCGSurE;
+}
+
 double CalTemp(double TKE) { //per frame
     return 2 * TKE / (3 * thisAtomNum) / BOLTZMANN; //remove "BOLTZMANN" will be the reduced T
 }
@@ -251,8 +326,8 @@ double FindPair (struct AtomStr *atom1, struct AtomStr *atom2, char *type, void 
     double PE = 0, accumPotential = 0;
     struct ConstraintStr *thisConstr = NULL;
     
-    transfer_vector(position_i, atom1->dynamic->coordinate);
-    transfer_vector(position_j, atom2->dynamic->coordinate);
+    TRANSFER_VECTOR(position_i, atom1->dynamic->coordinate);
+    TRANSFER_VECTOR(position_j, atom2->dynamic->coordinate);
     
     if (strcmp(type, "wall") == 0 && strcmp(((struct WallStr *)obstInfo)->wallExist, "smooth") == 0) {
         if (strncmp(((struct WallStr *)obstInfo)->wallType, "parallel", 1) == 0) { //parallel plates of wall
@@ -264,8 +339,8 @@ double FindPair (struct AtomStr *atom1, struct AtomStr *atom2, char *type, void 
         position_i[1] = 0;
     }
     
-    dotminus(position_i, position_j, r_ij);
-    distance2 = dotprod(r_ij, r_ij);
+    DOT_MINUS(position_i, position_j, r_ij);
+    distance2 = DOT_PROD(r_ij, r_ij);
     if (strcmp(type, "wall") == 0 && strcmp(((struct WallStr *)obstInfo)->wallExist, "smooth") == 0) {
         distance2 = boxCurtDim[2] * boxCurtDim[2] * 0.25 + distance2 - boxCurtDim[2] * sqrt(distance2);
     } else if (strcmp(type, "tunnel") == 0) {
@@ -278,8 +353,8 @@ double FindPair (struct AtomStr *atom1, struct AtomStr *atom2, char *type, void 
     }
 
     if (distance2 <= cutoffr * cutoffr && !(connectionMap[atom_i][atom_j] & bondConnect)) {
-        transfer_vector(speed_i, atom1->dynamic->velocity);
-        transfer_vector(speed_j, atom2->dynamic->velocity);
+        TRANSFER_VECTOR(speed_i, atom1->dynamic->velocity);
+        TRANSFER_VECTOR(speed_j, atom2->dynamic->velocity);
         
         if (strcmp(type, "wall") == 0 && strcmp(((struct WallStr *)obstInfo)->wallExist, "smooth") == 0) {
             if (strncmp(((struct WallStr *)obstInfo)->wallType, "parallel", 1) == 0) { //parallel plates of wall
@@ -291,8 +366,8 @@ double FindPair (struct AtomStr *atom1, struct AtomStr *atom2, char *type, void 
             speed_i[1] = 0;
         }
         
-        dotminus(speed_i, speed_j, v_ij);
-        direction = dotprod(r_ij, v_ij);
+        DOT_MINUS(speed_i, speed_j, v_ij);
+        direction = DOT_PROD(r_ij, v_ij);
         
         if ((strcmp(type, "wall") == 0 && strcmp(((struct WallStr *)obstInfo)->wallExist, "smooth") == 0) ||
             strcmp(type, "tunnel") == 0)

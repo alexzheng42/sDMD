@@ -1,0 +1,18 @@
+#
+# The reaction bonds (HB and/or disulfur bonds) have been existing before the simulation.
+# 2019/5/16 added bonds between AA and surface (the target atom is fixed)
+#
+# !!NOTE!! 
+# The atom number should be from the .gro file processed by sDMD, instead of from the
+# original, since the program may have removed some unimportant atoms from the original
+# .gro/.pdb file during processing and changed the sequence number.
+#
+# !FORMAT!
+# N (the total bond number)
+# atom1_1	atom1_2
+# atom2_1	atom2_2
+# ...
+# atomN_1	atomN_2
+#
+1
+23	 43

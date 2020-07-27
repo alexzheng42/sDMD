@@ -49,7 +49,7 @@ void LinkList(void) {
     double *boxsize;
     double *position;
     
-    pointToStruct(boxsize, boxOrigDim);
+    POINT_TO_STRUCT(boxsize, boxOrigDim);
     for (int i = 0; i < cellNum[0]; i ++) {
         celllist[i] = 0;
     }
@@ -58,7 +58,7 @@ void LinkList(void) {
     //calculate which subcells the atoms are in and generate the list
     for (int i = 1; i <= atomnum; i++) {
         
-        pointToStruct(position, atom[i].dynamic->coordinate);
+        POINT_TO_STRUCT(position, atom[i].dynamic->coordinate);
         
         for (int n = 1; n <= 3; n++) {
             
@@ -109,6 +109,7 @@ void PrintProcess(long step) {
     
     fflush(stdout);
 }
+
 
 int AtomModel(char *type) {
     int num = 0;
@@ -189,4 +190,75 @@ int AtomModel(char *type) {
     }
     
     return num;
+}
+
+
+int AAModel(char *component) {
+    if (strcmp(component, "ALA") == 0) {
+        return 1;
+    } else if (strcmp(component, "ARG") == 0) {
+        return 2;
+    } else if (strcmp(component, "ASN") == 0) {
+        return 3;
+    } else if (strcmp(component, "ASP") == 0) {
+        return 4;
+    } else if (strcmp(component, "CYS") == 0) {
+        return 5;
+    } else if (strcmp(component, "GLN") == 0) {
+        return 6;
+    } else if (strcmp(component, "GLU") == 0) {
+        return 7;
+    } else if (strcmp(component, "GLY") == 0) {
+        return 8;
+    } else if (strcmp(component, "HIS") == 0) {
+        return 9;
+    } else if (strcmp(component, "ILE") == 0) {
+        return 10;
+    } else if (strcmp(component, "LEU") == 0) {
+        return 11;
+    } else if (strcmp(component, "LYS") == 0) {
+        return 12;
+    } else if (strcmp(component, "MET") == 0) {
+        return 13;
+    } else if (strcmp(component, "PHE") == 0) {
+        return 14;
+    } else if (strcmp(component, "PRO") == 0) {
+        return 15;
+    } else if (strcmp(component, "SER") == 0) {
+        return 16;
+    } else if (strcmp(component, "THR") == 0) {
+        return 17;
+    } else if (strcmp(component, "TRP") == 0) {
+        return 18;
+    } else if (strcmp(component, "TYR") == 0) {
+        return 19;
+    } else if (strcmp(component, "VAL") == 0) {
+        return 20;
+    } else if (strcmp(component, "SOL") == 0) {
+        return 21;
+    } else if (strcmp(component, "GEL") == 0) {
+        return 22;
+    } else if (strcmp(component, "PHO") == 0) {
+        //hydrophobic surface
+        return 23;
+    } else if (strcmp(component, "PHI") == 0) {
+        //hydrophilic surface
+        return 24;
+    } else if (strcmp(component, "RPH") == 0) {
+        //relatively hydrophilic surface
+        return 25;
+    } else {
+        printf("\n!ERROR!:The amino acid name is not found in Library! Check the input coordinate file!\n");
+        exit(EXIT_FAILURE);
+    }
+    
+    return -1;
+}
+
+void PrintStep(struct StepPotenStr *thisStep) {
+    while (thisStep != NULL) {
+        printf("%10.4lf %10.4lf (%.4lf)\n", sqrt(thisStep->d), thisStep->e, thisStep->accumulated);
+        thisStep = thisStep->next;
+    }
+    printf("\n");
 }

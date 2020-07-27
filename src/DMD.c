@@ -33,6 +33,12 @@ double boxDimension[4]; //unit A
 struct AtomStr *atom;
 struct AAStr *aminoacid;
 struct PepStr *protein;
+struct CGGovStr CG;
+struct CGMatrixStr CGMatrix;
+struct PreBondStr preBond = {.mark = 0,
+                             .num  = 0,
+                             .dis  = 0
+};
 char neworcontinue[20];
 char Methodtype[20];
 char temperatureType[20];
@@ -49,6 +55,7 @@ long int HBNeighboreventsum = 0;
 long int thermostateventsum = 0;
 long int pbcandcrosseventsum = 0;
 long int walleventsum = 0;
+long int CGeventsum = 0;
 long int oldtotaleventsum = 0;
 long int newtotaleventsum = 0;
 long int warningsum = 0;
@@ -81,6 +88,7 @@ int nthCheck, nthNode;
 //potential pair
 struct ConstraintStr potentialPairCollision[NATOMTYPE + 1][NATOMTYPE + 1];
 struct ConstraintStr potentialPairHB[12][NATOMTYPE + 1][NATOMTYPE + 1];
+struct ConstraintStr potentialPairCG[NATOMTYPE + 1][NATOMTYPE + 1];
 struct HBPotentialStr HBPotential;
 
 
@@ -101,24 +109,16 @@ char timer[30];
 
 //-----------------
 //multi-thread variables
-int threadNum;
-int codeNum;
-int eventToCommit;
-signed int readCount = 0, writeCount = 0, activeWrite = 0;
-struct ThreadStr **thread;
-struct RandomListStr *threadRandomList;
-struct ThreadInfoStr *thrInfo;
-struct PreCalObjStr *preCalList;
-struct PreCalObjStr **preCalPtr;
-pthread_t *thread_t;
-pthread_mutex_t mainFrameLock, rawDataLock, commitLock;
-pthread_mutex_t mstThrLock, slvThrLock;
-pthread_cond_t mainFrameRenew = PTHREAD_COND_INITIALIZER;
-pthread_cond_t rawDataRenew = PTHREAD_COND_INITIALIZER;
-pthread_cond_t readCheck = PTHREAD_COND_INITIALIZER;
-pthread_cond_t writeCheck = PTHREAD_COND_INITIALIZER;
-pthread_cond_t mstThrQ = PTHREAD_COND_INITIALIZER;
-pthread_cond_t slvThrQ = PTHREAD_COND_INITIALIZER;
+
+
+//-----------------
+//single-thread variable
+int renewList[128];
+struct AtomListStr atomList = {
+    .x = {0, 1, 0, 0, 0, 1, 1, 1, -1,  0,  0,  0, -1, -1, -1,  0,  0,  1, -1,  1, -1, -1, -1,  1,  1,  1, -1},
+    .y = {0, 0, 1, 0, 1, 0, 1, 1,  0, -1,  0, -1,  0, -1, -1, -1,  1,  0,  0, -1,  1, -1,  1, -1,  1, -1,  1},
+    .z = {0, 0, 0, 1, 1, 1, 0, 1,  0,  0, -1, -1, -1,  0, -1,  1, -1, -1,  1,  0,  0,  1, -1, -1, -1,  1,  1}
+};
 
 
 //-----------------
@@ -209,6 +209,7 @@ int main(int argc, const char * argv[]) {
     printf("| Method          %20s |\n", Methodtype);
     printf("| Thermostat      %20s |\n", thermostatType);
 	printf("| ThermostatFreq  %20.2f |\n", thermoF);
+    printf("| CGModel         %12s%3.3s, %3.3s |\n", " ", CG.type[0], CG.type[1]);
     printf("| WallExist       %20s |\n", wallExist);
     printf("| WallType        %20s |\n", wallType);
     printf("| boxsize         %6.1f %6.1f %6.1f |\n", boxDimension[1], boxDimension[2], boxDimension[3]);
@@ -247,7 +248,8 @@ int main(int argc, const char * argv[]) {
                        HBNeighboreventsum  +
                        thermostateventsum  +
                        pbcandcrosseventsum +
-                       walleventsum;
+                       walleventsum        +
+                       CGeventsum;
     
     printf("ReCalculate times        = %li\n\n", countReCal);
     printf("collision times          = %li\n", collisioneventsum);
@@ -257,6 +259,7 @@ int main(int argc, const char * argv[]) {
     printf("thermostat times         = %li\n", thermostateventsum);
     printf("PBC&CC times             = %li\n", pbcandcrosseventsum);
     printf("Wall times               = %li\n", walleventsum);
+    printf("CG times                 = %li\n", CGeventsum);
     printf("percentage of thermostat = %.4f%%\n\n", (float) thermostateventsum / newtotaleventsum * 100);
     printf("total warning            = %li\n", warningsum);
     

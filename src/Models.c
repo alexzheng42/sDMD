@@ -201,7 +201,7 @@ int AtomModel(char *type) {
     } else if (strcmp(type, "GEL") == 0) {
         return 32;
     } else {
-        printf("\nNo atom type is matched! Check the atom outerType assignment! %s:%i\n", __FILE__, __LINE__);
+        printf("\nNo atom type is matched to %s! Check the atom outerType assignment! %s:%i\n", type, __FILE__, __LINE__);
         exit(EXIT_FAILURE);
     }
     

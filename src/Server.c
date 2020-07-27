@@ -1,9 +1,6 @@
-#define _XOPEN_SOURCE
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <strings.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -14,9 +11,11 @@
 
 //#define PRTDETAIL
 #define BACKLOG 15         /* buffer for waiting connections */
-#define TIMEOUT 3600       /* exit if conect’s aren’t made in this #seconds */
+#define TIMEOUT 3600       /* exit if connections aren’t made in this #seconds */
 
-#define min(x, y) (x < y) ? x : y
+#define MIN(x, y) (x < y) ? x : y
+#define RANDOMVALUE(low, high) \
+        low + (double)rand()/((double)RAND_MAX/(high - low))
 
 struct REMDTempStr {
     int num;
@@ -32,6 +31,7 @@ void swap(struct REMDTempStr *x, struct REMDTempStr *y);
 void distribute(int *sockets, struct REMDTempStr *T, int number_of_connects);
 int open_connections(int *sockets, int connects_wanted, int port_number, int timeout);
 int close_connections(int *sockets, int connections_open);
+int CheckEnd(struct REMDTempStr *T, int number_of_connects);
 
 
 /*
@@ -55,7 +55,7 @@ int main(int argc, char *argv[]) {
 	sscanf(argv[1], "%d", &port_number);
 	sscanf(argv[2], "%d", &numconnects);
 	sscanf(argv[3], "%ld", &seed);
-	srand48(seed);
+	srand(seed);
 
 	sockets = calloc(numconnects, sizeof(int));
 	if (!sockets) {
@@ -69,19 +69,19 @@ int main(int argc, char *argv[]) {
 		exit(1);
 	}
     
-    probability = (double **)calloc(numconnects + 1, sizeof(double *));
-    for (int i = 0; i <= numconnects; i ++) {
+    probability = (double **)calloc(numconnects, sizeof(double *));
+    for (int i = 0; i < numconnects; i ++) {
         probability[i] = (double *)calloc(2, sizeof(double));
     }
     
 	server(sockets, numconnects);
     
-    printf("\ntotal exchange rate = %.2lf%%\n", probability[numconnects][1] / probability[numconnects][0] * 100);
+    printf("\n");
     for (int i = 0; i < numconnects - 1; i ++) {
-        printf("%i <-> %i: %.2lf%%\n", i + 1, i + 2, probability[i][1] / probability[i][0] * 100);
+        printf("%2i <-> %2i: %.2lf%%\n", i + 1, i + 2, probability[i][1] / probability[i][0] * 100);
     }
     
-    for (int i = 0; i <= numconnects; i ++) {
+    for (int i = 0; i < numconnects; i ++) {
         free(probability[i]);
     }
     free(probability);
@@ -102,9 +102,12 @@ void server(int *sockets, int number_of_connects) {
 		perror("calloc");
 		exit(1);
 	}
+    for (int i = 0; i < number_of_connects; i ++) {
+        T[i].T = -1; // for termination
+    }
 
 	collect(sockets, Epot, T, number_of_connects);
-	while (T[0].T != 0.0) {
+	while (!CheckEnd(T, number_of_connects)) {
 		rearrange(Epot, T, number_of_connects);
 		distribute(sockets, T, number_of_connects);
 		collect(sockets, Epot, T, number_of_connects);
@@ -116,10 +119,10 @@ void server(int *sockets, int number_of_connects) {
 }
 
 void collect(int *sockets, double *Epot, struct REMDTempStr *T, int number_of_connects) {
-	static int i;
-	static long recv_size;
+	long recv_size;
 
-	for (i = 0; i < number_of_connects; i++) {
+	for (int i = 0; i < number_of_connects; i++) {
+        if (!T[i].T) continue; //if socket[i] has been closed, T[i].T = 0, skip
 		recv_size = read(sockets[i], &Epot[i], sizeof(double));
 		if (recv_size != sizeof(double)) {
 			perror("recv");
@@ -128,7 +131,8 @@ void collect(int *sockets, double *Epot, struct REMDTempStr *T, int number_of_co
 		}
 	}
 
-	for (i = 0; i < number_of_connects; i++) {
+	for (int i = 0; i < number_of_connects; i++) {
+        if (!T[i].T) continue;
 		recv_size = read(sockets[i], &T[i], sizeof(struct REMDTempStr));
 		if (recv_size != sizeof(struct REMDTempStr)) {
 			perror("recv");
@@ -139,51 +143,46 @@ void collect(int *sockets, double *Epot, struct REMDTempStr *T, int number_of_co
 }
 
 void rearrange(double *Epot, struct REMDTempStr *T, int number_of_connects) {
-	static int i;
-	static int first, second;
-	static double dE;
+	double dE;
     double beta1, beta2;
     double record = 0;
 
-	for (i = 0; i < number_of_connects * number_of_connects; i++) {
-		first = drand48() * number_of_connects;
-		second = drand48() * number_of_connects;
-        if (first == second) {
-            continue;
-        }
-        
-        beta1 = 1 / T[first].T;
-        beta2 = 1 / T[second].T;
-        
-		dE = (beta2 - beta1) * (Epot[first] - Epot[second]);
+	for (int i = 0; i < number_of_connects; i ++) {
+        if (!T[i].T) continue;
 
-        if (first == second - 1 || first == second + 1) {
-            probability[min(first, second)][0] ++;
-        }
-        probability[number_of_connects][0] ++;
-        
-#ifdef PRTDETAIL
-        printf("first = %2i, second = %2i, Epot[%i] = %6.2lf, Eport[%i] = %6.2lf, T[%i] = %6.2lf, T[%i] = %6.2lf, dE = %8.4lf, exp = %8.4lf ",
-               first, second, first, Epot[first], second, Epot[second], first, T[first], second, T[second], dE, exp(-1 * dE));
-#endif
-        
-        if (dE <= 0.0 || (record = drand48()) < exp(-1 * dE)) {
+        for (int j = 0; j < number_of_connects; j ++) {
+            if (!T[j].T) continue;
             
-#ifdef PRTDETAIL
-            printf("rand = %8.4lf, accept.\n", record);
-#endif
-            
-			swap(T + first, T + second);
+            if ((T[i].num == T[j].num + 1) ||
+                (T[i].num == 1 && T[j].num == 2)) { //only swap between the neighboring replicas
+                beta1 = 1 / T[i].T;
+                beta2 = 1 / T[j].T;
+        
+        		dE = (beta1 - beta2) * (Epot[j] - Epot[i]);
+                probability[(MIN(T[i].num, T[j].num)) - 1][0] ++;
 
-            if (first == second - 1 || first == second + 1) {
-                probability[min(first, second)][1] ++;
+        #ifdef PRTDETAIL
+                printf("i = %2i, j = %2i, Epot[%2i] = %6.2lf, Eport[%2i] = %6.2lf, T[%2i] = #%2i, %4.2lf, T[%2i] = #%2i, %4.2lf, dE = %6.2lf, exp = %6.2lf ",
+                       i, j, i, Epot[i], j, Epot[j], i, T[i].num, T[i].T, j, T[j].num, T[j].T, dE, exp(-1 * dE));
+        #endif
+
+                if (dE <= 0.0 || (record = (RANDOMVALUE(0, 1))) < exp(-1 * dE)) {
+
+        #ifdef PRTDETAIL
+                    printf("rand = %8.4lf, exp = %8.4lf, accept.\n", record, exp(-1 * dE));
+        #endif
+
+        			swap(T + i, T + j);
+                    probability[(MIN(T[i].num, T[j].num)) - 1][1] ++;
+
+                } else {
+        #ifdef PRTDETAIL
+                    printf("rand = %8.4lf, exp = %8.4lf, reject.\n", record, exp(-1 * dE));
+        #endif
+                }
+
+                break;
             }
-            probability[number_of_connects][1] ++;
-            
-        } else {
-#ifdef PRTDETAIL
-            printf("rand = %8.4lf, reject.\n", record);
-#endif
         }
 	}
     
@@ -193,17 +192,17 @@ void rearrange(double *Epot, struct REMDTempStr *T, int number_of_connects) {
 }
 
 void swap(struct REMDTempStr *x, struct REMDTempStr *y) {
-	static struct REMDTempStr z;
+	struct REMDTempStr z;
 	z = *x;
 	*x = *y;
 	*y = z;
 }
 
 void distribute(int *sockets, struct REMDTempStr *T, int number_of_connects) {
-	static int i;
-	static long size;
+	long size;
 
-	for (i = 0; i < number_of_connects; i++) {
+	for (int i = 0; i < number_of_connects; i++) {
+        if (!T[i].T) continue; // T has to be non-zero
 		if ((size = write(sockets[i], &T[i], sizeof(struct REMDTempStr))) != sizeof(struct REMDTempStr)) {
 			perror("send");
 			exit(1);
@@ -258,10 +257,20 @@ int open_connections(int *sockets, int connects_wanted, int port_number, int tim
 }
 
 int close_connections(int *sockets, int connections_open) {
-    int connects_closed = 0;
-    int i;
+    int connections_closed = 0;
     
-    for (i = 0; i < connections_open; i++)
-        connects_closed += !close(sockets[i]);
-    return connects_closed = connections_open;
+    for (int i = 0; i < connections_open; i++)
+        connections_closed += !close(sockets[i]);
+    return connections_closed == connections_open;
+}
+
+int CheckEnd(struct REMDTempStr *T, int number_of_connects) {
+    int sum = 0;
+    
+    for (int i = 0; i < number_of_connects; i ++) {
+        if (!T[i].T) sum ++;
+    }
+
+    if (sum == number_of_connects) return 1;
+    return 0;
 }

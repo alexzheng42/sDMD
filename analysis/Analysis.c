@@ -23,19 +23,40 @@ double cellNum[4] = {0};
 double cellSize[4] = {0};
 
 char path[1024];
-char names[NumofFileType][256] = {"SysInfo.dat", "", "", "out_log.txt", "out_REMD.txt", "rPBCGRO.gro", "Energy.txt", "HBInfo.txt", "AAMark.txt", "AggNum.txt", "RG.txt", "RMSD.txt", "PotMap.txt", "PotMap_T.txt", "PMFMap_T.txt"};
-char obstDir[1024] = "NUll";
+char names[NumofFileType][256] = {"SysInfo.dat", 
+                                  "WallInfo.dat",
+                                  "ObstInfo.dat",
+                                  "CGInfo.dat", 
+                                  "", 
+                                  "", 
+                                  "out_log.txt", 
+                                  "out_REMD.txt", 
+                                  "rPBCGRO.gro", 
+                                  "Energy.txt",
+                                  "HBInfo.txt", 
+                                  "AAMark.txt", 
+                                  "AggNum.txt", 
+                                  "RG.txt", 
+                                  "RMSD.txt", 
+                                  "PotMap.txt",
+                                  "CG2Obst.txt", 
+                                  "REMD_T.txt", 
+                                  "PotMap_T.txt", 
+                                  "PMFMap_T.txt"};
 char targetPeptideNum[16] = "";
 
 struct FileStr **files;
 struct AAStr *aminoacid;
 struct PepStr *protein;
+struct CGGovStr CG;
+struct DisStr disInfo = {.mark = 0};
 struct AtomStr *atom;
 struct ConstraintStr potentialPairCollision[NATOMTYPE + 1][NATOMTYPE + 1];
 struct ConstraintStr potentialPairHB[12][NATOMTYPE + 1][NATOMTYPE + 1];
+struct ConstraintStr potentialPairCG[NATOMTYPE + 1][NATOMTYPE + 1];
 struct HBPotentialStr HBPotential;
 struct REMDStr RE = {.mark = 0, .numReplica = -1};
-struct FileListStr fileList = {.count = 0};
+struct FileListStr *fileList;
 struct FileListStr RMSDFile = {.count = 0};
 struct SectionStr *sectInfo;
 
@@ -101,10 +122,15 @@ void Initialization(int argc, const char *argv[]) {
                 sprintf(names[inLog], "%s", argv[i + 1]);
             } else if (strcmp(argv[i], "-ref") == 0) {
                 while (strncmp(argv[i + RMSDFile.count + 1], "-", 1) != 0) {
-                    sprintf(RMSDFile.list[RMSDFile.count], "%s", argv[i + (++RMSDFile.count)]);
+                    RMSDFile.count ++;
+                    sprintf(RMSDFile.list[RMSDFile.count - 1], "%s", argv[i + RMSDFile.count]);
                 }
             } else if (strcmp(argv[i], "-obs") == 0) {
-                sprintf(obstDir, "%s", argv[i + 1]);
+                sprintf(names[inObst], "%s", argv[i + 1]);
+            } else if (strcmp(argv[i], "-dis") == 0) {
+                sprintf(disInfo.type, "%s", argv[i + 1]);
+                disInfo.mark = 1;
+                analysisList[CalculateRG2Obst] = 1;
             } else if (strcmp(argv[i], "-nPP") == 0) {
                 sprintf(targetPeptideNum, "%s", argv[i + 1]);
                 nPP = atoi(argv[i + 1]);
@@ -148,10 +174,6 @@ void Initialization(int argc, const char *argv[]) {
                 printf("  -bHB      (optional) use beta HB number as the reaction coordinate\n");
                 printf("  -tHB      (optional) use total HB number as the reaction coordinate\n");
                 printf("  -rmsd     (optional) use RMSD as the reaction coordinate (require -RMSD & -ref)\n");
-                printf("  -maxE     (optional) max value of potential energy (most negative). default -150\n");
-                printf("  -minE     (optional) min value of potential energy (least negative). default 0\n");
-                printf("  -maxRC    (optional) max value of reaction coordinate. default 10\n");
-                printf("  -minRC    (optional) min value of reaction coordinate. default 0\n");
                 printf("  -rate     (optional) data dumping rate, unit is time. default 10\n");
                 printf("  -temp     (optional) target temperature. default 300\n");
                 printf("  -st       (optional) start frame of analyzing. default 0\n");
@@ -159,8 +181,6 @@ void Initialization(int argc, const char *argv[]) {
                 exit(EXIT_SUCCESS);
             } else {
                 if (!(strcmp(argv[i], "-bin")   == 0 ||
-                      strcmp(argv[i], "-maxE")  == 0 ||
-                      strcmp(argv[i], "-minE")  == 0 ||
                       strcmp(argv[i], "-rate")  == 0 ||
                       strcmp(argv[i], "-temp")  == 0 ||
                       strcmp(argv[i], "-st")    == 0 ||
@@ -168,9 +188,7 @@ void Initialization(int argc, const char *argv[]) {
                       strcmp(argv[i], "-aHB")   == 0 ||
                       strcmp(argv[i], "-bHB")   == 0 ||
                       strcmp(argv[i], "-tHB")   == 0 ||
-                      strcmp(argv[i], "-rmsd")  == 0 ||
-                      strcmp(argv[i], "-minRC") == 0 ||
-                      strcmp(argv[i], "-maxRC") == 0)) {
+                      strcmp(argv[i], "-rmsd")  == 0)) {
                     printf ("!!ERROR!!: invalid flag: %s!\n %s:%i", argv[i], __FILE__, __LINE__);
                     exit(EXIT_FAILURE);
                 }
@@ -204,8 +222,10 @@ void DoAnalysis(int argc, const char *argv[]) {
         
         SystemInformationInput(i);
         AssignFileList(i);
-        ReadLog();
+        ReadLog(i);
         EstCell();
+        
+        if (CG.mark) ReadCGPot(i);
         
         for (int n = 1; n < NumofElem; n ++) {
             if (analysisList[n]) {
@@ -229,7 +249,11 @@ void DoAnalysis(int argc, const char *argv[]) {
                     case CalculateRG:
                         RGInfo(i);
                         break;
-                        
+                    
+                    case CalculateRG2Obst:
+                        DisInfo(i);
+                        break;
+
                     case CalculateMSD:
                         break;
                         

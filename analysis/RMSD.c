@@ -76,6 +76,11 @@ void RMSDInfo(int id) {
     
     InitializeVariables();
     
+    if (RMSDFile.count == 0) {
+        printf("!!ERROR!! no reference structure, which is required by RMSD calculation. please provide a valid reference structure by -ref! %s:%i\n", __FILE__, __LINE__);
+        exit(EXIT_FAILURE);
+    }
+
     //there would be multiple reference structures
     for (int i = 0; i < RMSDFile.count; i ++) {
         ReadRef(RMSDFile.list[i], DIM, nRow, refCoor[i]);
@@ -95,7 +100,7 @@ void RMSDInfo(int id) {
         exit(EXIT_FAILURE);
     }
     
-    for (int sectNum = 0; sectNum < fileList.count; sectNum ++) {
+    for (int sectNum = 0; sectNum < fileList[id].count; sectNum ++) {
         totalFrame = (sectInfo[sectNum].frameCount + sectInfo[sectNum].oldTime) / sectInfo[sectNum].outputRate + 1;
         for (step = sectInfo[sectNum].oldTime / sectInfo[sectNum].outputRate; step < totalFrame; step ++) {
             if (ReadGro(inputTrjFile)) break;
@@ -167,10 +172,10 @@ void PESurfaceInfo(int id) {
         exit(EXIT_FAILURE);
     }
     
-    for (int sectNum = 0; sectNum < fileList.count; sectNum ++) {
+    for (int sectNum = 0; sectNum < fileList[id].count; sectNum ++) {
         
         memset(buffer, '\0', sizeof(buffer));
-        FindTargetFile(files[inCnt][id].name, fileList.list[sectNum + 1], buffer);
+        FindTargetFile(files[inCnt][id].name, fileList[id].list[sectNum + 1], buffer);
         
         sprintf(directory, "%s%s", path, buffer);
         inputCntFile = fopen(directory, "r");
@@ -303,10 +308,10 @@ void PESurfaceInfoPerT(void) {
             exit(EXIT_FAILURE);
         }
         
-        for (int sectNum = 0; sectNum < fileList.count; sectNum ++) {
+        for (int sectNum = 0; sectNum < fileList[id].count; sectNum ++) {
             
             memset(buffer, '\0', sizeof(buffer));
-            FindTargetFile(files[inCnt][id].name, fileList.list[sectNum + 1], buffer);
+            FindTargetFile(files[inCnt][id].name, fileList[id].list[sectNum + 1], buffer);
             
             sprintf(directory, "%s%s", path, buffer);
             inputCntFile = fopen(directory, "r");

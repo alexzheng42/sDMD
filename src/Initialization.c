@@ -31,11 +31,14 @@ void CreateFlow(void);
 void RemoveConstr(struct PropertyStr *property, int atomNum, char *type);
 void RemoveSpace(char *str);
 void InitializeCharge(void);
-int FindNextBondList(int targetAtom, struct PropertyStr *property, double dmin, double dmax, int type);
-int ConstrList(int targetAtom, int step, struct PropertyStr *property, FILE *inputFile, int type);
-int FindTargetAtom(int AANum, char *targetAtom);
+void InitializeCG(void);
+void ReadPreBonds(char *type);
+int FindNextBondList(int target, struct PropertyStr *property, double dmin, double dmax, int type);
+int ConstrList(int target, int step, struct PropertyStr *property, FILE *inputFile, int type);
+int FindTargetAtom(int AANum, char *target);
 int CheckValidAtom(char *atomName, char atomList[][8], int listSize);
 int ChargeAACheck(char *AAName);
+int CheckPreBondAvailability(struct AtomStr *atom1, struct AtomStr *atom2, struct AtomStr *partner, char *checkType);
 
 #ifdef VIS
 void InitializeColor(void);
@@ -142,6 +145,8 @@ void InputData(int argc, const char * argv[]) {
                     if (!(i + 1 >= argc || argv[i + 1][0] == '-')) {
                         wallDyn.rate = atof(argv[i + 1]);
                     }
+                } else if (strcmp(argv[i], "-pre") == 0) {
+                    preBond.mark = 1;
                 } else if (strcmp(argv[i], "-arg") == 0) {
                     chargeAA[ARG] = 1;
                 } else if (strcmp(argv[i], "-asp") == 0) {
@@ -164,7 +169,6 @@ void InputData(int argc, const char * argv[]) {
                     flow.charge.PBCMark = 0;
                 } else if (strcmp(argv[i], "-REMD") == 0) {
                     REMDInfo.flag = 1;
-                    fileList[RE].mark = 1;
                     
                     if (i + 1 >= argc || argv[i + 1][0] == '-') {
                         printf("!!ERROR!!: Please provide a valid server name for this replica!\n\n");
@@ -185,6 +189,7 @@ void InputData(int argc, const char * argv[]) {
                         goto help;
                     } else {
                         REMDInfo.REMD_Temperature.T = atof(argv[i + 3]);
+                        targetTemperature = REMDInfo.REMD_Temperature.T;
                     }
                     
                     if (i + 4 >= argc || argv[i + 4][0] == '-') {
@@ -221,6 +226,7 @@ void InputData(int argc, const char * argv[]) {
                     printf(" -HBn: (optional) dump hydrogen bond number, followed by the file name, otherwise will use the default name\n");
                     printf(" -xyz: (optional) dump xyz trajectory, followed by the file name, otherwise will use the default name\n");
                     printf(" -pdb: (optional) dump pdb trajectory, followed by the file name, otherwise will use the default name\n");
+                    printf(" -pre: (optional) if there are pre-existing bonds (HB or SS bonds) assigned in PreBond.txt\n");
                     printf(" -box: (required only if the coordinate file is a .PDB file) the simulation box dimensions, x, y, z\n");
                     printf(" -Wsz: (required only if WallDyn is assigned) followed by the maximum changing size of the wall, default 5 A\n");
                     printf(" -Wrt: (required only if WallDyn is assigned) followed by the total time needed for the size change, default 200\n\n");
@@ -306,9 +312,10 @@ void InputData(int argc, const char * argv[]) {
         InitializeCharge();
         
         //initialize wall model if request
-        if (strcmp(wallExist, "no") || obstObj.mark) {
-            ReadWall();
-        }
+		if (strcmp(wallExist, "no") || obstObj.mark) ReadWall();
+        
+        //initialize CG model
+        if (CG.mark) InitializeCG();
         
         //initialize flow force/potential
         CreateFlow();
@@ -416,6 +423,11 @@ void ReadBreakPoint(FILE *input_file) {
         ReadWall();
     }
     
+    if (CG.mark) {
+        InitializeCG();
+        InitializeCGPotentialMatrix();
+    }
+    
     oldcurrenttime = currenttime;
     
     //-------------------------
@@ -458,7 +470,15 @@ void ReadBreakPoint(FILE *input_file) {
 	fread(&seed, sizeof(unsigned), 1, input_file); //new seed
 	srand(seed);
     
+    fread(&REMDInfo, sizeof(struct REMDStr), 1, input_file);
+    if (REMDInfo.flag) targetTemperature = REMDInfo.REMD_Temperature.T;
+    
     if (targetTemperature != oldTemperature) {
+        if (REMDInfo.flag) {
+            printf("\n!!ERROR!!: the current temperature is different from the record!\n");
+            printf("%s:%i\n", __FILE__, __LINE__);
+            exit(EXIT_FAILURE);
+        }
         printf("\n!WARNING!: the new temperature is different from the previous!\n");
         warningsum ++;
     }
@@ -502,29 +522,43 @@ void ReadParameter() {
         exit(EXIT_FAILURE);
     }
     
-    fscanf(input_file, "%s%s", statement, neworcontinue);
-    fscanf(input_file, "%s%lf", statement, &timestep);
+    fscanf(input_file, "%s%s\n",    statement, neworcontinue);
+    fscanf(input_file, "%s%lf\n",   statement, &timestep);
     
-    fscanf(input_file, "%s%s", statement, temperatureType);
+    fscanf(input_file, "%s%s\n",    statement, temperatureType);
     if (strcmp(temperatureType, "no")) { //keep using the previous temperature
         targetTemperature = atof(temperatureType);
     }
     
-    fscanf(input_file, "%s%lf",       statement, &outputrate);
-    fscanf(input_file, "%s%lf",       statement, &cutoffr);
-    fscanf(input_file, "%s%s",        statement, Methodtype);
+    fscanf(input_file, "%s%lf\n",   statement, &outputrate);
+    fscanf(input_file, "%s%lf\n",   statement, &cutoffr);
+    fscanf(input_file, "%s%s\n",    statement, Methodtype);
     
-    fscanf(input_file, "%s%s",        statement, thermostatType);
-	fscanf(input_file, "%s%lf",       statement, &thermoF);
+    fscanf(input_file, "%s%s\n",    statement, thermostatType);
+	fscanf(input_file, "%s%lf\n",   statement, &thermoF);
     
-    fscanf(input_file, "%s%i",        statement, &codeNum);
-    fscanf(input_file, "%s%i\n",      statement, &threadNum);
-    fscanf(input_file, "%s%s",        statement, wallExist);
-    fscanf(input_file, "%s%s",        statement, wallType);
-    fscanf(input_file, "%s%s\n",      statement, wallDyn.mark);
+    fgets(directory, sizeof(directory), input_file);
+    sscanf(directory, "%s%s%n",     statement, CG.type[0], &pos);
+    if (strcmp(CG.type[0], "no") == 0) {
+        CG.mark = 0;
+        sprintf(CG.type[1], "no");
+    } else if (strcmp(CG.type[0], "all") == 0) {
+        CG.mark = 1;
+        sscanf(directory + pos, "%s", CG.type[1]);
+    } else if (strcmp(CG.type[0], "surface") == 0) { //right now only support "surface residue"
+        CG.mark = 2;
+        sscanf(directory + pos, "%s", CG.type[1]);
+    } else {
+        printf("!!ERROR!!: CG model is invalid! %s:%i\n", __FILE__, __LINE__);
+        exit(EXIT_FAILURE);
+    }
+    
+    fscanf(input_file, "%s%s\n",    statement, wallExist);
+    fscanf(input_file, "%s%s\n",    statement, wallType);
+    fscanf(input_file, "%s%s\n",    statement, wallDyn.mark);
     
     fgets(directory, sizeof(directory), input_file); //use directory[] as buffer
-    sscanf(directory, "%s%s%n", statement, statement, &pos);
+    sscanf(directory, "%s%s%n",     statement, statement, &pos);
     if (strcmp(statement, "no")) {
         if (strcmp(statement, "velocity") == 0) {
             flow.mark = 1;
@@ -1212,17 +1246,17 @@ void RemoveConstr(struct PropertyStr *property, int atomNum, char *type) {
 }
 
 
-int FindNextBondList(int targetAtom, struct PropertyStr *property, double dmin, double dmax, int type) {
+int FindNextBondList(int target, struct PropertyStr *property, double dmin, double dmax, int type) {
     struct ConstraintStr *thisBond;
     
     thisBond = property->bond;
     while (thisBond != NULL) {
-        if (thisBond->connection == targetAtom) {
+        if (thisBond->connection == target) {
             if (thisBond->dmin != dmin ||
                 thisBond->dmax != dmax) {
                 if (strcmp(property->nameofAA, "PRO") &&
-                    strcmp(atom[targetAtom].property->nameofAA, "PRO")) {
-                    printf("\n!WARNING!: bond info assignment has something wrong! only PRO will reach here! %i - %i %s:%i\n", targetAtom, property->num, __FILE__, __LINE__);
+                    strcmp(atom[target].property->nameofAA, "PRO")) {
+                    printf("\n!WARNING!: bond info assignment has something wrong! only PRO will reach here! %i - %i %s:%i\n", target, property->num, __FILE__, __LINE__);
                     warningsum ++;
                     return 0;
                 }
@@ -1235,33 +1269,33 @@ int FindNextBondList(int targetAtom, struct PropertyStr *property, double dmin, 
     }
     
     struct ConstraintStr *newBond = calloc(1, sizeof(struct ConstraintStr));
-    newBond->connection = targetAtom;
+    newBond->connection = target;
     newBond->dmin = dmin;
     newBond->dmax = dmax;
     newBond->next = (property->bond == NULL) ? NULL : property->bond;
     property->bond = newBond;
     
     if (type == 2) {
-        RemoveConstr(property, targetAtom, "constraint");
+        RemoveConstr(property, target, "constraint");
     }
     
     return 1;
 }
 
 
-int ConstrList(int targetAtom, int step, struct PropertyStr *property, FILE *inputFile, int type) {
+int ConstrList(int target, int step, struct PropertyStr *property, FILE *inputFile, int type) {
     struct ConstraintStr *thisConstr = property->constr;
     struct StepPotenStr *thisStep = NULL;
     
     while (thisConstr != NULL) {
-        if (thisConstr->connection == targetAtom) {
+        if (thisConstr->connection == target) {
             return 0;
         }
         thisConstr = thisConstr->next;
     }
     
     struct ConstraintStr *newConstr = calloc(1, sizeof(struct ConstraintStr));
-    newConstr->connection = targetAtom;
+    newConstr->connection = target;
     fscanf(inputFile, "%lf", &newConstr->dmin);
     newConstr->dmin *= newConstr->dmin;
     
@@ -1285,7 +1319,7 @@ int ConstrList(int targetAtom, int step, struct PropertyStr *property, FILE *inp
     property->constr = newConstr;
     
     if (type == 2) {
-        RemoveConstr(property, targetAtom, "bond");
+        RemoveConstr(property, target, "bond");
     }
     
     return 1;
@@ -1318,10 +1352,10 @@ void RemoveSpace(char *str) {
 }
 
 
-int FindTargetAtom(int AANum, char *targetAtom) {
+int FindTargetAtom(int AANum, char *target) {
     int start, end;
     
-    if (targetAtom[0] == '+') {
+    if (target[0] == '+') {
         if (AANum == totalAminoAcids || aminoacid[AANum + 1].proteinNum != aminoacid[AANum].proteinNum) {
             return -1; //not available but legal
         } else {
@@ -1334,7 +1368,7 @@ int FindTargetAtom(int AANum, char *targetAtom) {
     }
     
     for (int i = start; i <= end; i ++) {
-        if (strcmp(atom[i].property->name, targetAtom[0] == '+' ? targetAtom + 1 : targetAtom) == 0) {
+        if (strcmp(atom[i].property->name, target[0] == '+' ? target + 1 : target) == 0) {
             return i;
         }
     }
@@ -1348,15 +1382,15 @@ void BondDuplicate(int AANum) {
     int flag;
     struct ConstraintStr *thisBond;
     
-    for (int targetAtomNum = aminoacid[AANum].startAtomNum; targetAtomNum <= aminoacid[AANum].endAtomNum; targetAtomNum ++) {
-        for (int i = (atom[targetAtomNum].property->sequence.aminoacidNum == 1) ? aminoacid[AANum].startAtomNum : aminoacid[AANum - 1].startAtomNum; i <= aminoacid[AANum].endAtomNum; i ++) {
+    for (int targetNum = aminoacid[AANum].startAtomNum; targetNum <= aminoacid[AANum].endAtomNum; targetNum ++) {
+        for (int i = (atom[targetNum].property->sequence.aminoacidNum == 1) ? aminoacid[AANum].startAtomNum : aminoacid[AANum - 1].startAtomNum; i <= aminoacid[AANum].endAtomNum; i ++) {
             
             thisBond = atom[i].property->bond;
             while (thisBond != NULL) {
-                if (thisBond->connection == targetAtomNum) {
-                    flag = FindNextBondList(i, atom[targetAtomNum].property, thisBond->dmin, thisBond->dmax, 0);
+                if (thisBond->connection == targetNum) {
+                    flag = FindNextBondList(i, atom[targetNum].property, thisBond->dmin, thisBond->dmax, 0);
                     if (flag == 1) {
-                        connectionMap[targetAtomNum][i] |= BOND_CONNECT;
+                        connectionMap[targetNum][i] |= BOND_CONNECT;
                     }
                     break;
                 }
@@ -1371,14 +1405,14 @@ void ConstrDuplicate(int AANum) {
     int flag;
     struct ConstraintStr *thisConstr;
     
-    for (int targetAtomNum = aminoacid[AANum].startAtomNum; targetAtomNum <= aminoacid[AANum].endAtomNum; targetAtomNum ++) {
+    for (int targetNum = aminoacid[AANum].startAtomNum; targetNum <= aminoacid[AANum].endAtomNum; targetNum ++) {
         
-        for (int i = (atom[targetAtomNum].property->sequence.aminoacidNum == 1) ? aminoacid[AANum].startAtomNum : aminoacid[AANum - 1].startAtomNum; i <= aminoacid[AANum].endAtomNum; i ++) {
+        for (int i = (atom[targetNum].property->sequence.aminoacidNum == 1) ? aminoacid[AANum].startAtomNum : aminoacid[AANum - 1].startAtomNum; i <= aminoacid[AANum].endAtomNum; i ++) {
             
             thisConstr = atom[i].property->constr;
             while (thisConstr != NULL) {
-                if (thisConstr->connection == targetAtomNum) {
-                    struct ConstraintStr *targetConstr = atom[targetAtomNum].property->constr;
+                if (thisConstr->connection == targetNum) {
+                    struct ConstraintStr *targetConstr = atom[targetNum].property->constr;
                     flag = 0;
                     while (targetConstr != NULL) {
                         if (targetConstr->connection == i) {
@@ -1398,10 +1432,10 @@ void ConstrDuplicate(int AANum) {
                     newConstr->dmax = thisConstr->dmax;
                     newConstr->dmin = thisConstr->dmin;
                     newConstr->step = thisConstr->step;
-                    newConstr->next = (atom[targetAtomNum].property->constr == NULL) ? NULL : atom[targetAtomNum].property->constr;
-                    atom[targetAtomNum].property->constr = newConstr;
+                    newConstr->next = (atom[targetNum].property->constr == NULL) ? NULL : atom[targetNum].property->constr;
+                    atom[targetNum].property->constr = newConstr;
                     
-                    connectionMap[targetAtomNum][i] |= CONSTRAINT_CONNECT;
+                    connectionMap[targetNum][i] |= CONSTRAINT_CONNECT;
                     break;
                 }
                 thisConstr = thisConstr->next;
@@ -1515,7 +1549,7 @@ void CalculateMass() {
 }
 
 
-void ReadHB() {
+void ReadHB(void) {
     //read the data about HB interactions
     //determine HB neighbors
     int typeNum = 0; //HB type number
@@ -1606,83 +1640,88 @@ void ReadHB() {
                 HBNeighborAssign(i);
             }
         }
+        
+        if (preBond.mark)
+            ReadPreBonds(neworcontinue);
     }
+
+    return;
 }
 
 
 void HBNeighborAssign(int num) {
-    int targetAtom = aminoacid[protein[atom[num].property->sequence.proteinNum - 1].endAANum + atom[num].property->sequence.aminoacidNum].endAtomNum + 1;
+    int target = aminoacid[protein[atom[num].property->sequence.proteinNum - 1].endAANum + atom[num].property->sequence.aminoacidNum].endAtomNum + 1;
 					 //start from the end of the amino acid, so never miss the target
     
     if (atom[num].property->typeofAtom == 2) {
         
-        while (atom[--targetAtom].property->typeofAtom != 18);
-        atom[num].dynamic->HB.neighbor = targetAtom;
+        while (atom[--target].property->typeofAtom != 18);
+        atom[num].dynamic->HB.neighbor = target;
         atom[num].dynamic->HB.role = 'D';
         
     } else if (atom[num].property->typeofAtom == 26) {
         
-        while (atom[--targetAtom].property->typeofAtom != 6);
-        atom[num].dynamic->HB.neighbor = targetAtom;
+        while (atom[--target].property->typeofAtom != 6);
+        atom[num].dynamic->HB.neighbor = target;
         atom[num].dynamic->HB.role = 'A';
         
     } else if (strcmp(atom[num].property->nameofAA, "HIS") == 0) {
         
         if (strcmp(atom[num].property->name, "HD1") == 0) {
-            while (strcmp(atom[--targetAtom].property->name, "ND1"));
-            atom[num].dynamic->HB.neighbor = targetAtom;
+            while (strcmp(atom[--target].property->name, "ND1"));
+            atom[num].dynamic->HB.neighbor = target;
             atom[num].dynamic->HB.role = 'D';
         } else if (strcmp(atom[num].property->name, "HE2") == 0) {
-            while (strcmp(atom[--targetAtom].property->name, "NE2"));
-            atom[num].dynamic->HB.neighbor = targetAtom;
+            while (strcmp(atom[--target].property->name, "NE2"));
+            atom[num].dynamic->HB.neighbor = target;
             atom[num].dynamic->HB.role = 'D';
         } else if (strcmp(atom[num].property->name, "NE2") == 0) {
-            while (strcmp(atom[--targetAtom].property->name, "CD2"));
-            atom[num].dynamic->HB.neighbor = targetAtom;
+            while (strcmp(atom[--target].property->name, "CD2"));
+            atom[num].dynamic->HB.neighbor = target;
             atom[num].dynamic->HB.role = 'A';
         }
         
     } else if (strcmp(atom[num].property->nameofAA, "TYR") == 0) {
         
         if (strcmp(atom[num].property->name, "HH") == 0) {
-            while (strcmp(atom[--targetAtom].property->name, "OH"));
-            atom[num].dynamic->HB.neighbor = targetAtom;
+            while (strcmp(atom[--target].property->name, "OH"));
+            atom[num].dynamic->HB.neighbor = target;
             atom[num].dynamic->HB.role = 'D';
         } else if (strcmp(atom[num].property->name, "OH") == 0) {
-            while (strcmp(atom[--targetAtom].property->name, "CZ"));
-            atom[num].dynamic->HB.neighbor = targetAtom;
+            while (strcmp(atom[--target].property->name, "CZ"));
+            atom[num].dynamic->HB.neighbor = target;
             atom[num].dynamic->HB.role = 'A';
         }
         
     } else if (strcmp(atom[num].property->nameofAA, "TRP") == 0) {
         
         if (strcmp(atom[num].property->name, "HE1") == 0) {
-            while (strcmp(atom[--targetAtom].property->name, "NE1"));
-            atom[num].dynamic->HB.neighbor = targetAtom;
+            while (strcmp(atom[--target].property->name, "NE1"));
+            atom[num].dynamic->HB.neighbor = target;
             atom[num].dynamic->HB.role = 'D';
         }
         
     } else if (strcmp(atom[num].property->nameofAA, "SER") == 0) {
         
         if (strcmp(atom[num].property->name, "HG") == 0) {
-            while (strcmp(atom[--targetAtom].property->name, "OG"));
-            atom[num].dynamic->HB.neighbor = targetAtom;
+            while (strcmp(atom[--target].property->name, "OG"));
+            atom[num].dynamic->HB.neighbor = target;
             atom[num].dynamic->HB.role = 'D';
         } else if (strcmp(atom[num].property->name, "OG") == 0) {
-            while (strcmp(atom[--targetAtom].property->name, "CB"));
-            atom[num].dynamic->HB.neighbor = targetAtom;
+            while (strcmp(atom[--target].property->name, "CB"));
+            atom[num].dynamic->HB.neighbor = target;
             atom[num].dynamic->HB.role = 'A';
         }
         
     } else if (strcmp(atom[num].property->nameofAA, "THR") == 0) {
         
         if (strcmp(atom[num].property->name, "HG1") == 0) {
-            while (strcmp(atom[--targetAtom].property->name, "OG1"));
-            atom[num].dynamic->HB.neighbor = targetAtom;
+            while (strcmp(atom[--target].property->name, "OG1"));
+            atom[num].dynamic->HB.neighbor = target;
             atom[num].dynamic->HB.role = 'D';
         } else if (strcmp(atom[num].property->name, "OG1") == 0) {
-            while (strcmp(atom[--targetAtom].property->name, "CB"));
-            atom[num].dynamic->HB.neighbor = targetAtom;
+            while (strcmp(atom[--target].property->name, "CB"));
+            atom[num].dynamic->HB.neighbor = target;
             atom[num].dynamic->HB.role = 'A';
         }
         
@@ -1690,12 +1729,12 @@ void HBNeighborAssign(int num) {
         
         if (strcmp(atom[num].property->name, "HD21") == 0 ||
             strcmp(atom[num].property->name, "HD22") == 0) {
-            while (strcmp(atom[--targetAtom].property->name, "ND2"));
-            atom[num].dynamic->HB.neighbor = targetAtom;
+            while (strcmp(atom[--target].property->name, "ND2"));
+            atom[num].dynamic->HB.neighbor = target;
             atom[num].dynamic->HB.role = 'D';
         } else if (strcmp(atom[num].property->name, "OD1") == 0) {
-            while (strcmp(atom[--targetAtom].property->name, "CG"));
-            atom[num].dynamic->HB.neighbor = targetAtom;
+            while (strcmp(atom[--target].property->name, "CG"));
+            atom[num].dynamic->HB.neighbor = target;
             atom[num].dynamic->HB.role = 'A';
         }
         
@@ -1703,12 +1742,12 @@ void HBNeighborAssign(int num) {
         
         if (strcmp(atom[num].property->name, "HE21") == 0 ||
             strcmp(atom[num].property->name, "HE22") == 0) {
-            while (strcmp(atom[--targetAtom].property->name, "NE2"));
-            atom[num].dynamic->HB.neighbor = targetAtom;
+            while (strcmp(atom[--target].property->name, "NE2"));
+            atom[num].dynamic->HB.neighbor = target;
             atom[num].dynamic->HB.role = 'D';
         } else if (strcmp(atom[num].property->name, "OE1") == 0) {
-            while (strcmp(atom[--targetAtom].property->name, "CD"));
-            atom[num].dynamic->HB.neighbor = targetAtom;
+            while (strcmp(atom[--target].property->name, "CD"));
+            atom[num].dynamic->HB.neighbor = target;
             atom[num].dynamic->HB.role = 'A';
         }
         
@@ -1717,26 +1756,26 @@ void HBNeighborAssign(int num) {
         if (strcmp(atom[num].property->name, "HZ1") == 0 ||
             strcmp(atom[num].property->name, "HZ2") == 0 ||
             strcmp(atom[num].property->name, "HZ3") == 0) {
-            while (strcmp(atom[--targetAtom].property->name, "NZ"));
-            atom[num].dynamic->HB.neighbor = targetAtom;
+            while (strcmp(atom[--target].property->name, "NZ"));
+            atom[num].dynamic->HB.neighbor = target;
             atom[num].dynamic->HB.role = 'D';
         }
         
     } else if (strcmp(atom[num].property->nameofAA, "ARG") == 0) {
         
         if (strcmp(atom[num].property->name, "HE") == 0) {
-            while (strcmp(atom[--targetAtom].property->name, "NE"));
-            atom[num].dynamic->HB.neighbor = targetAtom;
+            while (strcmp(atom[--target].property->name, "NE"));
+            atom[num].dynamic->HB.neighbor = target;
             atom[num].dynamic->HB.role = 'D';
         } else if (strcmp(atom[num].property->name, "HH11") == 0 ||
                    strcmp(atom[num].property->name, "HH12") == 0) {
-            while (strcmp(atom[--targetAtom].property->name, "NH1"));
-            atom[num].dynamic->HB.neighbor = targetAtom;
+            while (strcmp(atom[--target].property->name, "NH1"));
+            atom[num].dynamic->HB.neighbor = target;
             atom[num].dynamic->HB.role = 'D';
         } else if (strcmp(atom[num].property->name, "HH21") == 0 ||
                    strcmp(atom[num].property->name, "HH22") == 0) {
-            while (strcmp(atom[--targetAtom].property->name, "NH2"));
-            atom[num].dynamic->HB.neighbor = targetAtom;
+            while (strcmp(atom[--target].property->name, "NH2"));
+            atom[num].dynamic->HB.neighbor = target;
             atom[num].dynamic->HB.role = 'D';
         }
         
@@ -1744,8 +1783,8 @@ void HBNeighborAssign(int num) {
         
         if (strcmp(atom[num].property->name, "OD1") == 0 ||
             strcmp(atom[num].property->name, "OD2") == 0) {
-            while (strcmp(atom[--targetAtom].property->name, "CG"));
-            atom[num].dynamic->HB.neighbor = targetAtom;
+            while (strcmp(atom[--target].property->name, "CG"));
+            atom[num].dynamic->HB.neighbor = target;
             atom[num].dynamic->HB.role = 'A';
         }
         
@@ -1753,16 +1792,16 @@ void HBNeighborAssign(int num) {
         
         if (strcmp(atom[num].property->name, "OE1") == 0 ||
             strcmp(atom[num].property->name, "OE2") == 0) {
-            while (strcmp(atom[--targetAtom].property->name, "CD"));
-            atom[num].dynamic->HB.neighbor = targetAtom;
+            while (strcmp(atom[--target].property->name, "CD"));
+            atom[num].dynamic->HB.neighbor = target;
             atom[num].dynamic->HB.role = 'A';
         }
         
     } else if (strcmp(atom[num].property->nameofAA, "CYS") == 0) {
         
         if (strcmp(atom[num].property->name, "SG") == 0) {
-            while (strcmp(atom[--targetAtom].property->name, "CB"));
-            atom[num].dynamic->HB.neighbor = targetAtom;
+            while (strcmp(atom[--target].property->name, "CB"));
+            atom[num].dynamic->HB.neighbor = target;
             atom[num].dynamic->HB.role = 'S';
         }
         
@@ -1780,7 +1819,7 @@ void HBNeighborAssign(int num) {
         }
     }
     
-    if (targetAtom < aminoacid[atom[num].property->sequence.aminoacidNum].startAtomNum) {
+    if (target < aminoacid[atom[num].property->sequence.aminoacidNum].startAtomNum) {
         printf("!!ERROR!!: atom %2i(%2i%2s) cannot find its neighbor!\n", num, atom[num].property->sequence.aminoacidNum, atom[num].property->name);
         printf("           %s:%i\n", __FILE__, __LINE__);
         exit(EXIT_FAILURE);
@@ -1824,9 +1863,6 @@ void GenerateVelocity(void) {
 
 void InitializeOthers() {
     //initialize other variables
-    //include those multi-thread variables
-    
-    thread_t = (pthread_t *)calloc(threadNum, sizeof(pthread_t));
     
 #ifdef VIS
     if (visual) {
@@ -1938,8 +1974,13 @@ void ReadWall(void) {
                    obstObj.obst[i].property->extraProperty[0],
                    obstObj.obst[i].property->extraProperty[1]);
             
-            obstObj.obst[i].property->typeofAtom = AtomModel(rName);
-            sprintf(obstObj.obst[i].property->nameofAA, "Wall");
+            if (CG.mark == 2) {
+                obstObj.obst[i].property->typeofAtom = AAModel(rName);
+                sprintf(obstObj.obst[i].property->nameofAA, "%s", rName);
+            } else {
+                obstObj.obst[i].property->typeofAtom = AtomModel(rName);
+                sprintf(obstObj.obst[i].property->nameofAA, "Wall");
+            }
             
             obstObj.obst[i].dynamic->coordinate[1] = obstObj.position[i][1];
             obstObj.obst[i].dynamic->coordinate[2] = obstObj.position[i][2];
@@ -2095,6 +2136,169 @@ void InitializeCharge(void) {
     }
     
     return;
+}
+
+void ReadPreBonds(char *type) {
+    char directory[1024], *buffer;
+    FILE *inputFile;
+    
+    sprintf(directory, "%s/PreBond.txt", datadir);
+    inputFile = fopen(directory, "r");
+    if (inputFile == NULL) {
+        printf("!WARNING!: no pre-existing bonds assigned!\n");
+        return;
+    }
+    
+    buffer = (char *)calloc(1024, sizeof(char));
+	while (fgets(buffer, 1024, inputFile)) {
+		if (buffer[0] == '#') {
+			continue;
+		}
+
+		sscanf(buffer, "%i", &preBond.num);
+        break;
+	}
+
+	for (int i = 0; i < preBond.num; i++) {
+        int pos = 0;
+		char preAtomNum[2][32];
+
+		fgets(buffer, 1024, inputFile);
+		sscanf(buffer, "%s%s%n", preAtomNum[0], preAtomNum[1], &pos);
+
+		if (strcmp(preAtomNum[0], "wall") && strcmp(type, "continue")) {
+			int atom1 = atoi(preAtomNum[0]), atom2 = atoi(preAtomNum[1]);
+			struct AtomStr* HB_i = &atom[atom1];
+			struct AtomStr* HB_j = &atom[atom2];
+			struct AtomStr* neighbor_i = &atom[HB_i->dynamic->HB.neighbor];
+			struct AtomStr* neighbor_j = &atom[HB_j->dynamic->HB.neighbor];
+
+			if (CheckPreBondAvailability(HB_i, HB_j, NULL, "HB") &&
+				CheckPreBondAvailability(neighbor_j, HB_i, HB_j, "neighbor") &&
+				CheckPreBondAvailability(neighbor_i, HB_j, HB_i, "neighbor")) {
+
+				HB_i->dynamic->HB.bondConnection = atom2;
+				HB_j->dynamic->HB.bondConnection = atom1;
+
+				HB_i->property->typeofAtom = AtomTypeChange(HB_i->property->typeofAtom, 1);
+				HB_j->property->typeofAtom = AtomTypeChange(HB_j->property->typeofAtom, 1);
+
+				int temp;
+				temp = ++HB_i->dynamic->HBNeighbor.neighborStatus;
+				HB_i->dynamic->HBNeighbor.neighborPartner[temp] = HB_j->dynamic->HB.neighbor;
+
+				temp = ++HB_j->dynamic->HBNeighbor.neighborStatus;
+				HB_j->dynamic->HBNeighbor.neighborPartner[temp] = HB_i->dynamic->HB.neighbor;
+
+				//for neighbors
+				temp = ++neighbor_i->dynamic->HBNeighbor.neighborStatus;
+				neighbor_i->dynamic->HBNeighbor.neighborPartner[temp] = atom2;
+
+				temp = ++neighbor_j->dynamic->HBNeighbor.neighborStatus;
+				neighbor_j->dynamic->HBNeighbor.neighborPartner[temp] = atom1;
+
+                //adjust the connection map
+                connectionMap[atom1][atom2] ^= HB_CONNECT;
+                connectionMap[atom2][atom1] ^= HB_CONNECT;
+                connectionMap[atom1][HB_j->dynamic->HB.neighbor] ^= NEIGHBOR_CONNECT;
+                connectionMap[HB_j->dynamic->HB.neighbor][atom1] ^= NEIGHBOR_CONNECT;
+                connectionMap[atom2][HB_i->dynamic->HB.neighbor] ^= NEIGHBOR_CONNECT;
+                connectionMap[HB_i->dynamic->HB.neighbor][atom2] ^= NEIGHBOR_CONNECT;
+                HBnumformed ++;
+			} else {
+				continue;
+			}
+
+		} else {
+			if (strcmp(wallExist, "no") == 0 && !obstObj.mark) {
+				printf("!!ERROR!!: no wall is defined. there cannot be any prebond between atom %s and wall!\n", preAtomNum[1]);
+				printf("           %s:%i\n", __FILE__, __LINE__);
+				exit(EXIT_FAILURE);
+			}
+            
+            sscanf(buffer + pos, "%lf", &preBond.dis);
+            preBond.dis *= preBond.dis;
+            
+            if (strcmp(type, "new") == 0)
+                sprintf(atom[atoi(preAtomNum[1])].property->extraProperty[1], "CONS");
+		}
+	}
+    
+    free(buffer);
+    fclose(inputFile);
+    return;
+}
+
+int CheckPreBondAvailability(struct AtomStr *atom1, struct AtomStr *atom2, struct AtomStr *partner, char *checkType) {
+    int type1 = 0, type2 = 0;
+    int num1 = atom1->property->num, num2 = atom2->property->num;
+    double r_ij[4] = {0}, r_2;
+    struct ConstraintStr *thisConstr = NULL;
+
+    if (strcmp(checkType, "HB") == 0) {
+        
+        //either of the two atoms is not able to form HB or SS bond
+        if (atom1->dynamic->HB.role != 'A' &&
+            atom1->dynamic->HB.role != 'D' &&
+            atom1->dynamic->HB.role != 'S') {
+            printf("!!ERROR!!: the atom #%i in the assigned pre-existing bonds %i : %i is not able to form a HB or SS bond!\n", num1, num1, num2);
+            printf("           please check if the provided atom number was correct!\n");
+            printf("%s:%i\n", __FILE__, __LINE__);
+            exit(EXIT_FAILURE);
+        } else if (atom2->dynamic->HB.role != 'A' &&
+                   atom2->dynamic->HB.role != 'D' &&
+                   atom2->dynamic->HB.role != 'S') {
+            printf("!!ERROR!!: the atom #%i in the assigned pre-existing bonds %i : %i is not able to form a HB or SS bond!\n", num2, num1, num2);
+            printf("           please check if the provided atom number was correct!\n");
+            printf("%s:%i\n", __FILE__, __LINE__);
+            exit(EXIT_FAILURE);
+        }
+        
+        type1 = HBModel(atom1, atom2);
+        thisConstr = &potentialPairHB[type1][0][0];
+        
+    } else if (strcmp(checkType, "neighbor") == 0) {
+        
+        int typeNum = HBModel(atom2, partner);
+        type1 = AtomTypeChange(atom1->property->typeofAtom, 0);
+        type2 = AtomTypeChange(atom2->property->typeofAtom, 0);
+        
+        thisConstr = &potentialPairHB[typeNum][type1][type2];
+        
+    } else {
+        printf("!!ERROR!!: the check type is invalid!\n");
+        printf("%s:%i\n", __FILE__, __LINE__);
+        exit(EXIT_FAILURE);
+    }
+
+    
+    DOT_MINUS(atom1->dynamic->coordinate, atom2->dynamic->coordinate, r_ij);
+    r_2 = DOT_PROD(r_ij, r_ij);
+    
+    if (r_2 < thisConstr->dmin - ZERO) {
+        printf("!WARNING!: the pre-existing bond %i : %i could not be assigned due to its distance or its auxiliary bond's distance is too small!\n", num1, num2);
+        printf("           the min is %.2lf, the distance is %.2lf\n", sqrt(thisConstr->dmin), sqrt(r_2));
+        return 0;
+    }
+    
+    struct StepPotenStr *nextStep = thisConstr->step;
+    struct StepPotenStr *thisStep = NULL;
+    while (nextStep != NULL && nextStep->d != 0) {
+        thisStep = nextStep;
+        nextStep = nextStep->next;
+    }
+    
+    if (!thisStep) {
+        printf("!!ERROR!!: the potential data of the pre-existing bond %i : %i has something wrong!\n", num1, num2);
+        printf("%s:%i\n", __FILE__, __LINE__);
+        exit(EXIT_FAILURE);
+    } else if (r_2 > thisStep->d) {
+        printf("!WARNING!: the pre-existing bond %i : %i could not be assigned due to its distance or its auxiliary bond's distance is too large!\n", num1, num2);
+        printf("           the max is %.2lf, the distance is %.2lf\n", sqrt(thisStep->d), sqrt(r_2));
+        return 0;
+    }
+    
+    return 1;
 }
 
 #ifdef VIS

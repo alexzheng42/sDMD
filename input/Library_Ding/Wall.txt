@@ -1,2 +1,2 @@
 Wall
-   ATOM CA      CA    12.0  N N
+   ATOM PHO     PHO   12.0  N N

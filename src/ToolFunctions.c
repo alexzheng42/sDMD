@@ -9,32 +9,29 @@
 #include "DMD.h"
 
 
-void TimeForward(double time, struct ThreadStr *thisThread) {
+void ThreadProcess(void) {
+
+	if (REMDInfo.flag == 1) { //REMD is requested
+		REMD();
+	} else {
+		SingleThread();
+	}
+	return;
+}
+
+
+void TimeForward(double time) {
     for (int i = 1; i <= atomnum; ++i) {
-        thisThread->raw[i]->dynamic->event.time -= time;
+        atom[i].dynamic->event.time -= time;
     }
 }
 
 
-void UpdateData(double time, char *type, struct ThreadStr *thisThread) {
-    if (strncmp(type, "atom", 1) == 0) {
-        for (int i = 1; i <= atomnum; i++) {
-            thisThread->raw[i]->dynamic->coordinate[1] += thisThread->raw[i]->dynamic->velocity[1] * time;
-            thisThread->raw[i]->dynamic->coordinate[2] += thisThread->raw[i]->dynamic->velocity[2] * time;
-            thisThread->raw[i]->dynamic->coordinate[3] += thisThread->raw[i]->dynamic->velocity[3] * time;
-        }
-    } else if (strncmp(type, "partial", 2) == 0) {
-        list *atomList = &thisThread->atomList;
-        listElem *elem = listFirst(atomList);
-        for (int n = 1; n <= atomList->num_members; n ++) {
-            ((struct AtomStr *)elem->obj)->dynamic->coordinate[1] += ((struct AtomStr *)elem->obj)->dynamic->velocity[1] * time;
-            ((struct AtomStr *)elem->obj)->dynamic->coordinate[2] += ((struct AtomStr *)elem->obj)->dynamic->velocity[2] * time;
-            ((struct AtomStr *)elem->obj)->dynamic->coordinate[3] += ((struct AtomStr *)elem->obj)->dynamic->velocity[3] * time;
-            
-            elem = listNext(atomList, elem);
-        }
-    } else {
-        printf("!ERROR!: UpdateData function type has something wrong!\n");
+void UpdateData(double time) {
+    for (int i = 1; i <= atomnum; i++) {
+        atom[i].dynamic->coordinate[1] += atom[i].dynamic->velocity[1] * time;
+        atom[i].dynamic->coordinate[2] += atom[i].dynamic->velocity[2] * time;
+        atom[i].dynamic->coordinate[3] += atom[i].dynamic->velocity[3] * time;
     }
 }
 
@@ -92,6 +89,13 @@ int FindPair (struct AtomStr *atom1, struct AtomStr *atom2, char *interactionTyp
         
         thisConstr = &potentialPairHB[typeNum][type1][type2];
         
+    } else if (strncmp(interactionType, "CG", 2) == 0) {
+
+        type1 = AAModel(atom1->property->nameofAA);
+        type2 = AAModel(atom2->property->nameofAA);
+        
+        thisConstr = &potentialPairCG[type1][type2];
+        
     } else {
         printf("!ERROR!: InteractionType assignment does not match!\n");
         exit(EXIT_FAILURE);
@@ -108,7 +112,7 @@ int FindPair (struct AtomStr *atom1, struct AtomStr *atom2, char *interactionTyp
     struct StepPotenStr *thisStep = thisConstr->step;
     
     if (unlikely(thisConstr->dmin == 0)) {
-        printf("!!ERROR!!: the potential pair is invalid! %s:%i\n", __FILE__, __LINE__);
+        printf("!!ERROR!!: the potential pair between atom %i and %i is invalid! %s:%i\n", atom1->property->num, atom2->property->num, __FILE__, __LINE__);
         exit(EXIT_FAILURE);
     }
     
@@ -123,8 +127,7 @@ int FindPair (struct AtomStr *atom1, struct AtomStr *atom2, char *interactionTyp
         if (unlikely(!(strcmp(interactionType, "neighbor") == 0 && atom2->dynamic->HB.bondConnection == 0) &&
                      !(strcmp(interactionType, "HB") == 0 && atom1->dynamic->HB.bondConnection == 0) &&
                      !(strcmp(wallDyn.mark, "no")) &&
-                     !tunlObj.mark &&
-                     !(codeNum > 1))) {
+                     !tunlObj.mark)) {
             printf("!WARNING!: the distance between atom %2i(%2i%2s) and %2i(%2i%2s) is too small!\n",
                    atom1->property->num, atom1->property->sequence.aminoacidNum, atom1->property->name,
                    atom2->property->num, atom2->property->sequence.aminoacidNum, atom2->property->name);
@@ -288,7 +291,7 @@ struct ConstraintStr *RightPair(int type1, int type2, int flag) {
     return targetPair;
 }
 
-
+/*
 void PrintCellList(struct ThreadStr *thisThread) {
     int num;
     
@@ -306,7 +309,7 @@ void PrintCellList(struct ThreadStr *thisThread) {
         }
     }
 }
-
+*/
 
 void DisplayTime(char * timer) {
     time_t timetodisplay;
@@ -319,7 +322,7 @@ void DisplayTime(char * timer) {
 }
 
 
-void SDEnergyMin(long int stepNum, struct ThreadStr *thisThread) {
+void SDEnergyMin(long int stepNum, struct AtomListStr *thisList) {
     struct interStr {
         int connect[512];
         double coordinate[4];
@@ -330,7 +333,6 @@ void SDEnergyMin(long int stepNum, struct ThreadStr *thisThread) {
     
     long step = 0;
     long totalCN = INFINIT * INFINIT;
-    int l, flag;
     double factor = 0.1;
     double diff;
     double energy;
@@ -346,11 +348,11 @@ void SDEnergyMin(long int stepNum, struct ThreadStr *thisThread) {
     
     for (int i = 1; i <= atomnum; ++i) {
         
-        TRANSFER_VECTOR(interaction[i].coordinate, thisThread->raw[i]->dynamic->coordinate);
+        TRANSFER_VECTOR(interaction[i].coordinate, thisList->ptr[i]->dynamic->coordinate);
         
         //transfer bond information
         int m = 0;
-        struct ConstraintStr *thisBond = thisThread->raw[i]->property->bond;
+        struct ConstraintStr *thisBond = thisList->ptr[i]->property->bond;
         while (thisBond != NULL) {
             m++;
             interaction[i].connect[m] = thisBond->connection;
@@ -361,7 +363,7 @@ void SDEnergyMin(long int stepNum, struct ThreadStr *thisThread) {
         }
         
         //transfer constrains information
-        struct ConstraintStr *thisConstr = thisThread->raw[i]->property->constr;
+        struct ConstraintStr *thisConstr = thisList->ptr[i]->property->constr;
         while (thisConstr != NULL) {
             m++;
             interaction[i].connect[m] = thisConstr->connection;
@@ -373,22 +375,21 @@ void SDEnergyMin(long int stepNum, struct ThreadStr *thisThread) {
         
         //transfer interaction potential information
         for (int n = 1; n <= atomnum; n ++) {
-            direction[1] = thisThread->raw[n]->dynamic->coordinate[1] - thisThread->raw[i]->dynamic->coordinate[1];
-            direction[2] = thisThread->raw[n]->dynamic->coordinate[2] - thisThread->raw[i]->dynamic->coordinate[2];
-            direction[3] = thisThread->raw[n]->dynamic->coordinate[3] - thisThread->raw[i]->dynamic->coordinate[3];
+            direction[1] = thisList->ptr[n]->dynamic->coordinate[1] - thisList->ptr[i]->dynamic->coordinate[1];
+            direction[2] = thisList->ptr[n]->dynamic->coordinate[2] - thisList->ptr[i]->dynamic->coordinate[2];
+            direction[3] = thisList->ptr[n]->dynamic->coordinate[3] - thisList->ptr[i]->dynamic->coordinate[3];
             
             length2 = DOT_PROD(direction, direction);
             if (length2 <= 144 && //radius of 12 A
                 !(connectionMap[i][n] & BOND_CONNECT) &&
                 !(connectionMap[i][n] & CONSTRAINT_CONNECT)) {
-                FIND_DUPLICATED(n, interaction[i].connect, l, flag);
-                if (i != n && flag == 0) {
+                if (i != n && !FindElemInList(interaction[i].connect, n, -1, -1, 0)) {
                     m++;
                     interaction[i].connect[m] = n; //all the surrounding atoms
                     interaction[i].hiLimit[m] = INFINIT; //interaction potential only has low limit
                     
-                    int type1 = thisThread->raw[i]->property->typeofAtom;
-                    int type2 = thisThread->raw[n]->property->typeofAtom;
+                    int type1 = thisList->ptr[i]->property->typeofAtom;
+                    int type2 = thisList->ptr[n]->property->typeofAtom;
                     
                     if (type1 > type2) {
                         int i = type2;
@@ -473,7 +474,7 @@ void SDEnergyMin(long int stepNum, struct ThreadStr *thisThread) {
                 }
                 num ++;
             }
-            TRANSFER_VECTOR(thisThread->raw[i]->dynamic->coordinate, interaction[i].coordinate);
+            TRANSFER_VECTOR(thisList->ptr[i]->dynamic->coordinate, interaction[i].coordinate);
         }
         
         printf("step = %5li, total conflicts = %li\n", ++step, totalCN);
@@ -492,7 +493,7 @@ void SDEnergyMin(long int stepNum, struct ThreadStr *thisThread) {
 
 void AtomDataCpy(struct AtomStr * dest, struct AtomStr * sour, int flag) {
     memcpy(dest->dynamic, sour->dynamic, sizeof(struct DynamicStr));
-    if (flag > 0) {
+    if (flag > 0 || strcmp(sour->property->extraProperty[1], "_CONS") == 0) {
         dest->property = sour->property;
     }
     
@@ -500,54 +501,16 @@ void AtomDataCpy(struct AtomStr * dest, struct AtomStr * sour, int flag) {
 }
 
 
-void ResetTarget(int *renewList, struct ThreadStr *thisThread) {
+void ResetTarget(int *renewList, struct AtomListStr *thisList) {
     struct AtomStr *target = NULL;
     
     for (int n = 1; renewList[n]; n ++) {
-        target = thisThread->listPtr[renewList[n]];
+        target = thisList->ptr[renewList[n]];
         
         target->dynamic->event.eventType = Invd_Event;
         target->dynamic->event.time = INFINIT;
         target->dynamic->event.partner = INVALID;
     }
-}
-
-
-void RenewCellList(struct AtomStr *newTargetAtom, struct AtomStr *oldTargetAtom) {
-    int newCellIndex;
-    int oldCellIndex;
-    int targetNum = newTargetAtom->property->num;
-    int *sourCellList = celllist;
-    int nextAtom;
-    
-    newCellIndex = newTargetAtom->dynamic->cellIndex[3] * cellnum[1] * cellnum[2]
-    + newTargetAtom->dynamic->cellIndex[2] * cellnum[1]
-    + newTargetAtom->dynamic->cellIndex[1] + 1;
-    
-    oldCellIndex = oldTargetAtom->dynamic->cellIndex[3] * cellnum[1] * cellnum[2]
-    + oldTargetAtom->dynamic->cellIndex[2] * cellnum[1]
-    + oldTargetAtom->dynamic->cellIndex[1] + 1;
-    
-    nextAtom = oldCellIndex + atomnum;
-    
-    if (unlikely(sourCellList[nextAtom] == 0)) {
-        printf("!!ERROR!!: link list has errors!\n");
-    }
-    
-    //remove the target atom at the old position
-    while (sourCellList[nextAtom] != targetNum) {
-        nextAtom = sourCellList[nextAtom];
-        
-        if (unlikely(nextAtom == 0)) {
-            printf("!!ERROR!!: link list has errors!\n");
-        }
-    }
-    sourCellList[nextAtom] = sourCellList[targetNum];
-    
-    //add the target atom into the new position
-    nextAtom = newCellIndex + atomnum;
-    sourCellList[targetNum] = sourCellList[nextAtom];
-    sourCellList[nextAtom] = targetNum;
 }
 
 
@@ -606,14 +569,11 @@ repeat:
 }
 
 
-void ListRefresh(int targetatom, int * targetlist, int start, int end) {
+void ListRefresh(int target, int * targetlist, int start, int end) {
     int i, n;
-    int flag;
     
     if (start == 0 && end == 0) {
-        
-        FIND_DUPLICATED(targetatom, targetlist, i, flag);
-        if (flag == 1) {
+        if ((i = FindElemInList(targetlist, target, -1, -1, 0))) {
             n = i + 1;
             while (targetlist[n] != 0) {
                 targetlist[i] = targetlist[n];
@@ -624,9 +584,7 @@ void ListRefresh(int targetatom, int * targetlist, int start, int end) {
         }
         
     } else {
-        
-        FIND_DUPLICATED_IN_THE_RANGE(targetatom, targetlist, start, end, i, flag);
-        if (flag == 1) {
+        if ((i = FindElemInList(targetlist, target, -1, -1, 0))) {
             n = i + 1;
             while (targetlist[n] != 0 && n <= end) {
                 targetlist[i] = targetlist[n];
@@ -665,7 +623,7 @@ void CalCOMV(int proteinNum, double *netV) {
 }
 
 
-double CalKinetE(struct ThreadStr *thisThread) {
+double CalKinetE(void) {
     double temp[4];
     double TKE = 0;
     
@@ -698,7 +656,7 @@ double CalKinetE(struct ThreadStr *thisThread) {
 }
 
 
-double CalPotenE(struct ThreadStr *thisThread) {
+double CalPotenE(void) {
     signed int x[27]={0,1,0,0,0,1,1,1,-1,0,0,0,-1,-1,-1,0,0,1,-1,1,-1,-1,-1,1,1,1,-1};
     signed int y[27]={0,0,1,0,1,0,1,1,0,-1,0,-1,0,-1,-1,-1,1,0,0,-1,1,-1,1,-1,1,-1,1};
     signed int z[27]={0,0,0,1,1,1,0,1,0,0,-1,-1,-1,0,-1,1,-1,-1,1,0,0,1,-1,-1,-1,1,1};
@@ -715,7 +673,6 @@ double CalPotenE(struct ThreadStr *thisThread) {
     double r_ij[4], v_ij[4], direction, distance2;
     double TPE = 0, accumPotential = 0;
     double positionshift[4] = {0};
-    struct AtomStr **raw = thisThread->raw;
     struct AtomStr *HBPartner;
     
     for (int i = 1; i <= atomnum; i ++) {
@@ -757,28 +714,28 @@ double CalPotenE(struct ThreadStr *thisThread) {
                         
                         if (connectionMap[atom_i][atom_j] & HB_CONNECT) {
                             sprintf(eventType, "HB");
-                            TPE -= HBBarrier(raw[atom_i], raw[atom_j]);
+                            TPE -= HBBarrier(&atom[atom_i], &atom[atom_j]);
                         } else if (connectionMap[atom_i][atom_j] & CONSTRAINT_CONNECT) {
                             sprintf(eventType, "constraint");
                         } else if (connectionMap[atom_i][atom_j] & NEIGHBOR_CONNECT) {
-                            if (raw[raw[atom_i]->dynamic->HB.bondConnection]->dynamic->HB.neighbor == atom_j) {
+                            if (atom[atom[atom_i].dynamic->HB.bondConnection].dynamic->HB.neighbor == atom_j) {
                                 swap = atom_i;
                                 atom_i = atom_j;
                                 atom_j = swap;
                             }
-                            HBPartner = raw[raw[atom_j]->dynamic->HB.bondConnection];
+                            HBPartner = &atom[atom[atom_j].dynamic->HB.bondConnection];
                             sprintf(eventType, "neighbor");
                         } else {
                             sprintf(eventType, "collision");
                         }
                         
-                        TRANSFER_VECTOR(speed_i, raw[atom_i]->dynamic->velocity);
-                        TRANSFER_VECTOR(speed_j, raw[atom_j]->dynamic->velocity);
+                        TRANSFER_VECTOR(speed_i, atom[atom_i].dynamic->velocity);
+                        TRANSFER_VECTOR(speed_j, atom[atom_j].dynamic->velocity);
                         
                         DOT_MINUS(speed_i, speed_j, v_ij);
                         direction = DOT_PROD(r_ij, v_ij);
                         
-                        FindPair(raw[atom_i], raw[atom_j], eventType, direction, distance2, &tmp, &tmp, &tmp, &tmp, &accumPotential, HBPartner, 0);
+                        FindPair(&atom[atom_i], &atom[atom_j], eventType, direction, distance2, &tmp, &tmp, &tmp, &tmp, &accumPotential, HBPartner, 0);
                         
                         if (accumPotential < INFINIT / 2) {
                             TPE += accumPotential;
@@ -795,8 +752,8 @@ double CalPotenE(struct ThreadStr *thisThread) {
 }
 
 
-double CalSysTem(struct ThreadStr *thisThread) {
-    return 2 * CalKinetE(thisThread) / (3 * atomnum); //reduced
+double CalSysTem(void) {
+    return 2 * CalKinetE() / (3 * atomnum); //reduced
 }
 
 
@@ -807,7 +764,7 @@ double GetViscosity(double thisT) //water, range from 265 to 423 K (-8 to 150 C)
     
     convertedT = thisT - 273;
     temp = (20 - convertedT) / (convertedT + 96)*(1.2378 - 1.303 / 10E3 * (20 - convertedT) + 3.06 / 10E6 * (20 - convertedT)*(20 - convertedT) + 2.55 / 10E8 * (20 - convertedT)*(20 - convertedT)*(20 - convertedT));
-    temp = pow(10, temp);
+    temp = CalExponential(10, temp);
     
     thisViscosity = temp * 1002 / 1.66053892;
     
@@ -860,6 +817,7 @@ void PBCShift (struct AtomStr *atom_i, struct AtomStr *atom_j, double *shift) {
 }
 
 //print the atom list in the surrounding cells
+/*
 void PrintList(list *atomList) {
     listElem *elem = listFirst(atomList);
     struct AtomStr *obj = NULL;
@@ -870,15 +828,7 @@ void PrintList(list *atomList) {
         elem = listNext(atomList, elem);
     }
 }
-
-
-void PrintPreCalList() {
-    for (int i = 1; i < atomnum; i ++) {
-        if (preCalList[i].eventStatus != 0) {
-            printf("atom = %5i, status = %i\n", i, preCalList[i].eventStatus);
-        }
-    }
-}
+ */
 
 
 double AbsvalueVector(double * vector)
@@ -945,6 +895,12 @@ double CalDistance(double *p1, double *p2) {
 }
 
 void CalAccumulatedPoten(struct StepPotenStr *startPoint) {
+    /*
+     the potential table is read from the right to the left.
+     the most right potential (start potential) = delta_E_most_right
+     the other potentials = E_current + delta_E
+     */
+    
     double accumulated = 0;
     struct StepPotenStr *thisStep = NULL;
     
@@ -962,7 +918,7 @@ void CalAccumulatedPoten(struct StepPotenStr *startPoint) {
     }
 }
 
-int EnterTunnel(double time, struct AtomStr *targetAtom) {
+int EnterTunnel(double time, struct AtomStr *target) {
     double r_ij[4], r_2;
     double position_i[4], position_j[4];
     double speed[4];
@@ -973,11 +929,11 @@ int EnterTunnel(double time, struct AtomStr *targetAtom) {
     for (int n = 0; n < tunlObj.num; n ++) {
         radius2 = tunlObj.diameter[n] * 0.5;
         radius2 *= radius2;
-        distanceShift2 = FindPotWellWidth(thisTunnel, targetAtom);
+        distanceShift2 = FindPotWellWidth(thisTunnel, target);
         
-        TRANSFER_VECTOR(position_i, targetAtom->dynamic->coordinate);
+        TRANSFER_VECTOR(position_i, target->dynamic->coordinate);
         TRANSFER_VECTOR(position_j, tunlObj.position[n]);
-        TRANSFER_VECTOR(     speed, targetAtom->dynamic->velocity);
+        TRANSFER_VECTOR(     speed, target->dynamic->velocity);
         
         position_i[1] = position_j[1];
         position_i[2] += speed[2] * time;
@@ -1061,17 +1017,17 @@ void FreeConstr(struct ConstraintStr *thisConstr) {
     free(thisConstr);
 }
 
-void PrintListData(int *list) {
+void PrintListData(int *thisList) {
     double *coordinate;
     
-    for (int i = 1; i <= list[0]; i ++) {
-        int targetAtom = list[i];
-        POINT_TO_STRUCT(coordinate, atom[targetAtom].dynamic->coordinate);
+    for (int i = 1; i <= thisList[0]; i ++) {
+        int target = thisList[i];
+        POINT_TO_STRUCT(coordinate, atom[target].dynamic->coordinate);
         
         printf("frame #%li, atom = #%i, %lf %lf %lf %.20lf\n",
-               frame, targetAtom,
+               frame, target,
                coordinate[1], coordinate[2], coordinate[3],
-               atom[targetAtom].dynamic->event.time);
+               atom[target].dynamic->event.time);
         fflush(stdout);
     }
 }
@@ -1101,4 +1057,41 @@ void PrintHBData(void) {
     }
     
     return;
+}
+
+int FindElemInList(int *list, int value, int start, int end, int add) {
+    if (end >= 0 && start >= 0 && end >= start) {
+        for (int i = start; i <= end; i ++) {
+            if (list[i] == value) {
+                return i;
+            } else if (list[i] == 0) {
+                if (add) list[i] = value;
+                return 0;
+            }
+        }
+    } else {
+        if (add) {
+            printf("!!ERROR!!: unbounded search does not support \"add\"!\n");
+            printf("%s:%i\n", __FILE__, __LINE__);
+            exit(EXIT_FAILURE);
+        }
+        
+        int i = 0;
+        while (list[++i]) {
+            if (list[i] == value) {
+                return i;
+            }
+        }
+    }
+    return 0;
+}
+
+double CalExponential(double value, int times) {
+    double res = 1.0;
+    
+    for (int i = 0; i < times; i ++) {
+        res *= value;
+    }
+    
+    return res;
 }

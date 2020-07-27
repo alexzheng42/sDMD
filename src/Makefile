@@ -7,12 +7,11 @@ OBJ = CBT.o \
       Events.o \
       Initialization.o \
       Models.o \
-      ThreadProcess.o \
       TimePrediction.o \
       ToolFunctions.o \
-      List.o \
       SGThread.o \
-      REMD.o
+      REMD.o \
+      CG.o
 
 VISOBJ = Visual.o
 VISFLAG = -D VIS

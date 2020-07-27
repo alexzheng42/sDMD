@@ -16,6 +16,8 @@ static int Comparator(const void *a, const void *b);
 void InitializeFiles(int row, int column) {
     char extraName[5] = "";
     
+    fileList = (struct FileListStr *)calloc(column + 1, sizeof(struct FileListStr));
+    
     for (int i = 0; i < column; i ++) {
         if (RE.mark) {
             sprintf(extraName, "%i", i);
@@ -39,7 +41,8 @@ void AssignName(char *oldName, char *newName, char *extra, int row) {
     
     strncpy(newName, oldName, len - 4);
 
-    if (row > 5 && nPP) { //for analyzing specific peptide
+    if (row > 6 && nPP &&
+        strcmp(newName, "rPBCGRO")) { //for analyzing specific peptide
         strcat(newName, "_p");
         strcat(newName, targetPeptideNum);
     }
@@ -69,31 +72,33 @@ void AssignFileList(int id) {
             exit(EXIT_FAILURE);
         }
         
+		fileList[id].count = 0;
         while ((dp = readdir(dir)) != NULL) {
-            if (strncmp(dp->d_name, files[inLog][id].name, len - 4) == 0) {
+            if (strncmp(dp->d_name, files[inLog][id].name, len - 4) == 0 &&
+				(strlen(dp->d_name) == len || strlen(dp->d_name) == len + 20)) { //@date has 20 characters
                 if (strchr(dp->d_name, '@') == NULL) {
-                    strcpy(fileList.list[0], dp->d_name);
+                    strcpy(fileList[id].list[0], dp->d_name);
                 } else {
-                    strcpy(fileList.list[++fileList.count], dp->d_name);
+                    strcpy(fileList[id].list[++fileList[id].count], dp->d_name);
                 }
             }
         }
         
-        qsort(fileList.list[1], fileList.count, 64, Comparator);
-        if (strlen(fileList.list[0])) {
-            strcpy(fileList.list[++fileList.count], fileList.list[0]);
+        qsort(fileList[id].list[1], fileList[id].count, 64, Comparator);
+        if (strlen(fileList[id].list[0])) {
+            strcpy(fileList[id].list[++fileList[id].count], fileList[id].list[0]);
         }
     } else {
-        fileList.count = 1;
-        strcpy(fileList.list[fileList.count], files[inLog][id].name);
+        fileList[id].count = 1;
+        strcpy(fileList[id].list[fileList[id].count], files[inLog][id].name);
     }
     
-    if (fileList.count == 0) {
+    if (fileList[id].count == 0) {
         printf("!!ERROR!!: cannot find any log file named %s! %s:%i\n", files[inLog][id].name, __FILE__, __LINE__);
         exit(EXIT_FAILURE);
     }
     
-    sectInfo = (struct SectionStr *)calloc(fileList.count + 1, sizeof(struct SectionStr));
+    sectInfo = (struct SectionStr *)calloc(fileList[id].count + 1, sizeof(struct SectionStr));
     
     return;
 }

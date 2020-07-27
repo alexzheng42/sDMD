@@ -30,28 +30,28 @@ struct REMDTempStr {
     double T;
 };
 
-static long **count; //[replica number/temperature number][bin number]
-static long *totCount;
+static long   **count; //[replica number/temperature number][bin number]
+static long   *totCount;
 static double *temperature;
 static double **probability; //[replica number/temperature number][bin number]
 static double *potenE; //[bin number]
 static double *DoS; //[bin number]
 static double *fValue;
 static struct REMDAnaStr REMD = {
-    .binNum = 10,
-    .exRate = 10,
+    .binNum      = 10,
+    .exRate      = 10,
     .option.aHB  = 0,
     .option.bHB  = 0,
     .option.tHB  = 0,
     .option.rmsd = 0,
-    .st = 0,
-    .et = -1,
-    .dumpRate = 10,
-    .targetT = 300,
-    .min_E = 0,
-    .max_E = 200,
-    .min_RC = 0,
-    .max_RC = 10
+    .st          = 0,
+    .et          = -1,
+    .dumpRate    = 10,
+    .targetT     = 300,
+    .min_E       = INFINIT,
+    .max_E       = INFINIT * -1,
+    .min_RC      = INFINIT,
+    .max_RC      = INFINIT * -1
 };
 
 
@@ -74,6 +74,8 @@ static void CalPMFMap(char *type, double *tgtT, int repNo, int binNum, double *d
 static void SaveProbability(int repNo, int binNum, double *tgtT);
 static void FreeVariable(void);
 static void InitializeVariables(int argc, const char *argv[]);
+static void FindMaxMin(char *type);
+static void CombineTREMD(int replicaNum);
 static FILE *OpenInputFile(char *name);
 static struct REMDTempStr FindCurT(FILE *inputFile, long *step, long startTime, long endTime);
 void PrintCountinBin(int elem); //for debug
@@ -88,6 +90,7 @@ int WHAM(int argc, const char *argv[]) {
     
     InitializeVariables(argc, argv);
     ReadConfigFile();
+    CombineTREMD(REMD.replicaNo);
     
     /*
      These two functions, CountReplica() and CalDoS(), have to be called
@@ -139,29 +142,19 @@ static void InitializeVariables(int argc, const char *argv[]) {
                 REMD.binNum = atoi(argv[i + 1]); //bin number
             } else if (strcmp(argv[i], "-aHB") == 0) {
                 REMD.option.aHB = 1; //use alpha HB as the reaction coordinate
+                FindMaxMin("aHB");
             } else if (strcmp(argv[i], "-bHB") == 0) {
                 REMD.option.bHB = 1; //use beta HB as the reaction coordinate
+                FindMaxMin("bHB");
             } else if (strcmp(argv[i], "-tHB") == 0) {
                 REMD.option.tHB = 1; //use total HB as the reaction coordinate
+                FindMaxMin("tHB");
             } else if (strcmp(argv[i], "-rmsd") == 0) {
                 REMD.option.rmsd = 1; //use RMSD as the reaction coordinate
                 if (argv[i + 1][0] != '-') {
                     REMD.option.rmsd = atoi(argv[i + 1]);
                 }
-            } else if (strcmp(argv[i], "-maxE") == 0) {
-                REMD.max_E = atof(argv[i + 1]);
-                if (REMD.max_E > 0) {
-                    REMD.max_E *= -1;
-                }
-            } else if (strcmp(argv[i], "-minE") == 0) {
-                REMD.min_E = atof(argv[i + 1]);
-                if (REMD.min_E > 0) {
-                    REMD.min_E *= -1;
-                }
-            } else if (strcmp(argv[i], "-minRC") == 0) {
-                REMD.min_RC = atof(argv[i + 1]);
-            } else if (strcmp(argv[i], "-maxRC") == 0) {
-                REMD.max_RC = atof(argv[i + 1]);
+                FindMaxMin("rmsd");
             } else if (strcmp(argv[i], "-rate") == 0) {
                 REMD.dumpRate = atof(argv[i + 1]);
             } else if (strcmp(argv[i], "-temp") == 0) {
@@ -180,11 +173,12 @@ static void InitializeVariables(int argc, const char *argv[]) {
     }
     
     if (REMD.option.aHB || REMD.option.bHB || REMD.option.tHB) {
-        REMD.binNum = REMD.max_RC - REMD.min_RC;
+        REMD.binNum = REMD.max_RC - REMD.min_RC + 1;
     }
     
-    REMD.gap_E  = fabs((REMD.max_E  - REMD.min_E)  / REMD.binNum);
-    REMD.gap_RC = fabs((REMD.max_RC - REMD.min_RC) / REMD.binNum);
+    FindMaxMin("energy");
+    REMD.gap_E  = (REMD.max_E  - REMD.min_E)  / REMD.binNum;
+    REMD.gap_RC = (REMD.max_RC - REMD.min_RC) / REMD.binNum;
       LONG_2CALLOC(count,       REMD.replicaNo, REMD.binNum);
     DOUBLE_2CALLOC(probability, REMD.replicaNo, REMD.binNum);
     
@@ -203,6 +197,7 @@ FILE *OpenInputFile(char *name) {
     if (inputFile == NULL) {
         printf("!!ERROR!!: the file %s does not exist! please check your directory!\n", directory);
         printf("           you may need to implement some other analyses before doing REMD analysis!\n");
+        printf("           %s:%i\n", __FILE__, __LINE__);
         exit(EXIT_FAILURE);
     }
     while (fscanf(inputFile, "%c", &letter) != EOF && letter == '@') {
@@ -223,8 +218,8 @@ void CountReplica(long startTime, long endTime) {
         long step = startTime;
         struct REMDTempStr curT = {.T = 0, .num = 0};
         
-        inEnergyFile = OpenInputFile(files[outEne    ][id].name);
-        inTempFile   = OpenInputFile(files[inREMDTemp][id].name);
+        inEnergyFile = OpenInputFile(files[outEne   ][id].name);
+        inTempFile   = OpenInputFile(files[outREMD_T][id].name);
         
         //set the reaction coordinate file and type
         if (REMD.option.aHB ||
@@ -269,7 +264,7 @@ void CountReplica(long startTime, long endTime) {
         fclose(inReCorFile);
     } else {
         for (int l = 0; l < REMD.binNum; l ++) {
-            potenE[l] = REMD.min_E - (l + 0.5) * REMD.gap_E;
+            potenE[l] = REMD.min_E + (l + 0.5) * REMD.gap_E;
         }
     }
     
@@ -476,8 +471,8 @@ struct REMDTempStr FindCurT(FILE *inputFile, long *step, long startTime, long en
 
 int CountPosition(double value, double min, double gap) {
     int num = 0;
-    while (fabs(value) < min + num * gap ||
-           fabs(value) > min + (num + 1) * gap) {
+    while (value < min +  num      * gap ||
+           value > min + (num + 1) * gap) {
         num ++;
     }
     
@@ -784,9 +779,9 @@ void CalPMFMap(char *type, double *tgtT, int repNo, int binNum, double *dos, dou
             if (count == repNo) {
                 break;
             }
+            count = 0;
         }
     }
-
     
     for (int i = 0; i < repNo; i ++) {
         if (inTempFile[i])  fclose(inTempFile[i]);
@@ -864,4 +859,125 @@ repeat:
     sscanf(buffer, "%lf%lf%i", &tmp, &tmp, &seq);
     
     return seq;
+}
+
+void FindMaxMin(char *type) {
+    FILE *inputFile = NULL;
+    int check = 0;
+    long step = REMD.st, endTime = REMD.et;
+    
+    if (strcmp(type, "energy") == 0) {
+        struct EnergyReadStr thisE;
+        
+        for (int id = 0; id < REMD.replicaNo; id ++) {
+            inputFile = OpenInputFile(files[outEne][id].name);
+
+            while (step <= endTime || endTime < 0) {
+                check = ReadEnergyFile(inputFile, &thisE);
+                while ((long)(thisE.step) < REMD.st && (check = ReadEnergyFile(inputFile, &thisE)) == 0);
+                if (check < 0 || (endTime > 0 && (long)(thisE.step) > endTime)) {
+                    break; // end of the file
+                }
+                
+                if (REMD.min_E > thisE.PE) REMD.min_E = thisE.PE;
+                if (REMD.max_E < thisE.PE) REMD.max_E = thisE.PE;
+                
+                step += REMD.exRate * REMD.dumpRate;
+            }
+            
+            fclose(inputFile);
+        }
+        
+        REMD.min_E -= 1.0;
+        REMD.max_E += 1.0;  //add a tolerance
+        
+    } else if (strcmp(type, "aHB") == 0 ||
+               strcmp(type, "bHB") == 0 ||
+               strcmp(type, "tHB") == 0) {
+        struct HBReadStr thisHB;
+        
+        for (int id = 0; id < REMD.replicaNo; id ++) {
+            inputFile = OpenInputFile(files[outHBInfo][id].name);
+
+            while (step <= endTime || endTime < 0) {
+                check = ReadHBFile(inputFile, &thisHB);
+                while ((long)(thisHB.step) < REMD.st && (check = ReadHBFile(inputFile, &thisHB)) == 0);
+                if (check < 0 || (endTime > 0 && (long)(thisHB.step) > endTime)) {
+                    break; // end of the file
+                }
+                
+                if (strcmp(type, "aHB") == 0) {
+                    if (REMD.min_RC > thisHB.type.helix_alpha) REMD.min_RC = thisHB.type.helix_alpha;
+                    if (REMD.max_RC < thisHB.type.helix_alpha) REMD.max_RC = thisHB.type.helix_alpha;
+                } else if (strcmp(type, "bHB") == 0) {
+                    if (REMD.min_RC > thisHB.type.beta)        REMD.min_RC = thisHB.type.beta;
+                    if (REMD.max_RC < thisHB.type.beta)        REMD.max_RC = thisHB.type.beta;
+                } else if (strcmp(type, "tHB") == 0) {
+                    if (REMD.min_RC > thisHB.type.total)       REMD.min_RC = thisHB.type.total;
+                    if (REMD.max_RC < thisHB.type.total)       REMD.max_RC = thisHB.type.total;
+                }
+                
+                step += REMD.exRate * REMD.dumpRate;
+            }
+            
+            fclose(inputFile);
+        }
+    } else if (strcmp(type, "rmsd") == 0) {
+        struct RMSDReadStr thisRMSD;
+        
+        REMD.min_RC = 0;
+        for (int id = 0; id < REMD.replicaNo; id ++) {
+            inputFile = OpenInputFile(files[outRMSD][id].name);
+
+            while (step <= endTime || endTime < 0) {
+                check = ReadRMSDFile(inputFile, &thisRMSD);
+                while ((long)(thisRMSD.step) < REMD.st && (check = ReadRMSDFile(inputFile, &thisRMSD)) == 0);
+                if (check < 0 || (endTime > 0 && (long)(thisRMSD.step) > endTime)) {
+                    break; // end of the file
+                }
+                
+                if (REMD.max_RC < thisRMSD.vRMSD[0]) REMD.max_RC = thisRMSD.vRMSD[0];
+                if (REMD.max_RC < thisRMSD.vRMSD[1]) REMD.max_RC = thisRMSD.vRMSD[1];
+
+                step += REMD.exRate * REMD.dumpRate;
+            }
+            
+            fclose(inputFile);
+        }
+    } else {
+        printf("!!ERROR!!: the request type is invalid! %s:%i\n", __FILE__, __LINE__);
+        exit(EXIT_FAILURE);
+    }
+    
+    return;
+}
+
+void CombineTREMD(int replicaNum) {
+    char directory[512], buffer[512];
+    FILE *REMDOutput, *REMDInput;
+
+    for (int id = 0; id < replicaNum; id ++) {
+        sprintf(directory, "%s%s", path, files[outREMD_T][id].name);
+        REMDOutput = fopen(directory, "w");
+
+        for (int sectNum = 0; sectNum < fileList[id].count; sectNum ++) {
+            memset(buffer, '\0', sizeof(buffer));
+            FindTargetFile(files[inREMDTemp][id].name, fileList[id].list[sectNum + 1], buffer);
+
+            sprintf(directory, "%s%s", path, buffer);
+            REMDInput = fopen(directory, "r");
+            if (REMDInput == NULL) {
+                printf("!!ERROR!!: cannot find file %s in directory %s. make sure the input path is correct and the file does exist! %s:%i\n", buffer, path, __FILE__, __LINE__);
+                exit(EXIT_FAILURE);
+            }
+
+            while (fgets(buffer, sizeof(buffer), REMDInput))
+                fprintf(REMDOutput, "%s", buffer);
+            
+            fclose(REMDInput);
+        }
+        fclose(REMDOutput);
+    }
+
+    return;
 }

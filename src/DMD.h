@@ -15,7 +15,6 @@
 #include <stdlib.h>
 #include <time.h>
 #include <pthread.h>
-#include "List.h"
 
 //#define DEBUG_RANDOM
 //#define DEBUG_PRINTF
@@ -28,15 +27,18 @@
 #define ZERO          1E-8
 #define INVALID      -111
 #define NATOMTYPE     32
-#define EXTEND_RATIO  0.95 //make sure the cut off radius is less than the subcell length
+#define EXTEND_RATIO  0.90 //make sure the cut off radius is less than the subcell length
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846264338327950288
 #endif
 
 #ifdef DEBUG_RANDOM
-#define RANDOM_SEED 1551619393
+#define RANDOM_SEED 1575263273
 #endif
+
+#define FALSE 0
+#define TRUE 1
 
 /*
  Units of the system
@@ -126,54 +128,6 @@ out[3]=factor*vector[3];
 #define DOT_PROD(n1, n2) \
 n1[1]*n2[1]+n1[2]*n2[2]+n1[3]*n2[3];
 
-#define FIND_DUPLICATED(list1, list2, num, flag)  \
-flag=0; \
-num=0;    \
-while (list2[++num]) {   \
-if (list1==list2[num]) {   \
-flag=1; \
-break;  \
-}    \
-}
-
-#define FIND_DUPLICATED_IN_THE_RANGE(list1, list2, start, end, num, flag)  \
-flag=0; \
-for (num=start; num<=end; num++) {  \
-if (list2[num]==0) {  \
-break;  \
-}  else if (list1==list2[num]) {   \
-flag=1; \
-break;  \
-}   \
-}   \
-
-#define FIND_DUPLICATED_AND_ADD(list1, list2, num, flag)  \
-flag=0; \
-num=0;    \
-while (list2[++num]) {   \
-if (list1==list2[num]) {   \
-flag=1; \
-break;  \
-}    \
-}   \
-if (flag==0) list2[num]=list1;
-
-#define FIND_DUPLICATED_IN_THE_RANGE_AND_ADD(list1, list2, start, end, num, flag)  \
-flag=0; \
-for (num=start; num<=end; num++) {  \
-if (num==end) { \
-printf("List space may be not enough!\n");   \
-flag=1; \
-}   \
-if (list2[num]==0) {  \
-break;  \
-}  else if (list1==list2[num]) {   \
-flag=1; \
-break;  \
-}   \
-}   \
-if (flag==0 && list1!=0) list2[num]=list1;
-
 #define READ_MUTEX_PRE(lock, writers, readersQ, readers) \
 pthread_mutex_lock(&lock); \
 while (!(writers == 0)) \
@@ -217,6 +171,7 @@ enum EEventType {
     Chrg_Event,  //charge event
     SphO_Event,  //column event
      PCC_Event,  //PBC and crossing event
+    CGSu_Event,  //CG surface event
     Lagv_Event,  //Langevin event
      TBD_Event,  //TBD event
     Cacl_Event,  //event needs to be cancelled
@@ -265,6 +220,9 @@ enum FileType {
     pdb,         //pdb trajectory
     lgf,         //log file
     sysInfo,     //saved data for analyzing
+    wallInfo,    //saved data for wall
+    obstInfo,    //saved data for obstruct
+    CGInfo,      //saved data for CG
     savedData,   //saved data for continuity
     RE,          //replica exchange data
     lenFileType  //length of this list
@@ -366,6 +324,31 @@ struct AAStr {
     double mass;
 };
 
+struct CGStr {
+    int start;
+    int end;
+    int type;
+};
+
+struct CGGovStr {
+    char type[2][16];
+    int mark;
+    int totalNum;
+    int *list;
+    struct CGStr *thisCG;
+};
+
+struct CGBeadStr {
+    double chi;
+    double epsilon;
+    double sigma;
+};
+
+struct CGMatrixStr {
+    double theta[5]; // 1 2 3 s p
+    struct CGBeadStr CGBead[NATOMTYPE];
+};
+
 struct PepStr {
     int startAtomNum;
     int endAtomNum;
@@ -374,41 +357,19 @@ struct PepStr {
     double mass;
 };
 
+struct AtomListStr {
+    int targetNum;
+    int x[27], y[27], z[27];
+    double timeInr;
+    struct AtomStr *target;
+    struct AtomStr *partner;
+    struct AtomStr **ptr;
+};
+
 struct FileStr {
     int mark;
     char name[256];
     FILE *file;
-};
-
-struct ThreadStr {
-    int tid;
-    int atomNum;
-    int getWork, finishWork; //0: no; 1: yes
-    int hazardStatus;
-    double getWorkTime;
-    double finishWorkTime;
-    double getWorkFrame;
-    struct AtomStr **raw;       //point to the raw atom data
-    struct AtomStr **listPtr;   //point to the thread atom copy
-    struct AtomStr *newTarget;  //point to the obj in atomList
-    struct AtomStr *newPartner; //point to the obj in atomList
-    struct AtomStr oldTarget;   //store the original target data
-    struct AtomStr oldPartner;  //store the original partner data
-    struct FileStr *fileList;
-    list atomList;  //thread atom copy
-};
-
-
-struct ThreadInfoStr {
-    int threadID;
-    int *threadRenewList;
-};
-
-
-struct PreCalObjStr {
-    int eventStatus;
-    int renewList[64];
-    struct ThreadStr *data;
 };
 
 
@@ -496,6 +457,13 @@ struct FlowStr {
 };
 
 
+struct PreBondStr {
+    int mark;
+    int num;
+    double dis;
+};
+
+
 //--------------------------------------------
 //Global Variables
 //--------------------------------------------
@@ -527,6 +495,9 @@ extern double boxDimension[4]; //unit A
 extern struct AtomStr *atom;
 extern struct AAStr *aminoacid;
 extern struct PepStr *protein;
+extern struct CGGovStr CG;
+extern struct CGMatrixStr CGMatrix;
+extern struct PreBondStr preBond;
 extern char neworcontinue[20];
 extern char Methodtype[20];
 extern char temperatureType[20];
@@ -543,6 +514,7 @@ extern long int HBNeighboreventsum;
 extern long int thermostateventsum;
 extern long int pbcandcrosseventsum;
 extern long int walleventsum;
+extern long int CGeventsum;
 extern long int oldtotaleventsum;
 extern long int newtotaleventsum;
 extern long int warningsum;
@@ -575,6 +547,7 @@ extern int nthCheck, nthNode;
 //potential pair
 extern struct ConstraintStr potentialPairCollision[NATOMTYPE + 1][NATOMTYPE + 1];
 extern struct ConstraintStr potentialPairHB[12][NATOMTYPE + 1][NATOMTYPE + 1];
+extern struct ConstraintStr potentialPairCG[NATOMTYPE + 1][NATOMTYPE + 1];
 extern struct HBPotentialStr HBPotential;
 
 
@@ -595,19 +568,12 @@ extern char timer[30];
 
 //-----------------
 //multi-thread variables
-extern int threadNum;
-extern int codeNum;
-extern int eventToCommit;
-extern signed int readCount, writeCount, activeWrite;
-extern struct ThreadStr **thread;
-extern struct RandomListStr *threadRandomList;
-extern struct ThreadInfoStr *thrInfo;
-extern struct PreCalObjStr *preCalList;
-extern pthread_t *thread_t;
-extern pthread_mutex_t mainFrameLock, rawDataLock, commitLock;
-extern pthread_mutex_t mstThrLock, slvThrLock;
-extern pthread_cond_t mainFrameRenew, rawDataRenew, readCheck, writeCheck;
-extern pthread_cond_t mstThrQ, slvThrQ;
+
+
+//-----------------
+//single-thread variable
+extern int renewList[128];
+extern struct AtomListStr atomList;
 
 
 //-----------------
@@ -656,6 +622,7 @@ extern double tmpDouble;
 //initialization
 //---------------------------------------------
 void InputData(int argc, const char * argv[]);
+void InitializeCGPotentialMatrix(void);
 //---------------------------------------------
 
 
@@ -674,41 +641,39 @@ double HBBarrier(struct AtomStr *atom1, struct AtomStr *atom2);
 //---------------------------------------------
 //TimePrediction
 //---------------------------------------------
-void CollisionTime(struct AtomStr *collision_i, struct ThreadStr *thisThread);
-void BondTime(struct AtomStr *bond_i, struct ThreadStr *thisThread);
-void HBTime(struct AtomStr *HB_i, struct ThreadStr *thisThread);
-void HBNeighborTime(struct AtomStr *neighbor_i, struct ThreadStr *thisThread);
-void ThermostatTime(struct AtomStr *targetAtom);
-void PBCandCrossCellTime(struct AtomStr *targetAtom);
-void WallTime(struct AtomStr *targetAtom);
-void ObstTime(struct AtomStr *targetAtom);
-void TunnelTime(struct AtomStr *targetAtom);
-void ChargeTime(struct AtomStr *targetAtom);
-void SphObstTime(struct AtomStr *targetAtom);
+void CollisionTime(struct AtomStr *collision_i, struct AtomListStr *thisList);
+void BondTime(struct AtomStr *bond_i, struct AtomListStr *thisList);
+void HBTime(struct AtomStr *HB_i, struct AtomListStr *thisList);
+void HBNeighborTime(struct AtomStr *neighbor_i, struct AtomListStr *thisList);
+void CGSurfaceTime(struct AtomStr *target);
+void ThermostatTime(struct AtomStr *target);
+void PBCandCrossCellTime(struct AtomStr *target);
+void WallTime(struct AtomStr *target);
+void ObstTime(struct AtomStr *target);
+void TunnelTime(struct AtomStr *target);
+void ChargeTime(struct AtomStr *target);
+void SphObstTime(struct AtomStr *target);
+int JobAssign(struct AtomStr* atom_i, struct AtomStr* atom_j, struct InteractionEventStr* event, enum EEventType type);
 //---------------------------------------------
 
 
 //---------------------------------------------
-//ThreadProcess
+//SimulationProcess
 //---------------------------------------------
-int ProcessEvent(int *threadRenewList, struct ThreadStr *thisThread);
-int ThreadProcess(void);
-int DoEvent(struct ThreadStr *thisThread);
-int HazardCheck(struct AtomStr *oldTargetAtom, struct AtomStr *oldPartner, struct AtomStr *oldTargetNeighbor, struct AtomStr *oldPartnerNeighbor, struct ThreadStr *thisThread);
-void CommitEvent(struct AtomStr **destLibrary, struct AtomStr *newTargetAtom, struct AtomStr *newPartnerAtom, struct AtomStr *oldTargetAtom, struct AtomStr *oldPartnerAtom, struct AtomStr *oldTargetNeighbor, struct AtomStr *oldPartnerNeighbor, struct ThreadStr *thisThread, int *renewList);
-void Predict(int *renewList, struct ThreadStr *thisThread);
-void AssignJob(int *list, struct ThreadStr *thisThread);
-void AssignThread(int *renewList, struct ThreadStr *thisThread);
-void FirstRun(struct ThreadStr *thisThread);
+void Prepare(void);
+void FreeVariables(void);
+void Predict(int* renewList, struct AtomListStr* thisList);
+void AssignJob(struct AtomStr** target, struct AtomStr** partner, int* renewList, struct AtomListStr* thisList);
+void DoEvent(struct AtomListStr *thisList);
 void DoWallDyn(void);
-struct ThreadStr* InitializeThread(int tid, struct AtomStr *atomList);
+void FixAssignRenewList(int *renewList, struct AtomListStr *thisList);
+int HazardCheck(struct AtomStr *target, struct AtomStr *partner, struct AtomStr *targetNeighbor, struct AtomStr *partnerNeighbor, struct AtomListStr *thisList);
 //---------------------------------------------
 
 
 //---------------------------------------------
 //Simulation Method
 //---------------------------------------------
-//void MSThread(void);
 void SingleThread(void);
 void REMD(void);
 //---------------------------------------------
@@ -717,8 +682,8 @@ void REMD(void);
 //---------------------------------------------
 //Event
 //---------------------------------------------
-void LinkList(char * type, struct AtomStr *targetAtom, struct ThreadStr *thisThread);
-void PBC(char *type, struct AtomStr *targetAtom, struct ThreadStr *thisThread);
+void LinkList(char * type, struct AtomStr *target, int *oldIdx, struct AtomListStr *thisList);
+void PBC(char *type, struct AtomStr *target, struct AtomListStr *thisList);
 //---------------------------------------------
 
 
@@ -735,22 +700,15 @@ void DeleteCBT(int *renewList);
 //--------------------------------------------
 //Tool functions
 //--------------------------------------------
-void SurroundingCheck(int, int);
-void Rotation(double *, double *, double, char);
-void TimeBenchmark(char *, char *, int);
-void PrintCellList(struct ThreadStr *thisThread);
-void PrintList(list *atomList);
-void SDEnergyMin(long int stepNum, struct ThreadStr *thisThread);
+void ThreadProcess(void);
+void SDEnergyMin(long int stepNum, struct AtomListStr *thisList);
 void AtomDataCpy(struct AtomStr * dest, struct AtomStr * sour, int flag);
-void RenewCellList(struct AtomStr *newTargetAtom, struct AtomStr *oldTargetAtom);
 void ListRefresh(int, int *, int, int);
 void CreateGELCoordinate(int);
-void ResetTarget(int *renewList, struct ThreadStr *thisThread);
-void MakeNeighborList(int *neighborList, int targetAtom, int threadID);
-void TimeForward(double time, struct ThreadStr *thisThread);
-void UpdateData(double time, char *type, struct ThreadStr *thisThread);
+void ResetTarget(int *renewList, struct AtomListStr *thisList);
+void TimeForward(double time);
+void UpdateData(double time);
 void PBCShift(struct AtomStr *atom_i, struct AtomStr *atom_j, double *shift);
-void PrintPreCalList(void);
 void PrintBonds(int atomNum);
 void PrintConstr(int atomNum);
 void PrintStep(struct StepPotenStr *thisStep);
@@ -758,7 +716,7 @@ void PrintCollisionPotentialTable(void);
 void PrintHBPotentialTable(int HBTypeNum);
 void CalAccumulatedPoten(struct StepPotenStr *startPoint);
 void FreeConstr(struct ConstraintStr *thisConstr);
-void PrintListData(int *list);
+void PrintListData(int *thisList);
 void PrintHBData(void);
 void CalCOMV(int proteinNum, double *netV);
 void ChangeColor(int type, double *color);
@@ -766,13 +724,15 @@ int AtomTypeChange(int originalType, int direct);
 int FindPair(struct AtomStr *atom1, struct AtomStr *atom2, char *interactionType, double direction, double distance2, double *lowerLimit, double *upperLimit, double *lowerPotential, double *upperPotential, double *accumPotential, struct AtomStr *HBPartner, int typeChange);
 //HBPartner is only used during finding pair between HB target atom and its neighbor. HBPartner is the partner atom of the target atom.
 //typeChange is only used during calculating the energy change before and after HB forming or breaking
-int EnterTunnel(double time, struct AtomStr *targetAtom);
+int EnterTunnel(double time, struct AtomStr *target);
+int FindElemInList(int *thisList, int value, int start, int end, int add);
 double RandomValue(int, int);
 double Maxwell_Boltzmann_Distribution(double, double);
 double RandomVelocity(double mass);
-double CalKinetE(struct ThreadStr *thisThread);
-double CalPotenE(struct ThreadStr *thisThread);
-double CalSysTem(struct ThreadStr *thisThread);
+double CalKinetE(void);
+double CalSysTem(void);
+double CalPotenE(void);
+double CalExponential(double value, int times);
 double GetViscosity(double);
 double AbsvalueVector(double * vector);
 double CalDistance(double *p1, double *p2);
@@ -791,11 +751,11 @@ void DisplayTime(char *);
 //---------------------------------------------
 //DataSave
 //---------------------------------------------
-void SaveData(enum FileType type, struct ThreadStr *thisThread);
+void SaveData(enum FileType type, struct FileStr *fileList);
 void SavePDB(struct FileStr *file);
 void SaveGRO(struct FileStr *file);
 void GlobalCloseFree(void);
-struct FileStr* InitializeFiles(char *extra, struct FileStr* preList);
+void InitializeFiles(char *extra, struct FileStr* fileList);
 //---------------------------------------------
 
 

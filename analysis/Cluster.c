@@ -67,9 +67,9 @@ void CalCluster(int id) {
         exit(EXIT_FAILURE);
     }
     
-    for (int sectNum = 0; sectNum < fileList.count; sectNum ++) {
+    for (int sectNum = 0; sectNum < fileList[id].count; sectNum ++) {
         memset(buffer, '\0', sizeof(buffer));
-        FindTargetFile(files[inCnt][id].name, fileList.list[sectNum + 1], buffer);
+        FindTargetFile(files[inCnt][id].name, fileList[id].list[sectNum + 1], buffer);
         
         sprintf(directory, "%s%s", path, buffer);
         inputCntFile = fopen(directory, "r");
@@ -146,10 +146,10 @@ int CheckInteraction (struct AtomStr *atom1, struct AtomStr *atom2, int **connec
     double r_ij[4], distance2;
     double range = cutoffr * cutoffr;
     
-    transfer_vector(position_i, atom1->dynamic->coordinate);
-    transfer_vector(position_j, atom2->dynamic->coordinate);
-    dotminus(position_i, position_j, r_ij);
-    distance2 = dotprod(r_ij, r_ij);
+    TRANSFER_VECTOR(position_i, atom1->dynamic->coordinate);
+    TRANSFER_VECTOR(position_j, atom2->dynamic->coordinate);
+    DOT_MINUS(position_i, position_j, r_ij);
+    distance2 = DOT_PROD(r_ij, r_ij);
     
     if (distance2 < range || (connection[target_i][target_j] & HBConnect)) {
         return 1;

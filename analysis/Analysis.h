@@ -17,6 +17,7 @@
 #define TRUE      1
 #define FALSE     0
 #define INVALID  -111
+#define INFINIT   1E8
 #define NATOMTYPE 32
 #define BOLTZMANN 0.0019872041 //kcal / mol / K
 
@@ -49,35 +50,35 @@ list2[num]=list1; \
 (((num1) > (num2)) ? (((num1) > (num3)) ? (num1) : (num3)) :    \
 (((num2) > (num3)) ? (num2) : (num3)))
 
-#define transfer_vector(recv, send)   \
+#define TRANSFER_VECTOR(recv, send)   \
 recv[1]=send[1];    \
 recv[2]=send[2];    \
 recv[3]=send[3];
 
-#define dotminus(n1, n2, out) \
+#define DOT_MINUS(n1, n2, out) \
 out[1]=n1[1]-n2[1]; \
 out[2]=n1[2]-n2[2]; \
 out[3]=n1[3]-n2[3];
 
-#define dotplus(n1, n2, out) \
+#define DOT_PLUS(n1, n2, out) \
 out[1]=n1[1]+n2[1]; \
 out[2]=n1[2]+n2[2]; \
 out[3]=n1[3]+n2[3];
 
-#define crossprod(n1, n2, result)   \
+#define CROSS_PROD(n1, n2, result)   \
 result[1]=n1[2]*n2[3]-n1[3]*n2[2];  \
 result[2]=n1[3]*n2[1]-n1[1]*n2[3];  \
 result[3]=n1[1]*n2[2]-n1[2]*n2[1];
 
-#define factorprod(factor, vector, out) \
+#define FACTOR_PROD(factor, vector, out) \
 out[1]=factor*vector[1];    \
 out[2]=factor*vector[2];    \
 out[3]=factor*vector[3];
 
-#define dotprod(n1, n2) \
+#define DOT_PROD(n1, n2) \
 n1[1]*n2[1]+n1[2]*n2[2]+n1[3]*n2[3];
 
-#define pointToStruct(pointer, struct)  \
+#define POINT_TO_STRUCT(pointer, struct)  \
 pointer=&struct[0];
 
 #define INT_2CALLOC(name, size1, size2) \
@@ -111,6 +112,7 @@ enum EOperation {
     AnalyzeRamach,
     AnalyzeConMap,
     CalculateRG,
+    CalculateRG2Obst,
     CalculateMSD,
     CalculateRMSD,
     CalculatePotMap,
@@ -119,6 +121,9 @@ enum EOperation {
 
 enum EFileType {
     inSys,
+    inWall,
+    inObst,
+    inCG,
     inTrj,
     inCnt,
     inLog,
@@ -131,6 +136,8 @@ enum EFileType {
     outRG,
     outRMSD,
     outPotMap,
+    outCG2Obst,
+    outREMD_T,
     outPotMap_T,
     outPMFMap_T,
     NumofFileType
@@ -256,6 +263,17 @@ struct AAStr {
     int endAtomNum;
     int proteinNum;
     double mass;
+};
+
+struct CGGovStr {
+	char type[2][16];
+	int mark;
+	int totalNum;
+};
+
+struct DisStr {
+    char type[256];
+    int mark;
 };
 
 struct PepStr {
@@ -411,19 +429,21 @@ extern double cellSize[4];
 
 extern char path[1024];
 extern char names[NumofFileType][256];
-extern char obstDir[1024];
 extern char targetPeptideNum[16];
 
 extern struct FileStr **files;
 extern struct AAStr *aminoacid;
 extern struct PepStr *protein;
+extern struct CGGovStr CG;
+extern struct DisStr disInfo;
 extern struct AtomStr *atom;
 extern struct HBType HBSum;
 extern struct ConstraintStr potentialPairCollision[NATOMTYPE + 1][NATOMTYPE + 1];
 extern struct ConstraintStr potentialPairHB[12][NATOMTYPE + 1][NATOMTYPE + 1];
+extern struct ConstraintStr potentialPairCG[NATOMTYPE + 1][NATOMTYPE + 1];
 extern struct HBPotentialStr HBPotential;
 extern struct REMDStr RE;
-extern struct FileListStr fileList;
+extern struct FileListStr *fileList;
 extern struct FileListStr RMSDFile;
 extern struct SectionStr *sectInfo;
 extern struct EnergyReadStr energy;
@@ -432,12 +452,16 @@ extern struct RMSDReadStr rmsd;
 
 void InitializeFiles(int row, int column);
 void SystemInformationInput(int id);
+void ReadObst(int id, int sectNum);
+void ReadWall(int id, int sectNum);
+void ReadCGPot(int id);
 void AdjustPBC(int id);
 void FreeVariables(void);
 void HBInfo(int id);
 void ClusterInfo(int id);
 void EnergyInfo(int id);
 void RGInfo(int id);
+void DisInfo(int id);
 void RMSDInfo(int id);
 void PESurfaceInfo(int id);
 void PESurfaceInfoPerT(void);
@@ -447,12 +471,14 @@ void PrintProcess(long step);
 void AssignFileList(int id);
 void FindTargetFile(char *oldName, char *fileListName, char *newName);
 void REMDPESurfaceCombine(void);
-int ReadLog(void);
+void PrintStep(struct StepPotenStr *thisStep);
+int ReadLog(int id);
 int ReadGro(FILE *inputFile);
 int ReadConnectionMap(FILE *inputFile);
 int WHAM(int argc, const char * argv[]);
 int CheckHBConnection(int thisAtomNum);
 int AtomModel(char *type);
+int AAModel(char *type);
 int ReadEnergyFile(FILE *EnergyInputFile, struct EnergyReadStr *thisE);
 int ReadHBFile(FILE *HBInputFile, struct HBReadStr *thisHB);
 int ReadRMSDFile(FILE *RMSDInputFile, struct RMSDReadStr *thisRMSD);

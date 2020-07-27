@@ -8,21 +8,24 @@
 
 #include "DMD.h"
 
-void SaveLog(struct FileStr *file);
-void SaveSysInfo(struct FileStr *file);
-void SaveHB(struct FileStr *file);
-void SaveXYZ(struct FileStr *file);
-void SaveDAT(struct FileStr *file);
-void SaveRE(struct FileStr *file);
-void SaveTemp(struct FileStr *file, struct ThreadStr *thisThread);
-void SavePot(struct FileStr *file, struct ThreadStr *thisThread);
-void SaveKin(struct FileStr *file, struct ThreadStr *thisThread);
+void SaveLog          (struct FileStr *file);
+void SaveSysInfo      (struct FileStr *file);
+void SaveWallInfo     (struct FileStr *file);
+void SaveObstInfo     (struct FileStr *file);
+void SaveCGInfo       (struct FileStr *file);
+void SaveHB           (struct FileStr *file);
+void SaveXYZ          (struct FileStr *file);
+void SaveDAT          (struct FileStr *file);
+void SaveRE           (struct FileStr *file);
+void SaveTemp         (struct FileStr *file);
+void SavePot          (struct FileStr *file);
+void SaveKin          (struct FileStr *file);
 void SaveConnectionMap(struct FileStr *file);
-void BackupFile(struct FileStr *file);
-void AssignName(char *oldName, char *newName, char *extra);
+void BackupFile       (struct FileStr *file);
+void AssignName       (char *oldName, char *newName, char *extra);
 
 
-struct FileStr* InitializeFiles(char *extra, struct FileStr* preList) {
+void InitializeFiles(char *extra, struct FileStr* fileList) {
     char defaultName[lenFileType][256] = {
         "out_trj.gro",
         "out_pot.txt",
@@ -34,6 +37,9 @@ struct FileStr* InitializeFiles(char *extra, struct FileStr* preList) {
         "out_pdb.pdb",
         "out_log.txt",
         "SysInfo.dat",
+        "WallInfo.dat",
+        "ObstInfo.dat",
+        "CGInfo.dat",
         "savedData.dat",
         "out_REMD.txt"
     };
@@ -43,32 +49,15 @@ struct FileStr* InitializeFiles(char *extra, struct FileStr* preList) {
         sprintf(extraName, "%s", extra);
     }
     
-    struct FileStr* fileList = (struct FileStr*)calloc(lenFileType, sizeof(struct FileStr));
-    
     for (int i = 0; i < lenFileType; i ++) {
         AssignName(defaultName[i], fileList[i].name, extraName);
     }
     
     fileList[trj].mark = 1;
     fileList[cnt].mark = 1;
-    fileList[lgf].mark = 1;
     fileList[savedData].mark = 1;
-    if (strcmp(neworcontinue, "new") == 0) {
-        fileList[sysInfo].mark = 1;
-    }
     
-    if (preList != NULL) {
-        for (int i = 0; i < lenFileType; i ++) {
-            if (preList[i].mark) {
-                fileList[i].mark = preList[i].mark;
-                if (preList[i].name[0] != '\0') {
-                    AssignName(preList[i].name, fileList[i].name, extraName);
-                }
-            }
-        }
-    }
-    
-    return fileList;
+    return;
 }
 
 
@@ -113,21 +102,21 @@ void GenerateFile(struct FileStr *file) {
 }
 
 
-void SaveData(enum FileType type, struct ThreadStr *thisThread) {
-    struct FileStr *thisFile = &thisThread->fileList[type];
-    
+void SaveData(enum FileType type, struct FileStr *fileList) {
+    struct FileStr *thisFile = &fileList[type];
+
     switch (type) {
         case trj:
             SaveGRO(thisFile);
             break;
         case pot:
-            SavePot(thisFile, thisThread);
+            SavePot(thisFile);
             break;
         case kin:
-            SaveKin(thisFile, thisThread);
+            SaveKin(thisFile);
             break;
         case tem:
-            SaveTemp(thisFile, thisThread);
+            SaveTemp(thisFile);
             break;
         case cnt:
             SaveConnectionMap(thisFile);
@@ -149,6 +138,15 @@ void SaveData(enum FileType type, struct ThreadStr *thisThread) {
             break;
         case sysInfo:
             SaveSysInfo(thisFile);
+            break;
+        case wallInfo:
+            SaveWallInfo(thisFile);
+            break;
+        case obstInfo:
+            SaveObstInfo(thisFile);
+            break;
+        case CGInfo:
+            SaveCGInfo(thisFile);
             break;
         case RE:
             SaveRE(thisFile);
@@ -177,6 +175,11 @@ void GlobalCloseFree() {
             free(wall[0].property);
             free(wall);
         }
+    }
+    
+    if (CG.mark) {
+        free(CG.list);
+        free(CG.thisCG);
     }
     
     free(flow.force.timeRec);
@@ -269,12 +272,63 @@ void SaveSysInfo(struct FileStr *file) {
             }
         }
     }
-    fclose(SysInfoFile);
-    file->mark = 0;
     
+    fclose(SysInfoFile);
     return;
 }
+
+void SaveWallInfo(struct FileStr *file) {
+    if (file->file == NULL) {
+        BackupFile(file);
+        GenerateFile(file);
+    }
+    FILE *WallInfoFile = file->file;
     
+    fwrite(wall[0].property, sizeof(struct PropertyStr), 1, WallInfoFile);
+    fwrite(wall[0].dynamic, sizeof(struct DynamicStr), 1, WallInfoFile);
+    
+    fclose(WallInfoFile);
+    return;
+}
+
+void SaveObstInfo(struct FileStr *file) {
+    if (file->file == NULL) {
+        BackupFile(file);
+        GenerateFile(file);
+    }
+    FILE *ObstInfoFile = file->file;
+    
+    for (int i = 0; i < obstObj.num; i ++) {
+        fwrite(obstObj.obst[i].property, sizeof(struct PropertyStr), 1, ObstInfoFile);
+        fwrite(obstObj.obst[i].dynamic, sizeof(struct DynamicStr), 1, ObstInfoFile);
+    }
+    
+    fclose(ObstInfoFile);
+    return;
+}
+
+void SaveCGInfo(struct FileStr *file) {
+    if (file->file == NULL) {
+        BackupFile(file);
+        GenerateFile(file);
+    }
+    FILE *CGInfoFile = file->file;
+    
+    for (int i = 0; i <= NATOMTYPE; i ++) {
+        for (int n = 0; n <= NATOMTYPE; n ++) {
+            fwrite(&potentialPairCG[i][n], sizeof(struct ConstraintStr), 1, CGInfoFile);
+            
+            struct StepPotenStr *thisStep = potentialPairCG[i][n].step;
+            while (thisStep) {
+                fwrite(thisStep, sizeof(struct StepPotenStr), 1, CGInfoFile);
+                thisStep = thisStep->next;
+            }
+        }
+    }
+    
+    fclose(CGInfoFile);
+    return;
+}
     
 void SaveLog(struct FileStr *file) {
     DisplayTime(timer);
@@ -302,14 +356,13 @@ void SaveLog(struct FileStr *file) {
     fprintf(Logfile, "TargetTemperature   = %-5.2lf\n", targetTemperature);
     fprintf(Logfile, "OutputRate          = %-5.2lf\n", outputrate);
     fprintf(Logfile, "CutOffR             = %-5.2lf\n", cutoffr);
-    fprintf(Logfile, "Method              = %s\n", Methodtype);
-    fprintf(Logfile, "ThermostatType      = %s\n", thermostatType);
+    fprintf(Logfile, "Method              = %s\n",      Methodtype);
+    fprintf(Logfile, "ThermostatType      = %s\n",      thermostatType);
     fprintf(Logfile, "ThermostatParameter = %-5.3lf\n", thermoF);
-    fprintf(Logfile, "DMDMethod           = %-5i\n", codeNum);
-    fprintf(Logfile, "ThreadNo            = %-5i\n", threadNum);
-    fprintf(Logfile, "WallExist           = %s\n", wallExist);
-    fprintf(Logfile, "WallType            = %s\n", wallType);
-    fprintf(Logfile, "WallDyn             = %s\n", wallDyn.mark);
+    fprintf(Logfile, "CGModel             = %s, %s\n",  CG.type[0], CG.type[1]);
+    fprintf(Logfile, "WallExist           = %s\n",      wallExist);
+    fprintf(Logfile, "WallType            = %s\n",      wallType);
+    fprintf(Logfile, "WallDyn             = %s\n",      wallDyn.mark);
     fprintf(Logfile, "WallDynSize         = %-5.2lf\n", wallDyn.size);
     fprintf(Logfile, "WallDynRate         = %-5.2lf\n", wallDyn.rate);
     if (strcmp(wallDyn.mark, "no")) {
@@ -399,9 +452,9 @@ void SaveLog(struct FileStr *file) {
     fprintf(Logfile, "REMDServerName      = %s\n",    REMDInfo.REMD_ServerName);
     fprintf(Logfile, "REMDExtraName       = %s\n",    REMDInfo.REMD_ExtraName);
     fprintf(Logfile, "\n");
+
     fclose(Logfile);
-    
-    file->mark = 0;
+    return;
 }
 
 
@@ -419,14 +472,14 @@ void SaveHB(struct FileStr *file) {
 }
 
 
-void SaveTemp(struct FileStr *file, struct ThreadStr *thisThread) {
+void SaveTemp(struct FileStr *file) {
     if (unlikely(file->file == NULL)) {
         BackupFile(file);
         GenerateFile(file);
     }
     FILE *outputFile = file->file;
     
-    instTemperature = CalSysTem(thisThread);
+    instTemperature = CalSysTem();
     fprintf(outputFile, "%5.2lf    %10.4lf\n", currenttime, instTemperature);
     fflush(outputFile);
     
@@ -523,6 +576,9 @@ void SaveDAT(struct FileStr *file) {
     //record the random seed for further debugging
     fwrite(&seed, sizeof(unsigned), 1, continuedata); //old seed
     
+    //record the current REMD data
+    fwrite(&REMDInfo, sizeof(struct REMDStr), 1, continuedata);
+    
     fclose(continuedata);
     
     return;
@@ -604,26 +660,26 @@ void SaveConnectionMap(struct FileStr *file) {
     fflush(output);
 }
 
-void SaveKin(struct FileStr *file, struct ThreadStr *thisThread) {
+void SaveKin(struct FileStr *file) {
     if (unlikely(file->file == NULL)) {
         BackupFile(file);
         GenerateFile(file);
     }
     FILE *output = file->file;
     
-    fprintf(output, "%5.2lf    %10.4lf\n", currenttime, CalKinetE(thisThread));
+    fprintf(output, "%5.2lf    %10.4lf\n", currenttime, CalKinetE());
     fflush(output);
     return;
 }
 
-void SavePot(struct FileStr *file, struct ThreadStr *thisThread) {
+void SavePot(struct FileStr *file) {
     if (unlikely(file->file == NULL)) {
         BackupFile(file);
         GenerateFile(file);
     }
     FILE *output = file->file;
     
-    fprintf(output, "%5.2lf    %10.4lf\n", currenttime, CalPotenE(thisThread));
+    fprintf(output, "%5.2lf    %10.4lf\n", currenttime, CalPotenE());
     fflush(output);
     return;
 }
@@ -633,9 +689,12 @@ void SaveRE(struct FileStr *file) {
         BackupFile(file);
         GenerateFile(file);
     }
-    FILE *output = file->file;
     
-    fprintf(output, "%5.2f %8.4lf %2i\n", currenttime, REMDInfo.REMD_Temperature.T, REMDInfo.REMD_Temperature.num);
-    fflush(output);
+	if (REMDInfo.REMD_Temperature.T > 0) { //make sure the current temperature is valid
+		FILE* output = file->file;
+		fprintf(output, "%5.2f %8.4lf %2i\n", currenttime, REMDInfo.REMD_Temperature.T, REMDInfo.REMD_Temperature.num);
+		fflush(output);
+	}
+
     return;
 }

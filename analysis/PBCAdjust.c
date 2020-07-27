@@ -29,18 +29,18 @@ void AdjustPBC(int id)
     positionOutput = fopen(directory, "w");
 
 	if (nPP) {
-		sprintf(directory, "%srPBCGRO_%i.gro", path, nPP);
+		sprintf(directory, "%srPBCGRO_p%i.gro", path, nPP);
 		positionOutputMono = fopen(directory, "w");
 	}
     
-    for (int sectNum = 0; sectNum < fileList.count; sectNum ++) {
+    for (int sectNum = 0; sectNum < fileList[id].count; sectNum ++) {
         memset(buffer, '\0', sizeof(buffer));
-        FindTargetFile(files[inTrj][id].name, fileList.list[sectNum + 1], buffer);
+        FindTargetFile(files[inTrj][id].name, fileList[id].list[sectNum + 1], buffer);
         
         sprintf(directory, "%s%s", path, buffer);
         positionInput = fopen(directory, "r");
         if (positionInput == NULL) {
-            printf("!!ERROR!!: cannot find file %s in directory %s. make sure the input path is correct and the file does exist! %s:%i\n", files[inTrj][id].name, path, __FILE__, __LINE__);
+            printf("!!ERROR!!: cannot find file %s in directory %s. make sure the input path is correct and the file does exist! %s:%i\n", buffer, path, __FILE__, __LINE__);
             exit(EXIT_FAILURE);
         }
         

@@ -11,7 +11,8 @@ OBJ = Analysis.o 		  \
 	  RG.o 				  \
 	  RMSD.o              \
 	  SystemInformation.o \
-	  Tools.o
+	  Tools.o             \
+	  Distance.o
 
 all: sAnalysis
 

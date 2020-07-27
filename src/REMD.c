@@ -19,123 +19,109 @@
 
 int client_open(char *serverName, int port_number);
 void ReplicaExchange(double *E, struct REMDTempStr *T, char *serverName, int *port_number);
-void REMDRun(struct ThreadInfoStr *threadInfo, int outputRate, char *serverName, int *port_number);
-
+void REMDRun(int outputRate, char* serverName, int* port_number);
 
 void REMD(void) {
-    if (REMDInfo.REMD_Temperature.T > 0) {
-        targetTemperature = REMDInfo.REMD_Temperature.T;
-    }
-    
-    thread = (struct ThreadStr **)calloc(1, sizeof(struct ThreadStr *));
-    thread[0] = InitializeThread(0, atom);
-    thread[0]->fileList = InitializeFiles(REMDInfo.REMD_ExtraName, fileList);
-    SaveData(lgf, thread[0]);
-    
-    if (strncmp("new", neworcontinue, 1) == 0) {
-        SaveData(sysInfo, thread[0]);
-        FirstRun(thread[0]);
-    } else if (strncmp("continue", neworcontinue, 1) == 0) {
-        outputrecord = currenttime + outputrate;
-        CreateCBT();
-    }
-    
-    thrInfo[0].threadRenewList[1] = eventToCommit = CBT.node[1];
-    if (thread[0]->raw[eventToCommit]->dynamic->event.partner > 0) {
-        thrInfo[0].threadRenewList[++thrInfo[0].threadRenewList[0]] = thread[0]->raw[eventToCommit]->dynamic->event.partner;
-    }
-    AssignThread(thrInfo[0].threadRenewList, thread[0]);
-    REMDRun(&thrInfo[0], REMDInfo.REMD_OutputRate, REMDInfo.REMD_ServerName, &REMDInfo.REMD_PortNum);
+	Prepare();
+	REMDRun(REMDInfo.REMD_OutputRate, REMDInfo.REMD_ServerName, &REMDInfo.REMD_PortNum);
 }
 
-void REMDRun(struct ThreadInfoStr *threadInfo, int outputRate, char *serverName, int *port_number) {
-    int hazardType;
-    int tid = threadInfo->threadID;
-    int *threadRenewList = threadInfo->threadRenewList;
-    int rate = ((int)(currenttime / outputRate) + 1) * outputRate;
-    double timeIncr;
-    double processratio, gap = 0;
-    struct ThreadStr *thisThread = thread[tid];
-    struct AtomStr **newTarget = &thisThread->newTarget;;
-    struct AtomStr **newPartner = &thisThread->newPartner;
-    struct AtomStr *oldTarget = &thisThread->oldTarget;
-    struct AtomStr *oldPartner = &thisThread->oldPartner;
-    
-    while (currenttime <= timestep) {
-        
-        hazardType = ProcessEvent(threadRenewList, thisThread);
-        
-        if (hazardType < 0) {
-            threadRenewList[0] = 1;
-            threadRenewList[2] = 0;
-            threadRenewList[3] = 0;
-            
-            AssignThread(threadRenewList, thisThread);
-            Predict(threadRenewList, thisThread);
-            
-            AtomDataCpy(thisThread->raw[threadRenewList[1]], thisThread->listPtr[threadRenewList[1]], 0);
-            UpdateCBT(threadRenewList);
-            
-            AssignJob(threadRenewList, thisThread);
-            AssignThread(threadRenewList, thisThread);
-            
-        } else {
+void REMDRun(int outputRate, char *serverName, int *port_number) {
+	int hazardType;
+	int renewList[256] = { 0 };
+	int rate = ((int)(currenttime / outputRate) + 1) * outputRate;
+	double processratio, gap = 0;
+	struct AtomListStr* thisList = &atomList;
+	struct AtomStr* target;
+	struct AtomStr* partner;
 
-            timeIncr = thisThread->raw[threadRenewList[1]]->dynamic->event.time;
-            if (unlikely(timeIncr < 0)) {
-                printf("!!ERROR!!: time calculation is not correct!\n");
-            }
-            
-            UpdateData(timeIncr, "atom", thisThread); //update the coordinates
-            TimeForward(timeIncr, thisThread); //update the node time
-            currenttime += timeIncr;
-            frame++;
-            
-            CommitEvent(thisThread->raw,
-                        *newTarget, (threadRenewList[0] == 2 ? *newPartner : NULL),
-                        oldTarget, (threadRenewList[0] == 2 ?  oldPartner : NULL),
-                        thisThread->listPtr[oldTarget->dynamic->HB.neighbor],
-                        (threadRenewList[0] == 2 ? thisThread->listPtr[oldPartner->dynamic->HB.neighbor] : NULL), thisThread, threadRenewList);
-            
-            UpdateCBT(threadRenewList);
-            processratio = (currenttime - oldcurrenttime) / (timestep - oldcurrenttime) * 100;
-            
-            if (processratio >= gap + 0.01) {
-                
-                printf("Process=%8.2lf%%\r", processratio);
-                fflush(stdout);
-                gap += 0.01;
-                
-            }
-            
-            //save data to the output files
-            if (currenttime >= outputrecord) {
-                for (int i = 0; i < lenFileType; i ++) {
-                    if (thisThread->fileList[i].mark && i != RE) {
-                        SaveData(i, thisThread);
-                    }
-                }
-                outputrecord += outputrate;
-            }
-            
-            if (currenttime >= rate) {
-                double potenEnergy = CalPotenE(thisThread);
-                ReplicaExchange(&potenEnergy, &REMDInfo.REMD_Temperature, serverName, port_number);
-                targetTemperature = REMDInfo.REMD_Temperature.T;
-                SaveData(RE, thisThread);
+	while (currenttime <= timestep) {
+
+		AssignJob(&target, &partner, renewList, thisList);
+		UpdateData(thisList->timeInr);
+		TimeForward(thisList->timeInr); //update the node time
+		currenttime += thisList->timeInr;
+
+		hazardType = HazardCheck(target, partner,
+								 thisList->ptr[target->dynamic->HB.neighbor],
+								 (partner != NULL ? thisList->ptr[partner->dynamic->HB.neighbor] : NULL),
+								 thisList);
+
+#ifdef DEBUG_PRINTF
+		printf("frame = %4li, target atom = %5i, partner = %5i, %6s:%6s, type = %2i",
+			   frame, target->property->num, target->dynamic->event.partner,
+			   target->property->name,
+			   partner == NULL ? "NULL" : partner->property->name,
+			   target->dynamic->event.eventType);
+		fflush(stdout);
+#endif
+
+		if (!hazardType) {
+#ifdef DEBUG_PRINTF
+			printf(", executed!\n");
+#endif
+			frame++;
+			DoEvent(thisList); //calculate the after-event velocities
+			target->dynamic->event.counter++;
+			if (renewList[0] == 2 && strcmp(partner->property->extraProperty[1], "_CONS"))
+				partner->dynamic->event.counter++;
+
+			//if the target atom is a fixing atom and the event is a CGEvent, then all the atoms in the neighboring cells will be renewed
+			if (CG.mark && target->dynamic->event.eventType == CGSu_Event &&
+				strcmp(target->property->extraProperty[1], "_CONS") == 0) {
+				FixAssignRenewList(renewList, thisList);
+			}
+
+			Predict(renewList, thisList); //pre-predict the after-event event
+			UpdateCBT(renewList);
+
+			processratio = (currenttime - oldcurrenttime) / (timestep - oldcurrenttime) * 100;
+			if (unlikely(processratio >= gap + 0.01)) {
+				printf("Process=%8.2lf%%\r", processratio);
+				fflush(stdout);
+				gap += 0.01;
+			}
+
+			if (strcmp(wallDyn.mark, "no")) DoWallDyn();
+
+			//save data to the output files
+			if (unlikely(currenttime >= outputrecord)) {
+				for (int i = 0; i < lenFileType; i++) {
+					if (fileList[i].mark) {
+						SaveData(i, fileList);
+					}
+				}
+				outputrecord += outputrate;
+			}
+
+			if (currenttime >= rate) {
+				double potenEnergy = CalPotenE();
+				ReplicaExchange(&potenEnergy, &REMDInfo.REMD_Temperature, serverName, port_number);
+				targetTemperature = REMDInfo.REMD_Temperature.T;
+				SaveData(RE, fileList);
                 
                 rate += outputRate;
             }
-            
-            AssignJob(threadRenewList, thisThread);
-            AssignThread(threadRenewList, thisThread);
-        }
-    }
-    
-    tmpDouble = 0.0;
-    REMDInfo.REMD_Temperature.T = 0.0;
-    ReplicaExchange(&tmpDouble, &REMDInfo.REMD_Temperature, serverName, port_number);
-    
+
+		} else {
+#ifdef DEBUG_PRINTF
+			printf(", denied, self/partner changed!\n");
+#endif
+			renewList[0] = 1;
+			renewList[2] = 0;
+			renewList[3] = 0;
+
+			Predict(renewList, thisList);
+			UpdateCBT(renewList);
+			countReCal++;
+		}
+	}
+
+	tmpDouble = 0.0;
+	REMDInfo.REMD_Temperature.T = 0.0;
+	ReplicaExchange(&tmpDouble, &REMDInfo.REMD_Temperature, serverName, port_number);
+
+	FreeVariables();
     return;
 }
 
@@ -151,6 +137,10 @@ void ReplicaExchange(double *E, struct REMDTempStr *T, char *serverName, int *po
     double energy;
     struct REMDTempStr thisT;
     
+    /*
+     The local static variable will be initiated only at the first call;
+     its value during the last call will be kept.
+     */
     static int is_initialized = 0;
     static int sock;
     
@@ -190,7 +180,7 @@ void ReplicaExchange(double *E, struct REMDTempStr *T, char *serverName, int *po
      *- - - - - - - - - - - - - - - - - - - - - - - - - - - -*/
     thisT.T = 0;
     len = read(sock, &thisT, sizeof(struct REMDTempStr));
-    if (unlikely(len != sizeof(struct REMDTempStr))) {
+    if (unlikely(len != sizeof(struct REMDTempStr) && thisT.T)) {
         perror("recv");
         printf("%s:%i\n", __FILE__, __LINE__);
         exit(1);

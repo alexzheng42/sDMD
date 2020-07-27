@@ -291,6 +291,7 @@ void VisualSGThread(void) {
     
     InitializeVisual(argc, argv);
     
+    /*
     thread = (struct ThreadStr **)calloc(1, sizeof(struct ThreadStr *));
     thread[0] = InitializeThread(0, atom);
     thread[0]->fileList = InitializeFiles(NULL, fileList);
@@ -311,12 +312,14 @@ void VisualSGThread(void) {
     
     glutIdleFunc(VisualSGThreadRun);
     glutMainLoop();
+     */
     
     return;
 }
 
 
 void VisualSGThreadRun(void) {
+    /*
     int hazardType;
     int tid = thrInfo[0].threadID;
     int *threadRenewList = thrInfo[0].threadRenewList;
@@ -446,6 +449,7 @@ void VisualSGThreadRun(void) {
         
         exit(EXIT_SUCCESS);
     }
+     */
     
     return;
 }
