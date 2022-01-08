@@ -10,6 +10,8 @@
 
 static int beginP, endP, offSet, thisAtomNum;
 
+void CalParticle2Wall(char *style, struct SectionStr *sect, double **dist);
+
 void DisInfo(int id) {
     long step = 0, totalFrame;
     char directory[1024], buffer[1024];
