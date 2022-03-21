@@ -49,11 +49,13 @@ void InputData(int argc, const char * argv[]) {
     char saveDataFileName[50] = "savedData.dat";
     char coordinateFileName[50] = "coordinate.gro";
     char directory[1024];
-    
+
+    /*    
     //default box size
     boxDimension[1] = 100.0;
     boxDimension[2] = 100.0;
     boxDimension[3] = 100.0;
+    */
     
     //------------------------------
     //adjust directory and/or input coordinate file name
@@ -775,6 +777,15 @@ void ReadPDBFile(FILE* inputFile) {
     FILE *outputFile;
     FILE *AAInputFile = NULL;
     
+    if (boxDimension[1] == 0 ||
+        boxDimension[2] == 0 ||
+        boxDimension[3] == 0) {
+        
+        printf("!!ERROR!!: simulation box is dimensionless! for PDB files, please give box dimenions manually by using -box [x] [y] [z], unit is Angstrom.\n");
+        printf("           %s:%i\n", __FILE__, __LINE__);
+        exit(EXIT_FAILURE);
+    }
+
     sprintf(directory, "%s/coordinate%s.xyz", datadir, REMDInfo.REMD_ExtraName);
     outputFile = fopen(directory, "w");
     fprintf(outputFile, "File path: %s/\n", datadir);
@@ -1018,6 +1029,7 @@ void ReadCoordinate() {
                &atom[i].dynamic->coordinate[2],
                &atom[i].dynamic->coordinate[3]);
         
+        /*
         for (int n = 1; n <= 3; n ++) {
             if (atom[i].dynamic->coordinate[n] < 0 ||
                 atom[i].dynamic->coordinate[n] > boxDimension[n]) {
@@ -1025,6 +1037,7 @@ void ReadCoordinate() {
                 exit(EXIT_FAILURE);
             }
         }
+        */
         
         if (i > aminoacid[AANum].endAtomNum) {
             AANum ++;
@@ -1330,6 +1343,13 @@ int CheckValidAtom(char *atomName, char atomList[][8], int listSize) {
     for (int i = 0; i < listSize; i ++) {
         if (strcmp(atomName, atomList[i]) == 0) {
             sprintf(atomList[i], "%s", "0");
+            return TRUE;
+        }
+
+        //terminal O
+        if (strcmp(atomName, "O1") == 0) {
+            sprintf(atomList[i], "%s", "0");
+            sprintf(atomName, "O");
             return TRUE;
         }
     }

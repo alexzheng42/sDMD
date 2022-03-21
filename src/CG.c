@@ -8,7 +8,7 @@
 
 #include "DMD.h"
 
-#define CG_DEBUG
+//#define CG_DEBUG
 #define POT_RO      1 //ro in surface potential equation
 #define MAX_R       10
 #define MAX_P       0.8
@@ -36,10 +36,10 @@ void PrintDisPot(double pot[128][2], int step, char *sur_type, int num);
 char *GetAAName(int AAType);
 double FindMinDisDimen(int dim);
 double CalculateTime(struct ParameterStr *parameters);
-double CalculateSurPoten(int sur_type, int CG_type, double epsilon_sur, double sigma_sur, double kai_sur, double epsilon_r, double sigma_r, double kai_r, double dis);
-double FindMaxPotDis(int sur_type, int CG_type, double epsilon_sur, double sigma_sur, double kai_sur, double epsilon_r, double sigma_r, double kai_r, double setP);
-double FindMinPotDis(int sur_type, int CG_type, double epsilon_sur, double sigma_sur, double kai_sur, double epsilon_r, double sigma_r, double kai_r, int print);
-double FindMaxRadius(int sur_type, int CG_type, double epsilon_sur, double sigma_sur, double kai_sur, double epsilon_r, double sigma_r, double kai_r, double minPDis, double diff);
+double CalculateSurPoten(struct CGBeadStr sur, struct CGBeadStr res, double dis);
+double FindMaxPotDis(struct CGBeadStr sur, struct CGBeadStr res, double setP);
+double FindMinPotDis(struct CGBeadStr sur, struct CGBeadStr res, int print);
+double FindMaxRadius(struct CGBeadStr sur, struct CGBeadStr res, double minPDis, double diff);
 
 
 void InitializeCG(void) {
@@ -116,10 +116,11 @@ void InitializeCGPotentialMatrix(void) {
                        &CGMatrix.theta[3],
                        &CGMatrix.theta[4]);
             } else {
-                sscanf(statement + pos, "%lf%lf%lf",
+                sscanf(statement + pos, "%lf%lf%lf%lf",
                        &CGMatrix.CGBead[AAModel(buffer)].chi,
                        &CGMatrix.CGBead[AAModel(buffer)].epsilon,
-                       &CGMatrix.CGBead[AAModel(buffer)].sigma);
+                       &CGMatrix.CGBead[AAModel(buffer)].sigma,
+                       &CGMatrix.CGBead[AAModel(buffer)].delta);
             }
         }
         fclose(input_file);
@@ -200,21 +201,11 @@ void CreateCGPotentialMatrix(void) {
             }
             
             //the minimum distance
-            minDis  = FindMaxPotDis(AAModel(sur_type[i]), n,
-                                    CGMatrix.CGBead[AAModel(sur_type[i])].epsilon,
-                                    CGMatrix.CGBead[AAModel(sur_type[i])].sigma,
-                                    CGMatrix.CGBead[AAModel(sur_type[i])].chi,
-                                    CGMatrix.CGBead[n].epsilon,
-                                    CGMatrix.CGBead[n].sigma,
-                                    CGMatrix.CGBead[n].chi, MAX_P);
+            minDis  = FindMaxPotDis(CGMatrix.CGBead[AAModel(sur_type[i])],
+                                    CGMatrix.CGBead[n], MAX_P);
             //the distance at which the potenial has the minimum
-            minPDis = FindMinPotDis(AAModel(sur_type[i]), n,
-                                    CGMatrix.CGBead[AAModel(sur_type[i])].epsilon,
-                                    CGMatrix.CGBead[AAModel(sur_type[i])].sigma,
-                                    CGMatrix.CGBead[AAModel(sur_type[i])].chi,
-                                    CGMatrix.CGBead[n].epsilon,
-                                    CGMatrix.CGBead[n].sigma,
-                                    CGMatrix.CGBead[n].chi, 0);
+            minPDis = FindMinPotDis(CGMatrix.CGBead[AAModel(sur_type[i])],
+                                    CGMatrix.CGBead[n], 0);
             
             fprintf(outputPoten, "%5s %5s ", sur_type[i], GetAAName(n));
             fprintf(outputPoten, "%10.6lf ", minDis);
@@ -222,13 +213,8 @@ void CreateCGPotentialMatrix(void) {
             step = 0; flag = 1;
             dis = minDis + gap[2];
             disPot[step][0] = dis;
-            disPot[step++][1] = CalculateSurPoten(AAModel(sur_type[i]), n,
-                                                  CGMatrix.CGBead[AAModel(sur_type[i])].epsilon,
-                                                  CGMatrix.CGBead[AAModel(sur_type[i])].sigma,
-                                                  CGMatrix.CGBead[AAModel(sur_type[i])].chi,
-                                                  CGMatrix.CGBead[n].epsilon,
-                                                  CGMatrix.CGBead[n].sigma,
-                                                  CGMatrix.CGBead[n].chi, dis);
+            disPot[step++][1] = CalculateSurPoten(CGMatrix.CGBead[AAModel(sur_type[i])],
+                                                  CGMatrix.CGBead[n], dis);
             
             //calculate the discretized points of potential
             while (dis <= MAX_R) {
@@ -240,23 +226,13 @@ void CreateCGPotentialMatrix(void) {
                 }
                 
                 disPot[step][0] = dis;
-                disPot[step][1] = CalculateSurPoten(AAModel(sur_type[i]), n,
-                                                    CGMatrix.CGBead[AAModel(sur_type[i])].epsilon,
-                                                    CGMatrix.CGBead[AAModel(sur_type[i])].sigma,
-                                                    CGMatrix.CGBead[AAModel(sur_type[i])].chi,
-                                                    CGMatrix.CGBead[n].epsilon,
-                                                    CGMatrix.CGBead[n].sigma,
-                                                    CGMatrix.CGBead[n].chi, dis);
+                disPot[step][1] = CalculateSurPoten(CGMatrix.CGBead[AAModel(sur_type[i])],
+                                                    CGMatrix.CGBead[n], dis);
                 
                 if (flag && fabs(disPot[step][0] - minPDis) < gap[2]) { //only do this once
                     disPot[step][0] = minPDis;
-                    disPot[step][1] = CalculateSurPoten(AAModel(sur_type[i]), n,
-                                                        CGMatrix.CGBead[AAModel(sur_type[i])].epsilon,
-                                                        CGMatrix.CGBead[AAModel(sur_type[i])].sigma,
-                                                        CGMatrix.CGBead[AAModel(sur_type[i])].chi,
-                                                        CGMatrix.CGBead[n].epsilon,
-                                                        CGMatrix.CGBead[n].sigma,
-                                                        CGMatrix.CGBead[n].chi, minPDis);
+                    disPot[step][1] = CalculateSurPoten(CGMatrix.CGBead[AAModel(sur_type[i])],
+                                                        CGMatrix.CGBead[n], minPDis);
                     if (disPot[step][0] - disPot[step - 1][0] > gap[1] * 0.1 ||
                         fabs(disPot[step][1] - disPot[step - 1][1]) > gap[0] * 0.1) {
                         step ++;
@@ -306,21 +282,11 @@ void PrintPotCur_Res(void) {
             sprintf(name, "%s/%s-%s.txt", savedir, sur_type[i], GetAAName(n));
             potCurFile = fopen(name, "w");
             
-            dis = FindMaxPotDis(AAModel(sur_type[i]), n,
-                                CGMatrix.CGBead[AAModel(sur_type[i])].epsilon,
-                                CGMatrix.CGBead[AAModel(sur_type[i])].sigma,
-                                CGMatrix.CGBead[AAModel(sur_type[i])].chi,
-                                CGMatrix.CGBead[n].epsilon,
-                                CGMatrix.CGBead[n].sigma,
-                                CGMatrix.CGBead[n].chi, 0.6);
+            dis = FindMaxPotDis(CGMatrix.CGBead[AAModel(sur_type[i])],
+                                CGMatrix.CGBead[n], 0.6);
             while (dis < MAX_R) {
-                poten = CalculateSurPoten(AAModel(sur_type[i]), n,
-                                          CGMatrix.CGBead[AAModel(sur_type[i])].epsilon,
-                                          CGMatrix.CGBead[AAModel(sur_type[i])].sigma,
-                                          CGMatrix.CGBead[AAModel(sur_type[i])].chi,
-                                          CGMatrix.CGBead[n].epsilon,
-                                          CGMatrix.CGBead[n].sigma,
-                                          CGMatrix.CGBead[n].chi, dis);
+                poten = CalculateSurPoten(CGMatrix.CGBead[AAModel(sur_type[i])],
+                                          CGMatrix.CGBead[n], dis);
                 fprintf(potCurFile, "%8.4lf  %8.4lf\n", dis, poten);
                 
                 dis += gap;
@@ -357,13 +323,8 @@ void PrintPotCur_Pep(void) {
                 
                 for (int j = AAHead; j <= AAEnd; j ++) {
                     if (strcmp(atom[j].property->extraProperty[0], "CG") == 0) {
-                        poten += CalculateSurPoten(AAModel(sur_type[i]), aminoacid[n].type,
-                                                   CGMatrix.CGBead[AAModel(sur_type[i])].epsilon,
-                                                   CGMatrix.CGBead[AAModel(sur_type[i])].sigma,
-                                                   CGMatrix.CGBead[AAModel(sur_type[i])].chi,
-                                                   CGMatrix.CGBead[aminoacid[n].type].epsilon,
-                                                   CGMatrix.CGBead[aminoacid[n].type].sigma,
-                                                   CGMatrix.CGBead[aminoacid[n].type].chi,
+                        poten += CalculateSurPoten(CGMatrix.CGBead[AAModel(sur_type[i])],
+                                                   CGMatrix.CGBead[aminoacid[n].type],
                                                    dis + atom[j].dynamic->coordinate[dim] - shift);
                     }
                 }
@@ -446,33 +407,33 @@ void PrintStepPotFun(void) {
 }
 
 
-double CalculateSurPoten(int sur_type, int CG_type, double epsilon_sur, double sigma_sur, double kai_sur, double epsilon_r, double sigma_r, double kai_r, double dis) {
+double CalculateSurPoten(struct CGBeadStr sur, struct CGBeadStr res, double dis) {
     double sigma, epsilon, ratio;
     
-    epsilon = epsilon_sur * epsilon_r;
+    epsilon = sur.epsilon * res.epsilon;
     if (epsilon < 0) {
         epsilon = sqrt(epsilon * -1);
     } else {
         epsilon = sqrt(epsilon);
     }
     
-    sigma = (sigma_sur + sigma_r) * 0.5;
+    sigma = (sur.sigma + res.sigma) * 0.5;
     ratio = sigma / dis;
     
     return M_PI * POT_RO * CalExponential(sigma, 3.0) * epsilon *
            (CGMatrix.theta[0] * CalExponential(ratio, 9) -
             CGMatrix.theta[1] * CalExponential(ratio, 7) +
             CGMatrix.theta[2] * CalExponential(ratio, 3) -
-           (CGMatrix.theta[3] * CGMatrix.CGBead[sur_type].chi +
-            CGMatrix.theta[4] * CGMatrix.CGBead[CG_type].chi) *
+           (CGMatrix.theta[3] *  sur.chi +
+            CGMatrix.theta[4] * (res.chi + 2 * res.delta)) *
             CalExponential(ratio, 3));
 }
 
 
-double FindMaxPotDis(int sur_type, int CG_type, double epsilon_sur, double sigma_sur, double kai_sur, double epsilon_r, double sigma_r, double kai_r, double setP) {
+double FindMaxPotDis(struct CGBeadStr sur, struct CGBeadStr res, double setP) {
 	double dis = 0.1;
 	
-	while (CalculateSurPoten(sur_type, CG_type, epsilon_sur, sigma_sur, kai_sur, epsilon_r, sigma_r, kai_r, dis) > setP) {
+	while (CalculateSurPoten(sur, res, dis) > setP) {
 		dis += 0.02;
 	}
 
@@ -480,12 +441,12 @@ double FindMaxPotDis(int sur_type, int CG_type, double epsilon_sur, double sigma
 }
 
 
-double FindMinPotDis(int sur_type, int CG_type, double epsilon_sur, double sigma_sur, double kai_sur, double epsilon_r, double sigma_r, double kai_r, int print) {
+double FindMinPotDis(struct CGBeadStr sur, struct CGBeadStr res, int print) {
     double min = INFINIT, minDis = 0;
     double dis = 1.0, value;
     
     while (dis < MAX_R) {
-		value = CalculateSurPoten(sur_type, CG_type, epsilon_sur, sigma_sur, kai_sur, epsilon_r, sigma_r, kai_r, dis);
+		value = CalculateSurPoten(sur, res, dis);
         
         if (print) {
             printf("%12.4lf%12.4lf\n", dis, value);
@@ -501,16 +462,16 @@ double FindMinPotDis(int sur_type, int CG_type, double epsilon_sur, double sigma
 }
 
 
-double FindMaxRadius(int sur_type, int CG_type, double epsilon_sur, double sigma_sur, double kai_sur, double epsilon_r, double sigma_r, double kai_r, double minPDis, double diff) {
+double FindMaxRadius(struct CGBeadStr sur, struct CGBeadStr res, double minPDis, double diff) {
 	double pot[2];
 	double dis = minPDis;
 
-	pot[0] = CalculateSurPoten(sur_type, CG_type, epsilon_sur, sigma_sur, kai_sur, epsilon_r, sigma_r, kai_r, dis);
-	pot[1] = CalculateSurPoten(sur_type, CG_type, epsilon_sur, sigma_sur, kai_sur, epsilon_r, sigma_r, kai_r, dis + 0.5);
+	pot[0] = CalculateSurPoten(sur, res, dis);
+	pot[1] = CalculateSurPoten(sur, res, dis + 0.5);
 	while (pot[0] < 0 || pot[1] < 0 || fabs(pot[0] - pot[1]) > diff) {
 		dis += 0.5;
-		pot[0] = CalculateSurPoten(sur_type, CG_type, epsilon_sur, sigma_sur, kai_sur, epsilon_r, sigma_r, kai_r, dis);
-		pot[1] = CalculateSurPoten(sur_type, CG_type, epsilon_sur, sigma_sur, kai_sur, epsilon_r, sigma_r, kai_r, dis + 0.5);
+		pot[0] = CalculateSurPoten(sur, res, dis);
+		pot[1] = CalculateSurPoten(sur, res, dis + 0.5);
         
         if (dis > MAX_R) return MAX_R;
 	}

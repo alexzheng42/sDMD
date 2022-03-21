@@ -342,6 +342,7 @@ struct CGBeadStr {
     double chi;
     double epsilon;
     double sigma;
+    double delta;
 };
 
 struct CGMatrixStr {
