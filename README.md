@@ -13,7 +13,7 @@ If you use this code in your academic work, please cite:
   *Comput. Phys. Commun.* 2020, 247, 106873-106886.
   
 - Zheng, S.; Sajib, M. S. J.; Wei, Y.; Wei, T.  
-  "Discontinuous Molecular Dynamics Simulations of Biomolecule Interfacial Behavior: Study of Ovispirin-1 Adsorption on a Graphene Surface"
+  "Discontinuous Molecular Dynamics Simulations of Biomolecule Interfacial Behavior: Study of Ovispirin-1 Adsorption on a Graphene Surface"  
   *J. Chem. Theory Comput.* 2021, 17 (3), 1874-1882.
 <br>
 
