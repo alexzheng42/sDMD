@@ -4,7 +4,18 @@
 =====================================
 
 # Discontinuous Molecular Dynamics (DMD) Simulation Package
-## <br><br>
+
+**Reference & Citing**
+
+If you use this code in your academic work, please cite:
+- Zheng, S.; Javidpour, L.; Sahimi, M.; Shing, K. S.; Nakano, A.  
+  "sDMD: An open source program for discontinuous molecular dynamics simulation of protein folding and aggregation"  
+  *Comput. Phys. Commun.* 2020, 247, 106873-106886.
+  
+- Zheng, S.; Sajib, M. S. J.; Wei, Y.; Wei, T.  
+  "Discontinuous Molecular Dynamics Simulations of Biomolecule Interfacial Behavior: Study of Ovispirin-1 Adsorption on a Graphene Surface"
+  *J. Chem. Theory Comput.* 2021, 17 (3), 1874-1882.
+<br>
 
 **Table of Contents**
 =====================
