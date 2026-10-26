@@ -1,14 +1,14 @@
 Continue?          new
 Time               200000
-T(reduced)         no
+Temp               no
 Dump_Rate          50
-CutOff_R(A)        9.0
+CutOff_R           9.0
 Force_Field        Ding
 Thermostat         Andersen
 Thermo_Freq        6.0
-CGModel            no
-WallExist?         no
-WallType           no
+CGModel            no no
+SurfExist?         no
+SurfType           no
 WallDyn            no
 Flow               no
 Obstruct?          no

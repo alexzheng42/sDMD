@@ -13,8 +13,8 @@
 (atom1->dynamic->HB.role == 'D' && atom2->dynamic->HB.role == 'A')
 
 #define HBPAIR_SD(atom1, atom2) \
-(atom1->dynamic->HB.role == 'S' && atom2->property->typeofAtom == 2) || \
-(atom2->dynamic->HB.role == 'S' && atom1->property->typeofAtom == 2)
+(atom1->dynamic->HB.role == 'S' && atom2->property->typeofAtom[1] == 2) || \
+(atom2->dynamic->HB.role == 'S' && atom1->property->typeofAtom[1] == 2)
 
 #define HBPAIR_SS(atom1, atom2) \
 (atom1->dynamic->HB.role == 'S' && atom2->dynamic->HB.role == 'S')
@@ -40,146 +40,104 @@ int CheckPairMatch(struct AtomStr *atom_i, struct AtomStr *atom_j, struct AtomLi
 double CalculateDisc(struct ParameterStr *parameters);
 double CalculateTime(struct ParameterStr *parameters);
 
+typedef void (*InteractionCallback)(struct AtomStr *atom_i, struct AtomStr *atom_j, struct ParameterStr *parameters, struct AtomListStr *thisList);
+// cheap pair test run before the neighbor is updated and measured; NULL accepts every pair
+typedef int (*PairFilter)(struct AtomStr *atom_i, struct AtomStr *atom_j);
 
-void CollisionTime(struct AtomStr *collision_i, struct AtomListStr *thisList) {
+static void ScanNeighborhood(struct AtomStr *atom_i, struct AtomListStr *thisList, PairFilter filter, InteractionCallback callback) {
     int target_i, target_j;
     int cell_neighbor[4], cellIndex;
     int *sourCellList = celllist;
-    struct AtomStr *collision_j;
-    struct InteractionEventStr event;
+    struct AtomStr *atom_j;
     struct ParameterStr parameters;
     
-    InitializeEvent(&event);
-    parameters.calibratedcutoffr = cutoffr * EXTEND_RATIO; //this radius should be less than the length of subcell
+    parameters.calibratedcutoffr = cutoffr * EXTEND_RATIO;
     parameters.calibratedcutoffr *= parameters.calibratedcutoffr;
     
-    target_i = collision_i->property->num;
-    TRANSFER_VECTOR(parameters.position_i, collision_i->dynamic->coordinate); //easier to use coordinate and velocity data
-    TRANSFER_VECTOR(parameters.speed_i,    collision_i->dynamic->velocity);
+    target_i = atom_i->property->num;
+    TRANSFER_VECTOR(parameters.position_i, atom_i->dynamic->coordinate);
+    TRANSFER_VECTOR(parameters.speed_i,    atom_i->dynamic->velocity);
     
-    for (int i = 0; i < 27; ++i) {
-        //scan the neighborhood 27 subcells, include the target subcell itself
-        cell_neighbor[3] = collision_i->dynamic->cellIndex[3] + thisList->z[i];
-        cell_neighbor[2] = collision_i->dynamic->cellIndex[2] + thisList->y[i];
-        cell_neighbor[1] = collision_i->dynamic->cellIndex[1] + thisList->x[i];
+    for (int i = 0; i < thisList->stencilNum; ++i) {
+        cell_neighbor[3] = atom_i->dynamic->cellIndex[3] + thisList->z[i];
+        cell_neighbor[2] = atom_i->dynamic->cellIndex[2] + thisList->y[i];
+        cell_neighbor[1] = atom_i->dynamic->cellIndex[1] + thisList->x[i];
         
         for (int j = 1; j <= 3; j++) {
-            if (unlikely(cell_neighbor[j] < 0)) {
-                cell_neighbor[j] = cellnum[j] - 1;
-            } else if (unlikely(cell_neighbor[j] >= cellnum[j])) {
-                cell_neighbor[j] = 0;
-            }
+            if (unlikely(cell_neighbor[j] < 0)) cell_neighbor[j] += cellnum[j];
+            else if (unlikely(cell_neighbor[j] >= cellnum[j])) cell_neighbor[j] -= cellnum[j];
         }
         
-        cellIndex = cell_neighbor[3] * cellnum[1] * cellnum[2]
-        + cell_neighbor[2] * cellnum[1]
-        + cell_neighbor[1] + 1;
+        cellIndex = cell_neighbor[3] * cellnum[1] * cellnum[2] + cell_neighbor[2] * cellnum[1] + cell_neighbor[1] + 1;
         
         target_j = sourCellList[atomnum + cellIndex];
         while (target_j) {
-            collision_j = thisList->ptr[target_j];
-            
-            if (target_i != target_j) {
-                //---------------------------------
-                //check if there is any duplicate case or if this pair has been already registered
-                //new code allows the target atom and its partner both have the same event information
-                //which will reduce the complexity of the list maintenance
-                if (CheckDuplication(collision_i, collision_j, Coli_Event)) {
-                    target_j = sourCellList[target_j];
-                    continue;
-                }
-                //---------------------------------
-                
-                //---------------------------------
-                //if the two target beads are connected by bonds, or in HB relationship, skip them
-                if (connectionMap[target_i][target_j] & BOND_CONNECT ||
-                    collision_i->dynamic->HB.bondConnection == target_j ||
-                    FindElemInList(collision_i->dynamic->HBNeighbor.neighborPartner, target_j, -1, -1, 0)) {
-                    target_j = sourCellList[target_j];
-                    continue;
-                }
-                //---------------------------------
-                
-                TRANSFER_VECTOR(parameters.position_j, collision_j->dynamic->coordinate); //easier to use coordinate and velocity data
-                TRANSFER_VECTOR(parameters.speed_j,    collision_j->dynamic->velocity);
-                CalculateParameters(collision_i, collision_j, &parameters);
-                
-                if (parameters.r_2 <= parameters.calibratedcutoffr) { //if the distance between two atoms <= scan radius
+            atom_j = thisList->ptr[target_j];
+            if (target_i != target_j && (filter == NULL || filter(atom_i, atom_j))) {
+                if (!FindStrInList(atom_j->property->extraProperty, "_HBRMV", 0) &&
+                    !FindStrInList(atom_j->property->extraProperty, "_COLSKIP", 0)) {
                     
-                    if (connectionMap[target_i][target_j] & CONSTRAINT_CONNECT) {
-                        parameters.coreorShell = FindPair(collision_i, collision_j, "constraint",
-                                                          parameters.b_ij, parameters.r_2,
-                                                          &parameters.shortlimit2,    &parameters.longlimit2,
-                                                          &parameters.lowerPotential, &parameters.upperPotential,
-                                                          &tmpDouble, NULL, 0);
-                    } else {
-                        parameters.coreorShell = FindPair(collision_i, collision_j, "collision",
-                                                          parameters.b_ij, parameters.r_2,
-                                                          &parameters.shortlimit2, &parameters.longlimit2,
-                                                          &parameters.lowerPotential, &parameters.upperPotential,
-                                                          &tmpDouble, NULL, 0);
-                        if (parameters.lowerPotential == 0 && parameters.upperPotential == 0) {
-                            target_j = sourCellList[target_j];
-                            continue;
-                        }
+                    UpdateAtom(atom_j, currenttime); // Update neighbor atom
+                    TRANSFER_VECTOR(parameters.position_j, atom_j->dynamic->coordinate);
+                    TRANSFER_VECTOR(parameters.speed_j,    atom_j->dynamic->velocity);
+                    CalculateParameters(atom_i, atom_j, &parameters);
+                    
+                    if (parameters.r_2 <= parameters.calibratedcutoffr) {
+                        callback(atom_i, atom_j, &parameters, thisList);
                     }
-                    
-                    //judge which type of collisions will happen
-                    //core hit? well capture? well bounce? well escape?
-                    //Supplement to Introductory Chemical Engineering Thermodynamics, 2nd ED.
-                    if (parameters.b_ij < 0 && CalculateDisc(&parameters) > 0) { //approaching and will collide
-                        
-                        parameters.s_time    = -1;
-                        parameters.d_ij2     = parameters.shortlimit2;
-                        event.potential = parameters.lowerPotential;
-                        
-                        if (parameters.coreorShell == 0) { //inner well contact
-                            event.subEventType = CoreColli;
-                        } else { //well contact
-                            event.subEventType = TBDCaptr;
-                        }
-                        
-                    } else { //move further away
-                        
-                        parameters.s_time    = 1;
-                        parameters.d_ij2     = parameters.longlimit2;
-                        event.potential = parameters.upperPotential;
-                        
-                        if (strncmp(Methodtype, "Ding", 1) == 0) {
-                            if (connectionMap[target_i][target_j] & CONSTRAINT_CONNECT) {
-                                if (parameters.coreorShell == 1) { //most outer well contact
-                                    event.subEventType = WellBounc;
-                                } else { //well contact (pull)
-                                    event.subEventType = TBDEscap;
-                                }
-                            } else {
-                                if (parameters.coreorShell == 1) {
-                                    target_j = sourCellList[target_j];
-                                    continue;
-                                } else {
-                                    event.subEventType = TBDEscap;
-                                }
-                            }
-                        }
-                    }
-                    
-                    event.time = CalculateTime(&parameters);
-                    
-                    if (unlikely(event.time < 0)) {
-                        printf("!!ERROR!!: collision time is less than zero bewteen atoms %i and %i\n", target_i, target_j); //for debug and error check
-                        printf("           the current distance is %.4lf\n", sqrt(parameters.r_2));
-                        printf("           the min is %.4lf and the max is %.4lf\n", sqrt(parameters.shortlimit2), sqrt(parameters.longlimit2));
-                        printf("           %s:%i\n", __FILE__, __LINE__);
-                    }
-                    
-                    JobAssign(collision_i, collision_j, &event, Coli_Event);
                 }
             }
             target_j = sourCellList[target_j];
         }
     }
+}
+
+static void CollisionCallback(struct AtomStr *atom_i, struct AtomStr *atom_j, struct ParameterStr *parameters, struct AtomListStr *thisList) {
+    struct InteractionEventStr event;
+    InitializeEvent(&event);
+    int target_i = atom_i->property->num;
+    int target_j = atom_j->property->num;
+
+    if (CheckDuplication(atom_i, atom_j, Coli_Event)) return;
     
-    return;
+    if (connectionMap[target_i][target_j] & BOND_CONNECT ||
+        connectionMap[target_i][target_j] & HB_CONNECT   ||
+        FindElemInList(atom_i->dynamic->HBNeighbor.neighborPartner, target_j, -1, -1, 0)) return;
+
+    if (connectionMap[target_i][target_j] & CONSTRAINT_CONNECT) {
+        parameters->coreorShell = FindPair(atom_i, atom_j, InterConstr, parameters->b_ij, parameters->r_2, &parameters->shortlimit2, &parameters->longlimit2, &parameters->lowerPotential, &parameters->upperPotential, &tmpDouble, NULL, 0);
+    } else {
+        parameters->coreorShell = FindPair(atom_i, atom_j, InterColli, parameters->b_ij, parameters->r_2, &parameters->shortlimit2, &parameters->longlimit2, &parameters->lowerPotential, &parameters->upperPotential, &tmpDouble, NULL, 0);
+        if (parameters->lowerPotential == 0 && parameters->upperPotential == 0) return;
+    }
+
+    if (parameters->b_ij < 0 && CalculateDisc(parameters) > 0) { // approaching and will reach the inner boundary
+        parameters->s_time = -1;
+        parameters->d_ij2  = parameters->shortlimit2;
+        event.potential    = parameters->lowerPotential;
+        event.subEventType = (parameters->coreorShell == 0) ? CoreColli : TBDCaptr;
+    } else { // moving apart, or approaching but turning back before the inner boundary
+        if (connectionMap[target_i][target_j] & CONSTRAINT_CONNECT) {
+            event.subEventType = (parameters->coreorShell == 1) ? WellBounc : TBDEscap;
+        } else {
+            if (parameters->coreorShell == 1) return;
+            event.subEventType = TBDEscap;
+        }
+        parameters->s_time = 1;
+        parameters->d_ij2  = parameters->longlimit2;
+        event.potential    = parameters->upperPotential;
+    }
+
+    event.time = CalculateTime(parameters);
+    if (unlikely(event.time < 0)) event.time = INFINIT;
+    JobAssign(atom_i, atom_j, &event, Coli_Event);
+}
+
+void CollisionTime(struct AtomStr *collision_i, struct AtomListStr *thisList) {
+    UpdateAtom(collision_i, currenttime);
+    if (FindStrInList(collision_i->property->extraProperty, "_HBRMV", 0) ||
+        FindStrInList(collision_i->property->extraProperty, "_COLSKIP", 0)) return;
+    ScanNeighborhood(collision_i, thisList, NULL, CollisionCallback);
 }
 
 
@@ -191,6 +149,7 @@ void BondTime(struct AtomStr *bond_i, struct AtomListStr *thisList) {
     struct InteractionEventStr event;
     struct ParameterStr parameters;
     
+    UpdateAtom(bond_i, currenttime);
     InitializeEvent(&event);
     target_i = bond_i->property->num;
     TRANSFER_VECTOR(parameters.position_i, bond_i->dynamic->coordinate);
@@ -233,33 +192,32 @@ void BondTime(struct AtomStr *bond_i, struct AtomListStr *thisList) {
         parameters.longlimit2  = dmax[n]; //bonds can fluctuate a little bit
         parameters.shortlimit2 = dmin[n];
         
+        UpdateAtom(bond_j, currenttime);
         TRANSFER_VECTOR(parameters.position_j, bond_j->dynamic->coordinate);
         TRANSFER_VECTOR(parameters.speed_j,    bond_j->dynamic->velocity);
         CalculateParameters(bond_i, bond_j, &parameters);
         
         if (unlikely(parameters.r_2 - parameters.longlimit2 > ZERO)) {
-            printf("!!ERROR!!: long-error between atoms %i(%i%s) and %i(%i%s)\n",
-                   target_i, bond_i->property->sequence.aminoacidNum, bond_i->property->name,
-                   target_j, bond_j->property->sequence.aminoacidNum, bond_j->property->name);
-            printf("           the current distance is %.4lf, while the max is %.4lf\n", sqrt(parameters.r_2), sqrt(parameters.longlimit2));
-            printf("           %s:%i\n", __FILE__, __LINE__);
-            
             if (parameters.b_ij >= 0) { //try to correct the error
+                printf("!!ERROR!!: long-error between atoms %i(%i%s) and %i(%i%s)\n",
+                       target_i, bond_i->property->sequence.resNum, bond_i->property->name,
+                       target_j, bond_j->property->sequence.resNum, bond_j->property->name);
+                printf("           the current distance is %.4lf, while the max is %.4lf\n", sqrt(parameters.r_2), sqrt(parameters.longlimit2));
+                printf("           %s:%i\n", __FILE__, __LINE__);
                 event.subEventType = WellBounc;
                 event.time = 1e-16 * target_i * target_j;
                 JobAssign(bond_i, bond_j, &event, Bond_Event);
                 n ++;
                 continue;
             }
-            
+
         } else if (unlikely(parameters.shortlimit2 - parameters.r_2 > ZERO)) {
-            printf("!!ERROR!!: short-error between atoms %i(%i%s) and %i(%i%s)\n",
-                   target_i, bond_i->property->sequence.aminoacidNum, bond_i->property->name,
-                   target_j, bond_j->property->sequence.aminoacidNum, bond_j->property->name);
-            printf("           the current distance is %.4lf, while the min is %.4lf\n", sqrt(parameters.r_2), sqrt(parameters.shortlimit2));
-            printf("           %s:%i\n", __FILE__, __LINE__);
-            
             if (parameters.b_ij < 0) { //try to correct the error
+                printf("!!ERROR!!: short-error between atoms %i(%i%s) and %i(%i%s)\n",
+                       target_i, bond_i->property->sequence.resNum, bond_i->property->name,
+                       target_j, bond_j->property->sequence.resNum, bond_j->property->name);
+                printf("           the current distance is %.4lf, while the min is %.4lf\n", sqrt(parameters.r_2), sqrt(parameters.shortlimit2));
+                printf("           %s:%i\n", __FILE__, __LINE__);
                 event.subEventType = CoreColli;
                 event.time = 1e-16 * target_i * target_j;
                 JobAssign(bond_i, bond_j, &event, Bond_Event);
@@ -267,7 +225,6 @@ void BondTime(struct AtomStr *bond_i, struct AtomListStr *thisList) {
                 continue;
             }
         }
-        
         if (parameters.b_ij < 0 && CalculateDisc(&parameters) > 0) {
             
             parameters.s_time  = -1;
@@ -294,202 +251,160 @@ void BondTime(struct AtomStr *bond_i, struct AtomListStr *thisList) {
     } //while (connect[n]!=0)
 }
 
+static int HBPairFilter(struct AtomStr *HB_i, struct AtomStr *HB_j) {
+    if (!(HBPAIR_AD(HB_i, HB_j) || HBPAIR_SD(HB_i, HB_j) || HBPAIR_SS(HB_i, HB_j))) return FALSE;
+    if (!HBHasFreeSlot(HB_j) || HBIsPartner(HB_i, HB_j->property->num)) return FALSE;
+    if (HB_i->property->sequence.molNum == HB_j->property->sequence.molNum &&
+        ABSVALUE((HB_i->property->sequence.resNum - HB_j->property->sequence.resNum)) < 4) return FALSE;
+    return TRUE;
+}
 
-void HBTime(struct AtomStr *HB_i, struct AtomListStr *thisList) {
-    int target_i, target_j;
-    struct AtomStr *HB_j;
+static void HBCallback(struct AtomStr *HB_i, struct AtomStr *HB_j, struct ParameterStr *parameters, struct AtomListStr *thisList) {
     struct InteractionEventStr event;
-    struct ParameterStr parameters;
-    
     InitializeEvent(&event);
-    target_i = HB_i->property->num;
-    TRANSFER_VECTOR(parameters.position_i, HB_i->dynamic->coordinate);
-    TRANSFER_VECTOR(parameters.speed_i,    HB_i->dynamic->velocity);
-    
-    if (HB_i->dynamic->HB.interactionType == HBSkip) {
-        /*
-         this means the previous predicted event is HB event,
-         but due to the inappropriate positions of the neighbor atoms,
-         the HB formation could not be executed.
-         After that, in the normal condition, the target atom will keep moving
-         as the original speed and direction until the next event.
-         
-         In this case, there would be a chance that the target atoms, say A and B,
-         are very close after the previous HB event but their distance is still larger
-         than potentialPairHB[][].dmax. Thus, if we do HB time prediction again,
-         the next timestep for these atoms will be INFINITLY small,
-         which will get the whole process stuck...
-         
-         Therefore, here we should skip the time prediction for one time.
-         */
-        HB_i->dynamic->HB.interactionType = NoEvent;
+    int target_i = HB_i->property->num;
+    int target_j = HB_j->property->num;
+
+#ifdef HB_TRACE
+    if (currenttime > 340.0) {
+        printf("[HB_TRACE] t=%.4f Checking H#%d(res%d) O#%d(res%d) r=%.3f\n",
+               currenttime, target_i, HB_i->property->sequence.resNum,
+               target_j, HB_j->property->sequence.resNum, sqrt(parameters->r_2));
+        fflush(stdout);
+    }
+#endif
+
+    if (!(HBPAIR_AD(HB_i, HB_j) || HBPAIR_SD(HB_i, HB_j) || HBPAIR_SS(HB_i, HB_j))) {
+#ifdef HB_TRACE
+        if (currenttime > 340.0) printf("[HB_TRACE] t=%.4f  -> FAIL: HBPAIR role check (roles %c %c)\n", currenttime, HB_i->dynamic->HB.role, HB_j->dynamic->HB.role);
+#endif
         return;
     }
-    
-    HB_i->dynamic->HB.interactionType = NoEvent;
-    if (HB_i->dynamic->HB.bondConnection > 0) { //check if there has been already a connection between the two target beads
-        
-        target_j = HB_i->dynamic->HB.bondConnection;
-        HB_j = thisList->ptr[target_j];
+    if (!HBHasFreeSlot(HB_j) || HBIsPartner(HB_i, target_j)) {
+#ifdef HB_TRACE
+        if (currenttime > 340.0) printf("[HB_TRACE] t=%.4f  -> FAIL: O#%d already bonded to H#%d\n", currenttime, target_j, HB_j->dynamic->HB.bondConnection[1]);
+#endif
+        return;
+    }
+    if (!((HB_i->property->sequence.molNum == HB_j->property->sequence.molNum && ABSVALUE((HB_i->property->sequence.resNum - HB_j->property->sequence.resNum)) >= 4) || (HB_i->property->sequence.molNum != HB_j->property->sequence.molNum))) {
+#ifdef HB_TRACE
+        if (currenttime > 340.0) printf("[HB_TRACE]   -> FAIL: sequence resNum diff=%d\n", ABSVALUE((HB_i->property->sequence.resNum - HB_j->property->sequence.resNum)));
+#endif
+        return;
+    }
+    if (CheckDuplication(HB_i, HB_j, HB_Event)) {
+#ifdef HB_TRACE
+        if (currenttime > 340.0) printf("[HB_TRACE]   -> FAIL: duplicate event\n");
+#endif
+        return;
+    }
+    if (CheckPairMatch(HB_i, HB_j, thisList) < 0) {
+#ifdef HB_TRACE
+        if (currenttime > 340.0) printf("[HB_TRACE]   -> FAIL: CheckPairMatch (HB.neighbor[0]=%d)\n", HB_i->dynamic->HB.neighbor[0]);
+#endif
+        return;
+    }
 
-        if (CheckDuplication(HB_i, HB_j, HB_Event)) {
-            return;
+    parameters->coreorShell = FindPair(HB_i, HB_j, InterHB, parameters->b_ij, parameters->r_2, &parameters->shortlimit2, &parameters->longlimit2, &parameters->lowerPotential, &parameters->upperPotential, &tmpDouble, NULL, 0);
+
+    if (parameters->b_ij < 0 && parameters->coreorShell == 1 && CalculateDisc(parameters) > 0) {
+        parameters->s_time = -1;
+        parameters->d_ij2 = parameters->shortlimit2;
+        event.potential = parameters->lowerPotential;
+        event.subEventType = TBDHBForm;
+        event.time = CalculateTime(parameters);
+        if (unlikely(event.time < 0)) event.time = INFINIT;
+#ifdef HB_TRACE
+        if (currenttime > 340.0) printf("[HB_TRACE]   -> SCHEDULED TBDHBForm at t+%.4f (b=%.4f cs=%d disc=%.4f)\n",
+               event.time, parameters->b_ij, parameters->coreorShell, CalculateDisc(parameters));
+#endif
+        JobAssign(HB_i, HB_j, &event, HB_Event);
+    }
+#ifdef HB_TRACE
+    else if (currenttime > 340.0) {
+        printf("[HB_TRACE]   -> NO SCHEDULE: b=%.4f cs=%d disc=%.4f r=%.3f\n",
+               parameters->b_ij, parameters->coreorShell, CalculateDisc(parameters), sqrt(parameters->r_2));
+    }
+#endif
+}
+
+void HBTime(struct AtomStr *HB_i, struct AtomListStr *thisList) {
+    UpdateAtom(HB_i, currenttime);
+    if (FindStrInList(HB_i->property->extraProperty, "_HBRMV", 0)) return;
+    // HBSkip (a failed formation) only suppresses the search for new partners;
+    // the atom's existing HBs must always be re-predicted
+    int skipScan = (HB_i->dynamic->HB.interactionType == HBSkip);
+    HB_i->dynamic->HB.interactionType = NoEvent;
+
+    for (int p = 1; p <= HBPartnerNum(HB_i); p++) {
+        struct AtomStr *HB_j = thisList->ptr[HB_i->dynamic->HB.bondConnection[p]];
+        UpdateAtom(HB_j, currenttime);
+        if (FindStrInList(HB_j->property->extraProperty, "_HBRMV", 0)) {
+            printf("!!ERROR!!: HB_j #%i has been removed! %s:%i\n", HB_i->dynamic->HB.bondConnection[p], __FILE__, __LINE__);
+            exit(EXIT_FAILURE);
         }
-        
+        if (CheckDuplication(HB_i, HB_j, HB_Event)) continue;
+
+        struct ParameterStr parameters;
+        TRANSFER_VECTOR(parameters.position_i, HB_i->dynamic->coordinate);
+        TRANSFER_VECTOR(parameters.speed_i,    HB_i->dynamic->velocity);
         TRANSFER_VECTOR(parameters.position_j, HB_j->dynamic->coordinate);
-        TRANSFER_VECTOR(parameters.speed_j, HB_j->dynamic->velocity);
+        TRANSFER_VECTOR(parameters.speed_j,    HB_j->dynamic->velocity);
         CalculateParameters(HB_i, HB_j, &parameters);
-        
-        parameters.coreorShell = FindPair(HB_i, HB_j, "HB",
-                                          parameters.b_ij, parameters.r_2,
-                                          &parameters.shortlimit2, &parameters.longlimit2,
-                                          &parameters.lowerPotential, &parameters.upperPotential,
-                                          &tmpDouble, NULL, 0);
-        
+
+        parameters.coreorShell = FindPair(HB_i, HB_j, InterHB, parameters.b_ij, parameters.r_2, &parameters.shortlimit2, &parameters.longlimit2, &parameters.lowerPotential, &parameters.upperPotential, &tmpDouble, NULL, 0);
+
+        struct InteractionEventStr event;
+        InitializeEvent(&event);
         if (parameters.b_ij < 0 && CalculateDisc(&parameters) > 0) {
-            
-            parameters.s_time    = -1;
-            parameters.d_ij2     = parameters.shortlimit2;
-                 event.potential = parameters.lowerPotential;
-            
+            parameters.s_time = -1;
             if (parameters.coreorShell == 0) {
+                parameters.d_ij2 = parameters.shortlimit2;
                 event.subEventType = CoreColli;
             } else {
+                parameters.d_ij2 = parameters.shortlimit2;
                 event.subEventType = TBDCaptr;
             }
-            
+            event.potential = parameters.lowerPotential;
         } else {
-            parameters.s_time    = 1;
-            parameters.d_ij2     = parameters.longlimit2;
-                 event.potential = parameters.upperPotential;
-            
-            if (strncmp(Methodtype, "Ding", 1) == 0) {
-                if (parameters.coreorShell == 1) { //most outer shell, may break
-                    event.subEventType = TBDHBBrik;
-                } else {
-                    event.subEventType = TBDEscap;
-                }
+            // Handles b_ij > 0 (outward) AND b_ij < 0 with disc <= 0 (H can't
+            // reach the next inner step; must schedule the outer boundary crossing
+            // so the velocity adjustment at that wall is not skipped).
+            parameters.s_time = 1;
+            if (parameters.coreorShell == 1) {
+                parameters.d_ij2 = parameters.longlimit2;
+                event.subEventType = TBDHBBrik;
+            } else {
+                parameters.d_ij2 = parameters.longlimit2;
+                event.subEventType = TBDEscap;
             }
+            event.potential = parameters.upperPotential;
         }
-        
         event.time = CalculateTime(&parameters);
-        
-        if (unlikely(event.time < 0)) {
-            printf("!!ERROR!!: HB time is less than zero between atoms %i and %i! %s:%i\n", target_i, target_j, __FILE__, __LINE__);
-            event.time = INFINIT;
-        }
-        
+        // on the outer edge already (FindPair keeps a bonded pair there in the last shell): break now
+        if (event.time < 0 && parameters.s_time == 1 && ABSVALUE(parameters.r_2 - parameters.d_ij2) < ZERO)
+            event.time = 0;
+        if (unlikely(event.time < 0)) event.time = INFINIT;
         JobAssign(HB_i, HB_j, &event, HB_Event);
-        
-    } else if (target_i != 0 &&
-               (HB_i->dynamic->HB.role == 'A' ||
-                HB_i->dynamic->HB.role == 'D' ||
-                HB_i->dynamic->HB.role == 'S') &&
-               HB_i->dynamic->HB.bondConnection == 0) {
-        
-        parameters.calibratedcutoffr = cutoffr * EXTEND_RATIO;
-        parameters.calibratedcutoffr *= parameters.calibratedcutoffr;
-        
-        int cell_neighbor[4], cellIndex;
-        int *sourCellList = celllist;
-        
-        for (int i = 0; i < 27; ++i) {
-            //scan the neighborhood 27 subcells, include the target subcell itself
-            cell_neighbor[3] = HB_i->dynamic->cellIndex[3] + thisList->z[i];
-            cell_neighbor[2] = HB_i->dynamic->cellIndex[2] + thisList->y[i];
-            cell_neighbor[1] = HB_i->dynamic->cellIndex[1] + thisList->x[i];
-            
-            for (int j = 1; j <= 3; j++) {
-                if (unlikely(cell_neighbor[j] < 0)) {
-                    cell_neighbor[j] = cellnum[j] - 1;
-                } else if (unlikely(cell_neighbor[j] >= cellnum[j])) {
-                    cell_neighbor[j] = 0;
-                }
-            }
-            
-            cellIndex = cell_neighbor[3] * cellnum[1] * cellnum[2]
-            + cell_neighbor[2] * cellnum[1]
-            + cell_neighbor[1] + 1;
-        
-            target_j = sourCellList[atomnum + cellIndex];
-            while (target_j) {
-                HB_j = thisList->ptr[target_j];
-                
-                if (target_i != target_j &&
-                    (/*normal A and D*/
-                     HBPAIR_AD(HB_i, HB_j) ||
-                     /*S and D, here D has to be in backbone*/
-                     HBPAIR_SD(HB_i, HB_j) ||
-                     /*S and S*/
-                     HBPAIR_SS(HB_i, HB_j)
-                     ) &&
-                    HB_j->dynamic->HB.bondConnection == 0 &&
-                    ((HB_i->property->sequence.proteinNum == HB_j->property->sequence.proteinNum &&
-                      ABSVALUE((HB_i->property->sequence.aminoacidNum - HB_j->property->sequence.aminoacidNum)) >= 4) ||
-                     (HB_i->property->sequence.proteinNum != HB_j->property->sequence.proteinNum)))
-                {
-                    
-                    if (CheckDuplication(HB_i, HB_j, HB_Event)) {
-                        target_j = sourCellList[target_j];
-                        continue;
-                    }
-                    
-                    TRANSFER_VECTOR(parameters.position_j, HB_j->dynamic->coordinate);
-                    TRANSFER_VECTOR(parameters.speed_j,    HB_j->dynamic->velocity);
-                    CalculateParameters(HB_i, HB_j, &parameters);
-                    
-                    if (parameters.r_2 <= parameters.calibratedcutoffr) { //if the distance between two atoms <= scan radius
-                        
-                        if (CheckPairMatch(HB_i, HB_j, thisList) < 0) { //the pair is not in the reaction library list
-                            target_j = sourCellList[target_j];
-                            continue;
-                        }
-                        
-                        parameters.coreorShell = FindPair(HB_i, HB_j, "HB",
-                                                          parameters.b_ij, parameters.r_2,
-                                                          &parameters.shortlimit2, &parameters.longlimit2,
-                                                          &parameters.lowerPotential, &parameters.upperPotential,
-                                                          &tmpDouble, NULL, 0);
-                        
-                        if (parameters.b_ij < 0 && parameters.coreorShell == 1 &&
-                            CalculateDisc(&parameters) > 0) { //approaching
-                            
-                            parameters.s_time       = -1;
-                            parameters.d_ij2        = parameters.shortlimit2;
-                            event.potential         = parameters.lowerPotential;
-                            event.subEventType      = TBDHBForm; //may form HB
-                            
-                        } else {
-                            target_j = sourCellList[target_j];
-                            continue;
-                        }
-                        
-                        event.time = CalculateTime(&parameters);
-                        
-                        if (unlikely(event.time < 0)) {
-                            printf("!!ERROR!!: HB time is less than zero bewteen atoms %i and %i! %s:%i\n", target_i, target_j, __FILE__, __LINE__);
-                            event.time = INFINIT;
-                        }
-                        
-                        JobAssign(HB_i, HB_j, &event, HB_Event);
-                    } //if (absvalue_vector(r_HB_ij[0])<=calibratedcutoffr)
-                }
-                target_j = sourCellList[target_j];
-            }
-        }
     }
-    
-    return;
+    if (!skipScan && HBHasFreeSlot(HB_i) && HB_i->property->num != 0 && (HB_i->dynamic->HB.role == 'A' || HB_i->dynamic->HB.role == 'D' || HB_i->dynamic->HB.role == 'S')) {
+        ScanNeighborhood(HB_i, thisList, HBPairFilter, HBCallback);
+    }
 }
 
 
 void HBNeighborTime(struct AtomStr *neighbor_i, struct AtomListStr *thisList) {
+    UpdateAtom(neighbor_i, currenttime);
     int flag = 0;
     int target_i, target_j;
     struct AtomStr *neighbor_j;
     struct AtomStr *virtualAtom[3];
     struct InteractionEventStr event;
     struct ParameterStr parameters;
+    
+    if (FindStrInList(neighbor_i->property->extraProperty, "_HBRMV", 0)) {
+        return;
+    }
     
     InitializeEvent(&event);
     target_i = neighbor_i->property->num;
@@ -498,71 +413,67 @@ void HBNeighborTime(struct AtomStr *neighbor_i, struct AtomListStr *thisList) {
     
     for (int n = 1; n <= neighbor_i->dynamic->HBNeighbor.neighborStatus; n++) {
         
-        target_j = neighbor_i->dynamic->HBNeighbor.neighborPartner[n];
-        neighbor_j   = thisList->ptr[target_j];
+        target_j   = neighbor_i->dynamic->HBNeighbor.neighborPartner[n];
+        neighbor_j = thisList->ptr[target_j];
+        
+        if (FindStrInList(neighbor_j->property->extraProperty, "_HBRMV", 0)) {
+            printf("!!ERROR!!: the neighbor_j #%i has been removed! Something is wrong!\n", target_j);
+            printf("           %s:%i\n", __FILE__, __LINE__);
+            exit(EXIT_FAILURE);
+        }
 
         if (flag == 0) {
             neighbor_i->dynamic->HBNeighbor.partnerNum = n; //decide which host will be used to do calculation
         }
         
+        UpdateAtom(neighbor_j, currenttime);
+
         if (CheckDuplication(neighbor_i, neighbor_j, HBNe_Event)) {
             neighbor_i->dynamic->HBNeighbor.partnerNum = n;
             flag = 1;
             continue;
         }
-        
+
         TRANSFER_VECTOR(parameters.position_j, neighbor_j->dynamic->coordinate);
         TRANSFER_VECTOR(parameters.speed_j,    neighbor_j->dynamic->velocity);
         CalculateParameters(neighbor_i, neighbor_j, &parameters);
         
         //==============================
         //check which atom is HOST and which atom is NEIGHBOR
+        int hostPartner;
         if ((neighbor_i->dynamic->HB.role == 'A' ||
              neighbor_i->dynamic->HB.role == 'D' ||
              neighbor_i->dynamic->HB.role == 'S') &&
-            (neighbor_i->dynamic->HB.bondConnection && thisList->ptr[neighbor_i->dynamic->HB.bondConnection]->dynamic->HB.neighbor == target_j)) { //both could be either 'A' or 'D'
+            (hostPartner = HBNeighborHostPartner(neighbor_i, target_j)) > 0)
+        {
             virtualAtom[0] = neighbor_i; //host
             virtualAtom[1] = neighbor_j; //neighbor
-            virtualAtom[2] = thisList->ptr[neighbor_i->dynamic->HB.bondConnection];
+            virtualAtom[2] = thisList->ptr[hostPartner];
         } else {
             virtualAtom[0] = neighbor_j;
             virtualAtom[1] = neighbor_i;
-            virtualAtom[2] = thisList->ptr[neighbor_j->dynamic->HB.bondConnection];
+            if ((hostPartner = HBNeighborHostPartner(neighbor_j, target_i)) == 0)
+                hostPartner = neighbor_j->dynamic->HB.bondConnection[1];
+            virtualAtom[2] = thisList->ptr[hostPartner];
         }
         //==============================
         
-        parameters.coreorShell = FindPair(virtualAtom[1], virtualAtom[0], "neighbor",
+        parameters.coreorShell = FindPair(virtualAtom[1], virtualAtom[0], InterNeighbor,
                                           parameters.b_ij, parameters.r_2,
                                           &parameters.shortlimit2, &parameters.longlimit2,
                                           &parameters.lowerPotential, &parameters.upperPotential,
                                           &tmpDouble, virtualAtom[2], 0);
         
         if (parameters.b_ij < 0 && CalculateDisc(&parameters) > 0) {
-            
-            parameters.s_time    = -1;
-            parameters.d_ij2     = parameters.shortlimit2;
-                 event.potential = parameters.lowerPotential;
-            
-            if (parameters.coreorShell == 0) { //inner well contact
-                event.subEventType = CoreColli;
-            } else { //outer well contact
-                event.subEventType = TBDCaptr;
-            }
-            
+            parameters.s_time  = -1;
+            parameters.d_ij2   = parameters.shortlimit2;
+            event.potential    = parameters.lowerPotential;
+            event.subEventType = (parameters.coreorShell == 0) ? CoreColli : TBDCaptr;
         } else {
-            
-            parameters.s_time    = 1;
-            parameters.d_ij2     = parameters.longlimit2;
-                 event.potential = parameters.upperPotential;
-            
-            if (strncmp(Methodtype, "Ding", 1) == 0) {
-                if (parameters.coreorShell == 1) { //most outer well contact
-                    event.subEventType = WellBounc;
-                } else { //outer well contact (pull)
-                    event.subEventType = TBDEscap;
-                }
-            }
-
+            parameters.s_time  = 1;
+            parameters.d_ij2   = parameters.longlimit2;
+            event.potential    = parameters.upperPotential;
+            event.subEventType = (parameters.coreorShell == 1) ? WellBounc : TBDEscap;
         }
         
         event.time = CalculateTime(&parameters);
@@ -580,6 +491,7 @@ void HBNeighborTime(struct AtomStr *neighbor_i, struct AtomListStr *thisList) {
 
 
 void ThermostatTime(struct AtomStr *target) {
+    UpdateAtom(target, currenttime);
     double temp;
     struct InteractionEventStr event;
     
@@ -596,6 +508,7 @@ void ThermostatTime(struct AtomStr *target) {
 
 
 void PBCandCrossCellTime (struct AtomStr *target) {
+    UpdateAtom(target, currenttime);
     double position[4], speed[4];
     double boundary[2][4]; //0: lower; 1: higher
     double shortertime = INFINIT;
@@ -638,23 +551,27 @@ void WallTime(struct AtomStr *target) {
     struct ParameterStr parameters;
     struct InteractionEventStr event;
     
+    if (FindStrInList(target->property->extraProperty, "_HBRMV", 0)) {
+        return;
+    }
+    
 ReCal:
     InitializeEvent(&event);
     TRANSFER_VECTOR(boxSize, boxDimension);
     TRANSFER_VECTOR(parameters.position_i, target->dynamic->coordinate);
     TRANSFER_VECTOR(parameters.speed_i, target->dynamic->velocity);
     
-    if (strncmp(wallExist, "smooth", 2) == 0) {
+    if (strcmp(surfInfo.style, "implicit") == 0) {
         
         double distance2 = 0;
         struct AtomStr *thisWall = &wall[0];
         TRANSFER_VECTOR(parameters.position_j, thisWall->dynamic->coordinate);
         TRANSFER_VECTOR(parameters.speed_j, thisWall->dynamic->velocity);
         
-        if (strncmp(wallType, "parallel", 1) == 0) { //parallel plates of wall
+        if (strncmp(surfInfo.type, "parallel", 1) == 0) { //parallel plates of wall
             parameters.position_i[1] = parameters.position_i[3] = 0;
             parameters.speed_i[1]    = parameters.speed_i[3]    = 0;
-        } else if (strncmp(wallType, "cylinder", 1) == 0) {
+        } else if (strncmp(surfInfo.type, "cylinder", 1) == 0) {
             parameters.position_i[1] = 0;
             parameters.speed_i[1]    = 0;
         }
@@ -666,7 +583,7 @@ ReCal:
         parameters.v_2  = DOT_PROD(parameters.v_ij, parameters.v_ij);
         distance2 = boxSize[2] * boxSize[2] * 0.25 + parameters.r_2 - boxSize[2] * sqrt(parameters.r_2);
         
-        parameters.coreorShell = FindPair(target, thisWall, "collision",
+        parameters.coreorShell = FindPair(target, thisWall, InterColli,
                                           -1 * parameters.b_ij, distance2,
                                           &parameters.shortlimit2, &parameters.longlimit2,
                                           &parameters.lowerPotential, &parameters.upperPotential,
@@ -675,15 +592,15 @@ ReCal:
         if (parameters.lowerPotential == 0 &&
             parameters.upperPotential == 0) {
             
-            if (strcmp(wallDyn.mark, "no")) {
+            if (strcmp(wallDyn.mark, "no") != 0) {
                 wallDyn.touch ++;
                 
-                if (strncmp(wallType, "parallel", 1) == 0) {
+                if (strncmp(surfInfo.type, "parallel", 1) == 0) {
                     boxDimension[2] += wallDyn.step;
-                } else if (strncmp(wallType, "cylinder", 1) == 0) {
+                } else if (strncmp(surfInfo.type, "cylinder", 1) == 0) {
                     boxDimension[2] += wallDyn.step;
                     boxDimension[3] += wallDyn.step;
-                } else if (strncmp(wallType, "sphere", 1) == 0) {
+                } else if (strncmp(surfInfo.type, "sphere", 1) == 0) {
                     boxDimension[1] += wallDyn.step;
                     boxDimension[2] += wallDyn.step;
                     boxDimension[3] += wallDyn.step;
@@ -738,9 +655,14 @@ ReCal:
 
 
 void ObstTime(struct AtomStr *target) {
+    UpdateAtom(target, currenttime);
     int atomNum = target->property->num;
     struct ParameterStr parameters;
     struct InteractionEventStr event;
+    
+    if (FindStrInList(target->property->extraProperty, "_HBRMV", 0)) {
+        return;
+    }
     
     for (int n = 0; n < obstObj.num; n ++) {
         InitializeEvent(&event);
@@ -775,7 +697,7 @@ void ObstTime(struct AtomStr *target) {
             parameters.v_2  = DOT_PROD(parameters.v_ij, parameters.v_ij);
             distance2 = parameters.r_2;
             
-            parameters.coreorShell = FindPair(target, thisWall, "collision",
+            parameters.coreorShell = FindPair(target, thisWall, InterColli,
                                               parameters.b_ij, distance2,
                                               &parameters.shortlimit2, &parameters.longlimit2,
                                               &parameters.lowerPotential, &parameters.upperPotential,
@@ -830,6 +752,7 @@ void ObstTime(struct AtomStr *target) {
 
 
 void TunnelTime(struct AtomStr *target) {
+    UpdateAtom(target, currenttime);
     int atomNum = target->property->num;
     double radius2;
     double distance2 = 0;
@@ -839,7 +762,15 @@ void TunnelTime(struct AtomStr *target) {
     struct ParameterStr parameters;
     struct InteractionEventStr event;
     struct AtomStr *thisWall = &tunlObj.tunnel;
-    struct ConstraintStr *thisConstr = RightPair(target->property->typeofAtom, thisWall->property->typeofAtom, 0);
+    struct ConstraintStr *thisConstr = RightPair(  target->property->typeofAtom,
+                                                   target->property->typeofAtom[0],
+                                                 thisWall->property->typeofAtom,
+                                                 thisWall->property->typeofAtom[0],
+                                                 0);
+    
+    if (FindStrInList(target->property->extraProperty, "_HBRMV", 0)) {
+        return;
+    }
     
     distanceShift2 = thisConstr->dmin;
     extraRange = sqrt(FindPotWellWidth(thisWall, target));
@@ -871,7 +802,7 @@ void TunnelTime(struct AtomStr *target) {
         }
         distance2 = radius2 + parameters.r_2 - 2 * sqrt(parameters.r_2 * radius2);
         
-        parameters.coreorShell = FindPair(target, thisWall, "collision",
+        parameters.coreorShell = FindPair(target, thisWall, InterColli,
                                           -1 * parameters.b_ij, distance2,
                                           &parameters.shortlimit2, &parameters.longlimit2,
                                           &parameters.lowerPotential, &parameters.upperPotential,
@@ -931,6 +862,7 @@ void TunnelTime(struct AtomStr *target) {
 
 
 void ChargeTime(struct AtomStr *target) {
+    UpdateAtom(target, currenttime);
     int flag = 0;
     int gapNum;
     int totalCNum = (flow.charge.PBCMark) ? flow.charge.num : flow.charge.num / 2;
@@ -938,6 +870,10 @@ void ChargeTime(struct AtomStr *target) {
     double distance2, gap2;
     struct ParameterStr parameters;
     struct InteractionEventStr event;
+    
+    if (FindStrInList(target->property->extraProperty, "_HBRMV", 0)) {
+        return;
+    }
     
     if (!target->property->charge) {
         return;
@@ -966,12 +902,12 @@ void ChargeTime(struct AtomStr *target) {
         TRANSFER_VECTOR(parameters.speed_j, flow.charge.velocity[chargeNum]);
         
         DOT_MINUS(parameters.position_i, parameters.position_j, parameters.r_ij);
-        DOT_MINUS(parameters.speed_i, parameters.speed_j, parameters.v_ij);
+        DOT_MINUS(parameters.speed_i,    parameters.speed_j,    parameters.v_ij);
         parameters.r_2  = DOT_PROD(parameters.r_ij, parameters.r_ij);
         parameters.b_ij = DOT_PROD(parameters.r_ij, parameters.v_ij);
         parameters.v_2  = DOT_PROD(parameters.v_ij, parameters.v_ij);
         
-        gapNum = sqrt(parameters.r_2) / flow.charge.gap[chargeNum];
+        gapNum = (int)(sqrt(parameters.r_2) / flow.charge.gap[chargeNum]);
         gap2 = flow.charge.gap[chargeNum] * flow.charge.gap[chargeNum];
         distance2 = gapNum * gapNum * gap2;
         
@@ -1018,10 +954,14 @@ void ChargeTime(struct AtomStr *target) {
 
 
 void SphObstTime(struct AtomStr *target) {
+    UpdateAtom(target, currenttime);
     int atomNum = target->property->num;
-    double distance2 = 0;
     struct ParameterStr parameters;
     struct InteractionEventStr event;
+    
+    if (FindStrInList(target->property->extraProperty, "_HBRMV", 0)) {
+        return;
+    }
     
     for (int n = 0; n < SphObstObj.num; n ++) {
         InitializeEvent(&event);
@@ -1039,7 +979,6 @@ void SphObstTime(struct AtomStr *target) {
         parameters.r_2  = DOT_PROD(parameters.r_ij, parameters.r_ij);
         parameters.b_ij = DOT_PROD(parameters.r_ij, parameters.v_ij);
         parameters.v_2  = DOT_PROD(parameters.v_ij, parameters.v_ij);
-        distance2 = parameters.r_2;
         
         parameters.shortlimit2 = SphObstObj.radius[n] * SphObstObj.radius[n];
         parameters.lowerPotential = 0;
@@ -1072,6 +1011,7 @@ void SphObstTime(struct AtomStr *target) {
 
 
 void InitializeEvent(struct InteractionEventStr *event) {
+    event->flag         = 1;
     event->time         = INFINIT;
     event->potential    = 0;
     event->eventType    = Invd_Event;
@@ -1098,12 +1038,98 @@ double CalculateTime(struct ParameterStr *parameters) {
             sqrt(parameters->b_ij * parameters->b_ij - parameters->v_2 * (parameters->r_2 - parameters->d_ij2))) / parameters->v_2;
 }
 
+/*
+ Backup events (Optimization_Report.md Section 12). Besides its earliest event,
+ each atom keeps the next BACKUP_EVENTS best events of its last prediction.
+ When the earliest event expires because the partner took part in another
+ event (the atom itself is unchanged), the earliest backup whose partner is
+ also unchanged is the atom's true next event, so the full re-prediction can
+ be skipped. Events with changed partners are re-predicted from the partner's
+ side. Thermostat events are not kept: a fresh one is drawn exactly as a full
+ re-prediction would.
+ */
+#define BACKUP_EVENTS 8
+
+struct BackupListStr {
+    int num;
+    struct InteractionEventStr event[BACKUP_EVENTS];
+};
+
+static struct BackupListStr *backupEvents = NULL;
+static int backupUsable = 0;
+
+void InitBackupEvents(void) {
+    free(backupEvents);
+    backupEvents = (struct BackupListStr *)calloc(atomnum + 1, sizeof(struct BackupListStr));
+    // events of walls, obstacles, tunnels, charges and CG surfaces encode their
+    // partner after JobAssign, so backups are only used without them
+    backupUsable = !(strcmp(surfInfo.style, "implicit") == 0 || obstObj.mark || tunlObj.mark ||
+                     flow.mark == 3 || SphObstObj.mark || CG.mark);
+}
+
+void ClearBackupEvents(int atomNum) {
+    if (backupEvents) backupEvents[atomNum].num = 0;
+}
+
+// TRUE if an HB-formation event (type/sub/partner/time) must be ordered before
+// the existing event: a collision with the same partner at the same time
+static int HBFormWinsTie(enum EEventType type, enum EInteractionType sub, int partner, double time,
+                         const struct InteractionEventStr *existing) {
+    return type == HB_Event && sub == TBDHBForm &&
+           existing->eventType == Coli_Event && existing->partner == partner &&
+           fabs(existing->time - time) <= 1e-9 * (1 + time);
+}
+
+static void KeepBackup(struct AtomStr *atom_i, const struct InteractionEventStr *event) {
+    if (backupEvents == NULL || event->eventType == Ther_Event ||
+        event->eventType == Invd_Event || event->time >= INFINIT) return;
+
+    struct BackupListStr *list = &backupEvents[atom_i->property->num];
+    if (list->num == BACKUP_EVENTS && event->time >= list->event[BACKUP_EVENTS - 1].time) return;
+    if (list->num < BACKUP_EVENTS) list->num++;
+
+    int pos = list->num - 1;
+    while (pos > 0 && (list->event[pos - 1].time > event->time ||
+                       HBFormWinsTie(event->eventType, event->subEventType, event->partner, event->time, &list->event[pos - 1]))) {
+        list->event[pos] = list->event[pos - 1];
+        pos--;
+    }
+    list->event[pos] = *event;
+}
+
+int TakeBackupEvent(struct AtomStr *target, struct AtomListStr *thisList) {
+    if (!backupUsable || backupEvents == NULL) return FALSE;
+
+    struct BackupListStr *list = &backupEvents[target->property->num];
+    for (int k = 0; k < list->num; k++) {
+        struct InteractionEventStr *backup = &list->event[k];
+        if (backup->partner > 0 &&
+            thisList->ptr[backup->partner]->dynamic->event.counter != backup->partnerCounter) continue;
+
+        target->dynamic->event.partner        = backup->partner;
+        target->dynamic->event.partnerCounter = backup->partnerCounter;
+        target->dynamic->event.time           = backup->time;
+        target->dynamic->event.potential      = backup->potential;
+        target->dynamic->event.eventType      = backup->eventType;
+        target->dynamic->event.subEventType   = backup->subEventType;
+
+        list->num -= k + 1;
+        memmove(list->event, list->event + k + 1, list->num * sizeof(struct InteractionEventStr));
+
+        UpdateAtom(target, currenttime);
+        ThermostatTime(target);
+        return TRUE;
+    }
+    return FALSE;
+}
+
 int CheckDuplication(struct AtomStr *atom_i, struct AtomStr *atom_j, enum EEventType type) {
     if (   atom_j->dynamic->event.partner        == atom_i->property->num
         && atom_j->dynamic->event.eventType      == type
         && atom_j->dynamic->event.partnerCounter == atom_i->dynamic->event.counter
         && atom_i->dynamic->event.time           >  atom_j->dynamic->event.time) {
         
+        KeepBackup(atom_i, &atom_i->dynamic->event);
         atom_i->dynamic->event.partner        = atom_j->property->num;
         atom_i->dynamic->event.potential      = atom_j->dynamic->event.potential;
         atom_i->dynamic->event.subEventType   = atom_j->dynamic->event.subEventType;
@@ -1121,28 +1147,45 @@ int CheckPairMatch(struct AtomStr *atom_i, struct AtomStr *atom_j, struct AtomLi
 	if (type < 0) return -1;
 
 	//atom_i and atom_j must be their original types
-	int atom_i_type = atom_i->property->typeofAtom;
-	int atom_j_type = atom_j->property->typeofAtom;
+	int atom_i_type = atom_i->property->typeofAtom[1];
+	int atom_j_type = atom_j->property->typeofAtom[1];
 	if (potentialPairHB[type][atom_i_type][atom_j_type].step == NULL) {
 		return -1;
 	}
 
-	int neighbor_i_type = AtomTypeChange(thisList->ptr[atom_i->dynamic->HB.neighbor]->property->typeofAtom, 0);
-	int neighbor_j_type = AtomTypeChange(thisList->ptr[atom_j->dynamic->HB.neighbor]->property->typeofAtom, 0);
-	if (potentialPairHB[type][atom_i_type][neighbor_j_type].step == NULL ||
-		potentialPairHB[type][atom_j_type][neighbor_i_type].step == NULL) {
-		return -1;
-	}
-	
-	return 0;
+    int neighbor_i_type, neighbor_j_type, count = 0;
+    for (int i = 1; i <= atom_i->dynamic->HB.neighbor[0]; i ++) {
+        neighbor_i_type = thisList->ptr[atom_i->dynamic->HB.neighbor[i]]->property->typeofAtom[1];
+        for (int j = 1; j <= atom_j->dynamic->HB.neighbor[0]; j ++) {
+            neighbor_j_type = thisList->ptr[atom_j->dynamic->HB.neighbor[j]]->property->typeofAtom[1];
+            if (potentialPairHB[type][atom_i_type][neighbor_j_type].step != NULL &&
+                potentialPairHB[type][atom_j_type][neighbor_i_type].step != NULL) {
+                count ++;
+            }
+        }
+    }
+    if (count == 0)
+        return -1;
+
+	return count;
 }
 
 int JobAssign(struct AtomStr *atom_i, struct AtomStr *atom_j, struct InteractionEventStr *event, enum EEventType type) {
+    if (event->time <= 0) return FALSE;
+    double abs_time = event->time;
+    if (abs_time != INFINIT) {
+        abs_time += currenttime;
+    }
     
-    if (event->time > 0 && atom_i->dynamic->event.time > event->time) {
+    // HB formation and the same pair's nonbonded step at the HB boundary are one
+    // physical event: the formation is attempted first, and a failed attempt is
+    // processed as the collision (FailedHBToCollision)
+    if (atom_i->dynamic->event.time > abs_time ||
+        (atom_j && HBFormWinsTie(type, event->subEventType, atom_j->property->num, abs_time, &atom_i->dynamic->event))) {
+        KeepBackup(atom_i, &atom_i->dynamic->event);
         atom_i->dynamic->event.potential    = event->potential;
         atom_i->dynamic->event.subEventType = event->subEventType;
-        atom_i->dynamic->event.time         = event->time;
+        atom_i->dynamic->event.time         = abs_time;
         atom_i->dynamic->event.eventType    = type;
         
         if (atom_j) {
@@ -1154,6 +1197,13 @@ int JobAssign(struct AtomStr *atom_i, struct AtomStr *atom_j, struct Interaction
         
         return TRUE;
     }
+
+    struct InteractionEventStr offered = *event;
+    offered.time           = abs_time;
+    offered.eventType      = type;
+    offered.partner        = atom_j ? atom_j->property->num : INVALID;
+    offered.partnerCounter = atom_j ? atom_j->dynamic->event.counter : 0;
+    KeepBackup(atom_i, &offered);
     return FALSE;
 }
 

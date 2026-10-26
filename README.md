@@ -1,342 +1,274 @@
 <img src="img/Icon.jpg" alt="sDMD Icon" height="200" align="right"/>
 
-**sDMD** - *Version 0.95*
-=====================================
+**sDMD** - *Version 0.99*
+===================
 
 # Discontinuous Molecular Dynamics (DMD) Simulation Package
 
 **Reference & Citing**
 
 If you use this code in your academic work, please cite:
-- Zheng, S.; Javidpour, L.; Sahimi, M.; Shing, K. S.; Nakano, A.  
-  "sDMD: An open source program for discontinuous molecular dynamics simulation of protein folding and aggregation"  
-  *Comput. Phys. Commun.* 2020, 247, 106873-106886.
-  
-- Zheng, S.; Sajib, M. S. J.; Wei, Y.; Wei, T.  
-  "Discontinuous Molecular Dynamics Simulations of Biomolecule Interfacial Behavior: Study of Ovispirin-1 Adsorption on a Graphene Surface"  
+
+- Zheng, S.; Javidpour, L.; Sahimi, M.; Shing, K. S.; Nakano, A."sDMD: An open source program for discontinuous molecular dynamics simulation of protein folding and aggregation"*Comput. Phys. Commun.* 2020, 247, 106873-106886.
+- Zheng, S.; Sajib, M. S. J.; Wei, Y.; Wei, T.
+  "Discontinuous Molecular Dynamics Simulations of Biomolecule Interfacial Behavior: Study of Ovispirin-1 Adsorption on a Graphene Surface"
   *J. Chem. Theory Comput.* 2021, 17 (3), 1874-1882.
-<br>
 
 **Table of Contents**
-=====================
+=================
 
 + [Introduction](#introduction)
-
++ [What Is New in This Version](#what-is-new-in-this-version)
 + [Units](#units)
-
 + [Models and Interactions](#models-and-interactions)
 
   + [Models](#models)
 
     + [Intermediate-resolution Coarse Grained Model](#intermediate-resolution-coarse-grained-model)
-
     + [High-resolution All-atom Model](#high-resolution-all-atom-model)
-
   + [Interactions](#interactions)
 
     + [Algorithms](#algorithms)
-
     + [Energy Minimization](#energy-minimization)
-
     + [Confined Walls](#confined-walls)
-
     + [Replica Exchange Molecular Dynamics Simulation (REMD)](#replica-exchange-molecular-dynamics-simulation-remd)
-
 + [Program Structure](#program-structure)
 
+  + [Data Structures](#data-structures)
+  + [The Event Loop](#the-event-loop)
+  + [How the Program Stays Fast](#how-the-program-stays-fast)
 + [Program Usage](#program-usage)
 
   + [Installation](#installation)
-
-  + [Run Parameters](#run-parameters)
+  + [Parameters](#parameters)
 
     + [Non-REMD simulation](#non-remd-simulation)
-
     + [REMD Simulation](#remd-simulation)
-
     + [Analysis](#analysis)
-
 + [Format](#format)
 
   + [Coordinate File](#coordinate-file)
 
     + [GRO File](#gro-file)
-
     + [PDB File](#pdb-file)
+  + [Force Field Files](#force-field-files)
 
-  + [Force Field File](#force-field-file)
-
-    + [Parameters of amino acid](#parameters-of-amino-acid)
-
-    + [Potential Table](#potential-table)
-
+    + [FF_Info.txt](#ff_infotxt)
+    + [Residue Files](#residue-files)
+    + [Potential Tables](#potential-tables)
+  + [Output Files](#output-files)
 + [Functions](#functions)
 
   + [Simulation Source Code](#simulation-source-code)
+  + [Analysis Source Code](#analysis-source-code)
 
-  + [DMD.c](#dmd.c)
 
-  + [DataSave.c](#datasave.c)
-
-  + [Event.c](#event.c)
-
-  + [Initialization.c](#initialization.c)
-
-  + [List.c](#list.c)
-
-  + [Models.c](#models.c)
-
-  + [REMD.c](#remd.c)
-
-  + [SGThread.c](#sgthread.c)
-
-  + [ThreadProcess.c](#threadprocess.c)
-
-  + [TimePrediction.c](#timeprediction.c)
-
-  + [ToolFunctions.c](#toolfunctions.c)
-
-  + [sREMD.c](#sremd.c)
-
-  + [sServer.c](#sserver.c)
-
-+ [Analysis Source Code](#analysis-source-code)
-
-  + [Analysis.c](#analysis.c)
-
-  + [FileManage.c](#filemanage.c)
-
-  + [SystemInformation.c](#systeminformation.c)
-
-  + [Cluster.c](#cluster.c)
-
-  + [Energy.c](#energy.c)
-
-  + [HBRamach.c](#hbramach.c)
-
-  + [PBCAdjust.c](#pbcadjust.c)
-
-  + [REMD.c](#remd.c-1)
-
-  + [Tools.c](#tools.c)
-
-<br><br><br>
-<br><br><br>
 
 **Introduction**
-================
+============
 
-Discrete molecular dynamics (DMD) is an extremely fast alternative to the traditional molecular dynamics. It was first introduced in 1959 by Alder and Wainwright<sup id="c11">[1](#c11)</sup> for simulations of hard spheres. Later it was used by Rapaport<sup id="c12">[2-4](#c12)</sup> for simulation of polymer chains. Nowadays it was adopted for simulations of protein-like polymers. It is extremely fast and suitable for the simulations of large systems on long time scales.
+Discrete molecular dynamics (DMD) is a very fast alternative to traditional molecular dynamics. It was first introduced in 1959 by Alder and Wainwright<sup id="c11"></sup> to simulate hard spheres. Rapaport<sup id="c12"></sup> later used it to simulate polymer chains, and today it is widely used for proteins and other polymers. Because it is so fast, it suits large systems and long time scales.
 
-During DMD simulation, potentials applied on particles are approximated by discontinuous step-functions of inter-particle distance *r* (see Figure *1-1*). Thus no forces will be exerted on particles until their distance becomes equal to the point of a discontinuity on the potential. When particle encounters a potential discontinuity, we call it have an "event". Between events, particles move at constant velocities. Because the energy change during each event is known, the post-event velocities can be calculated by solving the conservation of momentum and the conservation of energy simultaneously. Thus, the trajectory of a particle can be simulated discontinuously between events. The simulation code for DMD is significantly different from that for the traditional molecular dynamics due to the discontinuous movement of particles from one event to the next at known velocities, and the algorithm could become much more complex due to the event linking, time scheduling and especially the explicit hydrogen bonding mechanism.
+In DMD, the force between two particles is replaced by a *step function* of their distance *r* (see Figure *1-1*). The potential energy is flat between steps, so no force acts on a particle until two particles reach the distance of a step. When that happens we call it an *event*. Between events, every particle moves in a straight line at constant velocity. At an event, we know exactly how much the potential energy changes, so the new velocities follow directly from conservation of momentum and energy. The simulation therefore jumps from one event to the next instead of taking many small time steps. This makes the code quite different from traditional molecular dynamics: most of the work goes into predicting, ordering and checking events, and into the explicit hydrogen-bond mechanism.
 
-<br><br>
-<img src="img/CGPotential.jpg" alt="CGPotential" height="400"/>
 
-*Figure 1-1 DMD potential (a) hard sphere collision (b) attractive square well interaction (c) repulsive soft sphere interaction (d) covalent bond and auxiliary bond interaction*
-<br><br>
 
-Here we proudly introduce *sDMD*, a simulation package based on the DMD technique with a high-resolution all-atom molecular model. The package is written by *C* language from scratch and has been highly optimized. Its modularized structure has it highly expandable: new molecular groups can be introduced by simply adding new formatted connection and potential data files, and no modification on the code would be necessary. The package, including the simulation executable and analysis executable, is also very easy to use: the configurations are controlled by an easy-to-read configuration file and several command flags.
+*Figure 1-1 DMD potentials: (a) hard-sphere collision, (b) attractive square well, (c) repulsive soft sphere, (d) covalent bond and auxiliary bond.*
 
-Currently the package is capable to run simulations under various situations as follows,
+*sDMD* is a simulation package based on DMD, with a high-resolution all-atom molecular model. It is written in C from scratch and has been heavily optimized. New molecules can be added by writing new parameter and potential files; the code itself does not need to change. Both the simulation program and the analysis program are controlled by one easy-to-read configuration file and a few command-line flags.
 
--   NVT and NVE ensembles
+The package can simulate:
 
--   systems in bulk
+- NVT (constant temperature) and NVE (constant energy) ensembles
+- systems in bulk
+- systems in confined spaces such as parallel plates, cylindrical tubes and spherical cavities
+- walls that expand, compress or pulse during the simulation
+- molecules flowing through a tube between two reservoirs
+- replica exchange molecular dynamics (REMD)
 
--   system in confined environments such as parallel pores, cylindrical tubes and spherical cavities
+The analysis program can:
 
--   replica exchange molecular dynamics simulation (REMD)
+- remove periodic boundary conditions from a trajectory
+- count the different types of hydrogen bonds
+- compute Ramachandran plots
+- compute contact maps between pairs of atoms and pairs of amino acids
+- compute the temperature, kinetic energy and potential energy
+- compute the radius of gyration and the RMSD to a reference structure
+- compute density profiles and pore-size distributions
+- count clusters during aggregation
+- analyze REMD data with the weighted histogram analysis method (WHAM)
 
--   dynamic confined systems as the confined walls expand, compress and pulse.
+This manual explains the theory behind DMD, the molecular models and the interaction algorithms. It also describes how the program is organized, what each source file does, and how to install and use the package.
 
--   molecule flow through a tube between two reservoirs
 
-and the analysis executable can be used to analyze the following,
-
--   remove periodic boundary conditions of trajectory
-
--   compute the number of different types of hydrogen bonds
-
--   compute Ramachandran plot
-
--   compute the contact maps between pairs of atoms and pairs of amino acids
-
--   compute system temperature, kinetic energy and potential energy
-
--   compute number of clusters during aggregation
-
--   analyze data from T-REMD by weighted histogram analysis method (WHAM)
-
-This manual will describe the theories behind the DMD simulation, as well as the models of molecules and the algorithms of interactions. It will also describe the function of each file in the source code and demonstrate the ways to install and use the package.
-
-<br><br>
 *Reference*
 
-<b id="c11">[1]</b> Alder, B. J.; Wainwright, T. E., Studies in Molecular Dynamics. I.General Method. *The Journal of Chemical Physics* **1959,** *31* (2), 459-466.[↩](#c11)
+<b id="c11">[1]</b> Alder, B. J.; Wainwright, T. E., Studies in Molecular Dynamics. I. General Method. *The Journal of Chemical Physics* **1959,** *31* (2), 459-466.[↩](#c11)
 
 <b id="c12">[2]</b> Rapaport, D. C., Molecular dynamics simulation of polymer chains with excluded volume. *Journal of Physics A: Mathematical and General* **1978,** *11* (8), L213.[↩](#c12)
 
 <b id="c12">[3]</b> Rapaport, D. C., Molecular dynamics study of a polymer chain in solution. *The Journal of Chemical Physics* **1979,** *71* (8), 3299-3303.[↩](#c12)
 
 <b id="c12">[4]</b> Rapaport, D., The event scheduling problem in molecular dynamic simulation. *Journal of Computational Physics* **1980,** *34* (2), 184-201.[↩](#c12)
-<br><br><br>
-<br><br><br>
 
+
+**What Is New in This Version**
+===========================
+
+This version is a heavily optimized release of sDMD. The main changes are as follows:
+
+- **Much faster on large systems.** The program no longer moves every atom after every event. It only moves the atoms that take part in an event, and the event calendar stores absolute times, so nothing has to be updated for all atoms at each step. On a 7,400-atom system an event costs about 7.8 µs, compared with 36 µs before (about 4.6× faster). Very small systems, such as a single 10-residue peptide, gain little, because there almost every atom is a neighbour of every other atom.
+- **Adjustable neighbour cells.** The box can be cut into smaller cells (`-cell 1`, `2` or `3`). The program picks a size by itself. Smaller cells help dense systems such as proteins in explicit water (about 1.4× faster), not proteins in vacuum.
+- **Backup events.** Each atom remembers a few alternative future events. When its next event is cancelled, the program can often use a backup instead of searching the neighbourhood again (about 1.1–1.2× faster).
+- **Updated force field.** The backbone–backbone hydrogen-bond strength is scaled by 0.806, as in the original authors' parameter files. Each class of hydrogen bond can now have its own scale factor.
+- **Choice of parameter folder.** The new `FF_Library` option in *parameter.txt* selects which library folder to read.
+- **Safer data files.** The binary files *SysInfo.dat* and *savedData.dat* now start with a format version, so newer programs can still read older files. The analysis program was brought up to date with all simulation output.
+- **Reproducible runs.** `-seed N` fixes the random number seed.
 
 
 
 **Units**
-=========
+=====
 
 *Table 2-1 Basic units*
 
-**Quantity** | **Symbol** | **Unit**
------------- | ---------- | --------
-length       | L          | Å = 10<sup>-10</sup> m
-mass         | m          | u (atomic mass unit) <br/>= 1.6605402(10) x 10<sup>-27</sup> kg <br/>(1/12 the mass of a <sup>12</sup>C atom)
-energy       | E          | kcal mol<sup>-1</sup> <br/>= 4.184 kJ mol<sup>-1</sup> <br/>= 4184 m<sup>2</sup> kg s<sup>-1</sup> mol<sup>-1</sup>
-<br>
-
+| **Quantity** | **Symbol** | **Unit**                                                                                      |
+| ------------------ | ---------------- | --------------------------------------------------------------------------------------------------- |
+| length             | L                | Å = 10<sup>-10</sup> m                                                                             |
+| mass               | m                | u (atomic mass unit) = 1.6605402(10) x 10<sup>-27</sup> kg (1/12 the mass of a <sup>12</sup>C atom) |
+| energy             | E                | kcal mol<sup>-1</sup> = 4.184 kJ mol<sup>-1</sup>                                                   |
+|                    |                  |                                                                                                     |
 
 *Table 2-2 Derived units*
 
-**Quantity** | **Symbol** | **Unit**
------------- | ---------- | --------
-time         | T          | 50 fs = 50 x 10<sup>-15</sup> s
-velocity     | V          | Å (50 fs)<sup>-1</sup> = 2 x 10<sup>3</sup> m s<sup>-1</sup>
-temperature  | T          | 503 K
-force        | F          | u Å (50 fs)<sup>-2</sup> = 66.4 pN
-<br>
+| **Quantity** | **Symbol** | **Unit**                                                                  |
+| ------------------ | ---------------- | ------------------------------------------------------------------------------- |
+| time               | t                | about 48.88 fs = 48.88 x 10<sup>-15</sup> s                                     |
+| velocity           | v                | Å (48.88 fs)<sup>-1</sup> ≈ 2.05 x 10<sup>3</sup> m s<sup>-1</sup>            |
+| temperature        | T                | (1 kcal mol<sup>-1</sup>) / *k<sub>B</sub>* ≈ 503.2 K                        |
+| force              | F                | kcal mol<sup>-1</sup> Å<sup>-1</sup> = u Å (48.88 fs)<sup>-2</sup> ≈ 69.5 pN |
+|                    |                  |                                                                                 |
+
+The temperature in *parameter.txt* is a *reduced* temperature, *T\** = *k<sub>B</sub>T* / (1 kcal mol<sup>-1</sup>). For example, *T\** = 0.6 is about 300 K.
 
 *Table 2-3 Constants*
 
-**Symbol** | **Name** | **Unit**
----------- | -------- | --------
-*N<sub>A</sub>* | Avogadro's number    | 6.0221367(36) x 10<sup>23</sup> mol<sup>-1</sup>
-*k<sub>B</sub>* | Boltzmann's constant | 1.987204118 x 10<sup>-3</sup> kcal mol<sup>-1</sup> K<sup>-1</sup>
-<br>
-<br><br><br>
-<br><br><br>
-
-
-
+| **Symbol**  | **Name**       | **Unit**                                                     |
+| ----------------- | -------------------- | ------------------------------------------------------------------ |
+| *N<sub>A</sub>* | Avogadro's number    | 6.0221367(36) x 10<sup>23</sup> mol<sup>-1</sup>                   |
+| *k<sub>B</sub>* | Boltzmann's constant | 1.987204118 x 10<sup>-3</sup> kcal mol<sup>-1</sup> K<sup>-1</sup> |
+|                   |                      |                                                                    |
+|                   |                      |                                                                    |
+|                   |                      |                                                                    |
 
 **Models and Interactions**
-===========================
+=======================
 
-This section will describe the molecular models and interaction algorithms that used in sDMD.
-<br><br>
+This section describes the molecular models and the interaction algorithms used in sDMD.
 
 **Models**
-----------
+------
 
-Different protein models can be used in sDMD ranging from high-resolution all-atom model to low-resolution coarse-grained model. The latest version of library only uses the high-resolution all-atom model. The early version uses coarse grained model. Both models share a lot of characteristics. Users can add customized molecular models into the library as desired. Just need to follow the required format of the model file and there is no need to modify the source code.
+sDMD can use protein models from low-resolution coarse-grained models to the high-resolution all-atom model. The current library uses the all-atom model; earlier versions used a coarse-grained model. The two share many ideas. Users can add their own molecules to the library by following the file format in [Format](#format); the source code does not need to change.
 
-Here will give a description of the models starting from the low-resolution and then upgrade to the high-resolution.
-<br><br>
+We first describe the low-resolution model and then the high-resolution model.
 
 ### **Intermediate-resolution Coarse Grained Model**
 
-In the early version, sDMD uses an intermediate-resolution coarse grained model, named PRIME, developed by Smith and Hall<sup id="c31">[1-4](#c31)</sup>. It correctly reproduces the backbone geometry and has been highly successful in reproducing several important and experimentally determined features of proteins under bulk conditions. In PRIME, every amino acid is represented by four beads: N, C<sub>α</sub>, C, and R (see *Figure 3-1*). The N bead represents the amide nitrogen and its hydrogen; the C<sub>α</sub> bead represents the α-carbon and its hydrogen; the C bead represents the carbonyl carbon and oxygen; the R bead represent the side chain, all of which are assumed to have the same diameter of CH<sub>3</sub> (alanine). The inter-peptide bond is assumed to be in the *trans* configurations, all the backbone bonds' lengths and bond angles are fixed at their experimentally measure values, and the distance between the consecutive C<sub>α</sub> beads is also fixed according to the experimental data. *Table 3-1* presents all the relevant parameters of the model. Solvent molecules are NOT explicitly included in the model. The effect of solvent is factored into the energy function as a potential of mean force.
+Earlier versions of sDMD used an intermediate-resolution coarse-grained model called PRIME, developed by Smith and Hall<sup id="c31"></sup>. It reproduces the backbone geometry correctly and has been very successful in reproducing several experimentally measured features of proteins in bulk. In PRIME, every amino acid is represented by four beads: N, C<sub>α</sub>, C, and R (see *Figure 3-1*). The N bead represents the amide nitrogen and its hydrogen; the C<sub>α</sub> bead the α-carbon and its hydrogen; the C bead the carbonyl carbon and oxygen; and the R bead the side chain, which is given the diameter of CH<sub>3</sub> (alanine). The peptide bond is kept in the *trans* configuration. All backbone bond lengths and bond angles, and the distance between consecutive C<sub>α</sub> beads, are fixed at their experimental values. *Table 3-1* lists the parameters. Water is NOT included explicitly; its effect is built into the energy function as a potential of mean force.
 
 <img src="img/CGModel.png" alt="CGModel" height="200"/>
 
-*Figure 3-1 The four-bead model of the protein backbone. Bold lines show covalent bond, dashed lies show auxiliary bonds which helps maintain correct backbone geometry, and thick broken lines show possible hydrogen bonds.<sup id="c35">[5](#c35)</sup>*
-<br><br>
-
+*Figure 3-1 The four-bead model of the protein backbone. Bold lines show covalent bonds, dashed lines show auxiliary bonds that help keep the backbone geometry, and thick broken lines show possible hydrogen bonds.<sup id="c35"></sup>*
 
 *Table 3-1 Parameter values for the proteins used in the DMD simulations*
 
-**Beads** | **Diameter (Å)**
---------- | ----------------
-N         | 3.300
-C<sub>α</sub> | 3.700
-C         | 4.000
-R         | 4.408
-<br>
-                     
-**Bonds** | **Length (Å)**
---------- | --------------
-N<sub>i</sub>-C<sub>α,i</sub>   | 1.460
-C<sub>α,i</sub>-N<sub>i+1</sub> | 1.510
-C<sub>i</sub>-N<sub>i+1</sub>   | 1.330
-C<sub>α,i</sub>-R<sub>i</sub>   | 1.531
-<br>
-                          
-**Auxiliary Bonds** | **Length (Å)**
-------------------- | --------------
-N<sub>i</sub>-C<sub>i</sub>         | 2.450
-C<sub>α,i</sub>-N<sub>i+1</sub>     | 2.410
-C<sub>i</sub>-C<sub>α,i+1</sub>     | 2.450
-C<sub>α,i</sub>-C<sub>α,i+1</sub>   | 3.800
-N<sub>i</sub>-R<sub>i</sub>         | 2.440
-C<sub>i</sub>-R<sub>i</sub>         | 2.490
-<br>
-                          
-**Bond Angles** | **Angle (deg)**
---------------- | ---------------
-∠N<sub>i</sub>-C<sub>α,i</sub>-C<sub>i</sub>     | 111.0
-∠C<sub>α,i</sub>-C<sub>i</sub>-N<sub>i+1</sub>   | 116.0
-∠C<sub>i</sub>-N<sub>i+1</sub>-C<sub>α,i+1</sub> | 122.0
-∠R<sub>i</sub>-C<sub>α,i</sub>-C<sub>i</sub>     | 109.6
-∠R<sub>i</sub>-C<sub>α,i</sub>-N<sub>i</sub>     | 110.1
-<br>
+| **Beads** | **Diameter (Å)** |
+| --------------- | ----------------------- |
+| N               | 3.300                   |
+| C<sub>α</sub>  | 3.700                   |
+| C               | 4.000                   |
+| R               | 4.408                   |
+|                 |                         |
 
-Beads in the protein are subject to five different types of forces during events: (1) infinite repulsion due to excluded volume effect (hard-sphere collision), (2) infinite attraction between the beads connected with covalent bonds and auxiliary bonds, (3) attraction between pairs of backbone beads during hydrogen bond formation, (4) attraction between hydrophobic side chains, and (5) repulsion between the neighboring beads in hydrogen bond (soft-sphere collision). All these forces can be represented by the following step-functions,
+| **Bonds**                  | **Length (Å)** |
+| -------------------------------- | --------------------- |
+| N<sub>i</sub>-C<sub>α,i</sub>   | 1.460                 |
+| C<sub>α,i</sub>-N<sub>i+1</sub> | 1.510                 |
+| C<sub>i</sub>-N<sub>i+1</sub>    | 1.330                 |
+| C<sub>α,i</sub>-R<sub>i</sub>   | 1.531                 |
+|                                  |                       |
+
+| **Auxiliary Bonds**           | **Length (Å)** |
+| ----------------------------------- | --------------------- |
+| N<sub>i</sub>-C<sub>i</sub>         | 2.450                 |
+| C<sub>α,i</sub>-N<sub>i+1</sub>    | 2.410                 |
+| C<sub>i</sub>-C<sub>α,i+1</sub>    | 2.450                 |
+| C<sub>α,i</sub>-C<sub>α,i+1</sub> | 3.800                 |
+| N<sub>i</sub>-R<sub>i</sub>         | 2.440                 |
+| C<sub>i</sub>-R<sub>i</sub>         | 2.490                 |
+|                                     |                       |
+
+| **Bond Angles**                              | **Angle (deg)** |
+| -------------------------------------------------- | --------------------- |
+| ∠N<sub>i</sub>-C<sub>α,i</sub>-C<sub>i</sub>     | 111.0                 |
+| ∠C<sub>α,i</sub>-C<sub>i</sub>-N<sub>i+1</sub>   | 116.0                 |
+| ∠C<sub>i</sub>-N<sub>i+1</sub>-C<sub>α,i+1</sub> | 122.0                 |
+| ∠R<sub>i</sub>-C<sub>α,i</sub>-C<sub>i</sub>     | 109.6                 |
+| ∠R<sub>i</sub>-C<sub>α,i</sub>-N<sub>i</sub>     | 110.1                 |
+|                                                    |                       |
+
+Beads feel five kinds of forces at events: (1) infinite repulsion when two beads touch (hard-sphere collision), (2) infinite attraction that keeps beads joined by covalent and auxiliary bonds within a range, (3) attraction between backbone beads when a hydrogen bond forms, (4) attraction between hydrophobic side chains, and (5) repulsion between beads next to a hydrogen bond (soft-sphere collision). All of them can be written as step functions:
 
 <img src="img/eqn31.png" alt="eqn31" height="75"/>
 
-This is for a hard-sphere potential. *r* is the distance between beads *i* and *j*; *sigma<sub>ij</sub>* is the sum of bead radii.
+This is the hard-sphere potential. *r* is the distance between beads *i* and *j*; *sigma<sub>ij</sub>* is the sum of the bead radii.
 
 <img src="img/eqn32.png" alt="eqn32" height="85"/>
 
-This is for a square-well or shoulder potential depending on the sign of *epsilon* (positive for well depth, attractive; negative for shoulder height, repulsive). *lammda_sigma<sub>ij</sub>* is the well/shoulder width.
+This is a square well or a shoulder, depending on the sign of *epsilon* (positive: a well, attractive; negative: a shoulder, repulsive). *lambda sigma<sub>ij</sub>* is the width of the well or shoulder.
 
 <img src="img/eqn33.png" alt="eqn33" height="95"/>
 
-This is for a bond interaction. *l* is the bond length and *delta* is the bond vibration tolerance.
+This is a bond. *l* is the bond length and *delta* is how much the bond may stretch or shrink.
 
-Note that, as explained in the work by Takada et al,<sup id="c36">[6](#c36)</sup> interaction involving a pair of beads that are very close on the chain are more faithfully represented by an interaction between the atoms themselves, not the united atoms or the coarse grained beads. In other words, for example, neighboring carbonyl carbon atoms experience interactions based on the diameter of a carbon atom, not on the diameter of the C bead. Consequently, for interaction between pairs of beads that separated by three or fewer bonds, the beads are allowed to overlap in their simulations by up to 25% of their diameters; for those separated by four bonds, they are allowed to overlap up to 15%.
+As Takada et al.<sup id="c36"></sup> pointed out, two beads that are very close along the chain interact more like the real atoms than like the large beads. For example, neighbouring carbonyl carbons should use the diameter of a carbon atom, not of the whole C bead. So beads separated by three or fewer bonds may overlap by up to 25% of their diameters, and beads separated by four bonds by up to 15%.
 
-Backbone beads as well as C<sub>α</sub> and R beads are connected by covalent bonds. Bonds are allowed to move freely over a small range between *l(1 - delta)* and *l(1 + delta)*. The choice of *delta* defines the acceptable range of bond vibration. In the simulation, *delta* is chosen to be 0.02375. Auxiliary bonds are used between next-neighboring beads along the backbone of the chain to hold backbone angles fixed. For example, an auxiliary is placed between N<sub>i</sub> and C<sub>i</sub> in *Figure (3-1)* to force N<sub>i</sub>-C<sub>α,i</sub>-C<sub>i</sub> angle to be near its ideal value. Auxiliary bonds are also included between neighboring pairs of C<sub>α</sub> beads to maintain their distances near the experimentally determined value. The combination of C<sub>α,i</sub>-N<sub>i+1</sub>, C<sub>i</sub>-C<sub>α,i+1</sub>, and C<sub>α,i</sub>-C<sub>α,i+1</sub> auxiliary bonds and the C<sub>α,i</sub>-C<sub>i</sub>, C<sub>i</sub>-N<sub>i+1</sub>, and N<sub>i+1</sub>-C<sub>α,i+1</sub> covalent bonds holds the inter-peptide group (C<sub>α,i</sub>-C<sub>i</sub>-N<sub>i+1</sub>-C<sub>α,i+1</sub>) in the *trans* configuration. Auxiliary bonds are also placed between side-chains and N and C beads on backbone. This is to hold the side-chain beads fixed relative to the backbone so that all model residues are *L*-isomers.
+Backbone beads, and C<sub>α</sub> and R beads, are joined by covalent bonds. A bond may move freely between *l(1 - delta)* and *l(1 + delta)*; here *delta* = 0.02375. Auxiliary bonds between next-nearest beads along the backbone hold the bond angles. For example, an auxiliary bond between N<sub>i</sub> and C<sub>i</sub> in *Figure 3-1* keeps the N<sub>i</sub>-C<sub>α,i</sub>-C<sub>i</sub> angle near its ideal value. Auxiliary bonds between neighbouring C<sub>α</sub> beads keep their distance near the experimental value. Together, the C<sub>α,i</sub>-N<sub>i+1</sub>, C<sub>i</sub>-C<sub>α,i+1</sub> and C<sub>α,i</sub>-C<sub>α,i+1</sub> auxiliary bonds and the C<sub>α,i</sub>-C<sub>i</sub>, C<sub>i</sub>-N<sub>i+1</sub> and N<sub>i+1</sub>-C<sub>α,i+1</sub> covalent bonds keep the peptide group (C<sub>α,i</sub>-C<sub>i</sub>-N<sub>i+1</sub>-C<sub>α,i+1</sub>) in the *trans* configuration. Auxiliary bonds between the side chain and the N and C beads fix the side chain relative to the backbone, so every residue is an *L*-isomer.
 
-Hydrogen bond (HB) can be formed between N and C beads on backbones. Four criteria have to be met (see *Figure 3-2*): (1) the distance between N<sub>i</sub> and C<sub>j</sub> beads is 4.2 Å; (2) the neighboring beads, C<sub>i-1</sub> and C<sub>α,i</sub>, C<sub>α,j</sub> and N<sub>j+1</sub>, are at the appropriate positions; (3) neither N nor C bead is already involved in a hydrogen bond; (4) N and C beads are separated by at least three intervening residues or they are in the different peptides. To ensure that criteria (2) is satisfied, we require that the four atom pairs N<sub>i</sub>-C<sub>α,j</sub>, N<sub>i</sub>-N<sub>j+1</sub>, C<sub>j</sub>-C<sub>α,i</sub>, and C<sub>j</sub>-C<sub>i-1</sub> shown in *Figure (3-2)* be separated by a distance greater than *d<sub>ij</sub>*, which is chosen to maintain the hydrogen bond orientations. Their values are given in *Table 3-2*.
+A hydrogen bond (HB) can form between an N bead and a C bead on the backbone when four conditions are met (see *Figure 3-2*): (1) N<sub>i</sub> and C<sub>j</sub> are 4.2 Å apart; (2) their neighbours, C<sub>i-1</sub> and C<sub>α,i</sub>, C<sub>α,j</sub> and N<sub>j+1</sub>, are in suitable positions; (3) neither N nor C already has a hydrogen bond; (4) N and C are at least three residues apart or on different peptides. For condition (2), the four pairs N<sub>i</sub>-C<sub>α,j</sub>, N<sub>i</sub>-N<sub>j+1</sub>, C<sub>j</sub>-C<sub>α,i</sub> and C<sub>j</sub>-C<sub>i-1</sub> must be farther apart than the distances *d<sub>ij</sub>* in *Table 3-2*. This keeps the hydrogen bond correctly oriented.
 
 <img src="img/CGHB.png" alt="CGHB" height="350"/>
 
-*Figure 3-2 Hydrogen bond structure of coarse grained model. Thick dashed lines indicate hydrogen bond; thin dashed lines indicate auxiliary bonds helping to maintain hydrogen bond orientation, and bold lines show the covalent bonds of the backbone.*
-<br><br>
+*Figure 3-2 Hydrogen bond in the coarse-grained model. The thick dashed line is the hydrogen bond; thin dashed lines are auxiliary bonds that keep its orientation; bold lines are backbone covalent bonds.*
 
 *Table 3-2 Parameter values for hydrogen bond*
 
-**Pairs** | ***d<sub>ij</sub>(Å)***
---------- | -------------
-N<sub>i</sub>-C<sub>α,j</sub> | 5.00
-N<sub>i</sub>-N<sub>j+1</sub> | 4.74
-C<sub>j</sub>-C<sub>α,i</sub> | 4.86
-C<sub>j</sub>-C<sub>i-1</sub> | 4.83
-<br>
+| **Pairs**                | ***d<sub>ij</sub>(Å)*** |
+| ------------------------------ | -------------------------------- |
+| N<sub>i</sub>-C<sub>α,j</sub> | 5.00                             |
+| N<sub>i</sub>-N<sub>j+1</sub>  | 4.74                             |
+| C<sub>j</sub>-C<sub>α,i</sub> | 4.86                             |
+| C<sub>j</sub>-C<sub>i-1</sub>  | 4.83                             |
+|                                |                                  |
 
-When two beads N<sub>i</sub> and C<sub>j</sub> approach each other at the distance *d<sub>ij</sub>* = 4.2 Å, we will evaluate the total potential energy change by checking the four auxiliary interactions. The potential energy change can be -*epsilon<sub>HB</sub>*, *0*, *epsilon<sub>HB</sub>*, 2*epsilon<sub>HB</sub>* and 3*epsilon<sub>HB</sub>*, depending on the orientation of the N<sub>i</sub>, C<sub>j</sub>, and their neighbors. If the kinetic energy is enough to overcome the total potential energy change, the forward reaction will happen. N<sub>i</sub> and C<sub>j</sub> beads will change their type into N<sub>i</sub>' and C<sub>j</sub>', respectively, and interact with each other according to the parameters related to their new types (the other interactions with N<sub>i</sub> and C<sub>j</sub> will not be affected). Otherwise, the two atoms N<sub>i</sub> and C<sub>j</sub> do not change their types and undergo a regular hard-sphere collision.
+When N<sub>i</sub> and C<sub>j</sub> come to 4.2 Å, the program checks the four auxiliary pairs and adds up the change in potential energy. Depending on the orientation, it can be -*epsilon<sub>HB</sub>*, *0*, *epsilon<sub>HB</sub>*, 2*epsilon<sub>HB</sub>* or 3*epsilon<sub>HB</sub>*. If the pair has enough kinetic energy to pay for this change, the bond forms: N<sub>i</sub> and C<sub>j</sub> become new bead types N<sub>i</sub>' and C<sub>j</sub>', and from then on they interact with each other using the parameters of the new types (their other interactions do not change). Otherwise they keep their types and bounce off each other like hard spheres.
 
-The thermal fluctuation distorts the orientation of hydrogen bond and large fluctuations may break the hydrogen bond. Once the two atoms N<sub>i</sub>' and C<sub>j</sub>' come again to the exact distance *d<sub>ij</sub>* = 4.2 Å, a reverse reaction may occur. We will check the potential energy change by using the similar way we check during HB formation, and decide if the HB will break so that N<sub>i</sub>' and C<sub>j</sub>' will change back to their original types, N<sub>i</sub> and C<sub>j</sub>, respectively.
+Thermal motion distorts the hydrogen bond, and a large enough distortion can break it. When N<sub>i</sub>' and C<sub>j</sub>' come back to exactly 4.2 Å, the program checks the energy change in the same way and decides whether the bond breaks; if so, the beads change back to N<sub>i</sub> and C<sub>j</sub>.
 
-To maintain the temperature around the target value in NVT ensemble, we implement Andersen thermostat.<sup id="c37">[7](#c37)</sup> With this procedure, all beads in the simulation are subjected to random, infrequent collisions with ghost particles having the same mass as themselves. The post-event velocity of a bead colliding with a ghost particle is chosen randomly from a Maxwell-Boltzmann distribution centered at the simulation temperature. The collision frequency is controlled at 1% of the total events number.
+To keep the temperature near its target (NVT ensemble), sDMD uses the Andersen thermostat.<sup id="c37"></sup> Every bead now and then collides with an invisible "ghost" particle of the same mass. After such a collision the bead gets a new random velocity drawn from the Maxwell-Boltzmann distribution at the target temperature. How often this happens is set by `Thermo_Freq` in *parameter.txt*.
 
-The solvent molecules are not explicitly included. They are modeled implicitly by means of a square well attraction (potential of mean force) between hydrophobic side-chain beads. The side-chain beads, R beads, in a peptide are assigned as either "H" or "P": "H" means it is hydrophobic and such R beads will attract with each other when their distance is equal to 1.5*sigma<sub>ij</sub>* and as long as they are separated by at least three intervening residues in the same peptide or they are in the different peptides; "P" means the side-chain bead is polar. The interactions between two polar beads or between a polar and a hydrophobic side-chain beads will be a normal hard sphere collision.
-<br><br>
+Water is not included explicitly. Its effect is modelled by a square-well attraction (a potential of mean force) between hydrophobic side-chain beads. Each R bead is marked "H" (hydrophobic) or "P" (polar). Two "H" beads attract each other at a distance of 1.5*sigma<sub>ij</sub>*, as long as they are at least three residues apart or on different peptides. Pairs involving a "P" bead only collide as hard spheres.
 
 ### **High-resolution All-atom Model**
 
-In order to apply sDMD to more complex systems, we upgraded the molecular and potential models from coarse grained to all-atom. Large amounts of codes were rewritten and optimized to fulfill the more modularized and efficient architecture. Details of the format of the library files will be described in Section 5.
+To use sDMD on more complex systems, the model was upgraded from coarse-grained to all-atom. Much of the code was rewritten to make it more modular and efficient. The library file format is described in [Format](#format).
 
-The all-atom models are developed by Ding et al<sup id="c38">[8](#c38)</sup>, and thanks for the helps of Dr. Ding, we got the updated force field data (the data on the paper was outdated). The basic concepts and algorithms used in the all-atom models are similar to those in the coarse grained models: it still uses auxiliary bonds to maintain the configuration of molecules, and it still uses the step functions to represent the forces. But now, after the updates, the model represents all the atoms explicitly (except for some light hydrogens), see *Figure 3-3*; the step function is more realistic and closer to the continuous force, see *Figure 3-4(a)*. Thanks to the updated multi-step potential profile, now most interactions combine both attraction and repulsion, unlike the coarse grained model that only has either one of them. It also adds a new type of force, the dihedral constraint. Although it is also maintained by an auxiliary bond, it has more complex profile than a regular bond, see *Figure 3-4(b)*.
+The all-atom model was developed by Ding et al.<sup id="c38"></sup>. Thanks to Dr. Ding, we use the updated parameter files (the values printed in the paper are outdated). The ideas are the same as in the coarse-grained model: auxiliary bonds hold the shape of the molecule, and all forces are step functions. But now every atom is explicit, except some non-polar hydrogens (see *Figure 3-3*), and the step functions follow the real continuous potentials more closely (*Figure 3-4(a)*). Because each potential has several steps, most interactions now have both an attractive and a repulsive part, unlike the coarse-grained model, which had only one or the other. There is also a new kind of interaction, the dihedral constraint. It is also an auxiliary bond, but its potential has several steps (*Figure 3-4(b)*).
 
 <img src="img/Molecule.jpg" alt="Molecule" height="400"/>
 
-*Figure 3-3 Schematic diagram for the all-atom protein model. The solid lines represent the covalent bonds and the dashed lines represent the auxiliary bonds.*
-<br><br>
+*Figure 3-3 The all-atom protein model. Solid lines are covalent bonds and dashed lines are auxiliary bonds.*
 
 <img src="img/Potential.jpg" alt="Potential" height="300"/>
 (a)
@@ -344,54 +276,52 @@ The all-atom models are developed by Ding et al<sup id="c38">[8](#c38)</sup>, an
 <img src="img/Dihedral.jpg" alt="Dihedral" height="300"/>
 (b)
 
-*Figure 3-4 (a) Non-bonded interactions in all-atom model. The continuous dashed line corresponds to the VDW and solvation interaction between two carbon atoms. The solid step function is the discretized potential in DMD. (b) Potential profile of dihedral constraint.*
-<br><br>
+*Figure 3-4 (a) Non-bonded interaction in the all-atom model. The dashed curve is the continuous van der Waals plus solvation interaction between two carbon atoms; the solid step function is the DMD version. (b) Potential of a dihedral constraint.*
 
-Since the all-atom model represents the oxygen and hydrogen atoms explicitly, the structure of hydrogen bond is also optimized. The new hydrogen bond structure is shown in *Figure 3-5*.
+Because oxygen and hydrogen atoms are explicit, the hydrogen bond is also modelled in more detail, see *Figure 3-5*.
 
 <img src="img/HB.jpg" alt="HB" height="200"/>
 
-*Figure 3-5 Hydrogen bond structure of all-atom model. H<sub>i</sub> is the hydrogen atom; A<sub>j</sub> is the acceptor and could be different types of atoms; D<sub>i</sub> is the donor and X<sub>j</sub> is the heavy atom directly bonded to A<sub>j</sub>. The thick solid lines indicate the covalent bonds between the atoms; the thin solid lines indicate the hydrogen bond; the dashed lines indicate the auxiliary bonds for helping maintain the hydrogen bond orientation.*
-<br><br>
+*Figure 3-5 Hydrogen bond in the all-atom model. H<sub>i</sub> is the hydrogen; A<sub>j</sub> is the acceptor, which can be different kinds of atoms; D<sub>i</sub> is the donor, the heavy atom bonded to H<sub>i</sub>; X<sub>j</sub> is the heavy atom bonded to A<sub>j</sub>. Thick solid lines are covalent bonds; the thin solid line is the hydrogen bond; dashed lines are auxiliary bonds that keep its orientation.*
 
-By adjusting the type of A<sub>j</sub> atom, the hydrogen bond can be formed between backbone-backbone, backbone-side chain, and side chain-side chain. The donors include backbone amide hydrogen atoms and side chain polar hydrogen atoms of His, Trp, Tyr, Asn, Gln, Arg, and Lys. The acceptors include backbone carbonyl oxygens, side chain oxygen of Asp, Glu, Ser, Thr, and Tyr, and the side chain nitrogen of His.
+Depending on the type of A<sub>j</sub>, hydrogen bonds can form between two backbones, between backbone and side chain, or between two side chains. Donors are the backbone amide hydrogens and the polar side-chain hydrogens of His, Trp, Tyr, Asn, Gln, Arg and Lys. Acceptors are backbone carbonyl oxygens, the side-chain oxygens of Asp, Glu, Ser, Thr and Tyr, and the side-chain nitrogen of His.
 
-The mechanism to model the hydrogen bond forming and breaking is similar to the coarse grained model: once the hydrogen, H<sub>i</sub>, and the acceptor, A<sub>j</sub>, reach the interaction distance, the distances between H<sub>i</sub>-X<sub>j</sub> and D<sub>i</sub>-A<sub>j</sub>, which define the orientation of the hydrogen bond, will be evaluated; the total potential energy change, ΔE, between H<sub>i</sub>/A<sub>j</sub> and the other surrounding atoms are evaluated before and after the putative hydrogen bond formation; if these distances satisfy the preset range, and the total kinetic energy is enough to overcome the potential energy change, the hydrogen bond will be allowed to form, and forbad otherwise; after the formation of hydrogen bond, the atoms H<sub>i</sub> and A<sub>j</sub> will become H<sub>i</sub>' and A<sub>j</sub>', respectively, and they will interact with the other atoms by using the new pairs of potential.
-<br><br>
+Forming and breaking a hydrogen bond works like in the coarse-grained model:
 
+1. When H<sub>i</sub> and A<sub>j</sub> reach the bonding distance, the program checks the H<sub>i</sub>-X<sub>j</sub> and D<sub>i</sub>-A<sub>j</sub> distances, which describe the bond's orientation.
+2. It computes the total change in potential energy between H<sub>i</sub>, A<sub>j</sub> and all surrounding atoms, before and after the bond would form.
+3. If the orientation is acceptable and the pair has enough kinetic energy to pay for the change, the bond forms. H<sub>i</sub> and A<sub>j</sub> become new atom types H<sub>i</sub>' and A<sub>j</sub>' and use the potentials for those types from then on.
+
+Hydrogen bonds are grouped into three classes (backbone–backbone, backbone–side chain, side chain–side chain). Each class has its own scale factor at the top of *HBPotentialTable.txt*. Backbone–backbone bonds are scaled by 0.806, as in the authors' parameter files.
 
 **Interactions**
-----------------
+------------
 
-Here will describe the basic algorithms behind the DMD simulation. It will also give a description about the mechanisms in energy minimization, wall interaction, and REMD.
-<br><br>
+This part describes the basic DMD algorithm, followed by energy minimization, walls and REMD.
 
 ### **Algorithms**
 
-Here we will describe how DMD works.
+Here we describe how DMD works.
 
-Assume we have two particles, *i* and *j*, each with diameter *sigma*. The coordinates of the particles are the vector *vector_r<sub>i</sub>* = [x<sub>i</sub>,y<sub>i</sub>,z<sub>i</sub>] = *vector_r<sub>j</sub>* = [x<sub>j</sub>,y<sub>j</sub>,z<sub>j</sub>] and they have velocity vector *vector_v<sub>i</sub>* and *vector_v<sub>j</sub>*. The collision event and collision time can be determined by using the relative position and relative velocity, *vector_r<sub>ij</sub>* and *vector_v<sub>ij</sub>*.
+Take two particles, *i* and *j*, each with diameter *sigma*. Their positions are the vectors *vector_r<sub>i</sub>* = [x<sub>i</sub>,y<sub>i</sub>,z<sub>i</sub>] and *vector_r<sub>j</sub>* = [x<sub>j</sub>,y<sub>j</sub>,z<sub>j</sub>], and their velocities are *vector_v<sub>i</sub>* and *vector_v<sub>j</sub>*. Whether and when they collide can be found from their relative position and relative velocity, *vector_r<sub>ij</sub>* and *vector_v<sub>ij</sub>*.
 
 <img src="img/Interaction.jpg" alt="Interaction" height="225"/>
 
-*Figure 3-6 Sample System of a collision of a pair of atoms (2D)*
-<br><br>
+*Figure 3-6 A collision between two atoms (in 2D)*
 
-A collision event is dependent of whether the distance between particles *i* and *j* will become equal to the average molecular dimeter
-*sigma<sub>ij</sub> = (sigma<sub>i</sub> + sigma<sub>j</sub>) / 2* sometime in the future. Using superscript "*o*" to represent an initial condition, the relative position vector at any time in the future is found by the following equation,
+A collision happens if the distance between *i* and *j* will at some future time equal the average diameter *sigma<sub>ij</sub> = (sigma<sub>i</sub> + sigma<sub>j</sub>) / 2*. Writing the starting values with a superscript "*o*", the relative position at any later time is:
 
 <img src="img/eqn34.png" alt="eqn34" height="40"/>
 
-So if *vector_r<sub>ij</sub>* and *vector_v<sub>ij</sub>* have opposite sense, the particles will be approaching and a collision is possible. We may check to see if the dot product *vector_r<sub>ij</sub> ∙ vector_r<sub>ij</sub>* becomes equal to sigma<sub>ij</sub><sup>2</sup> in the future at some time increment *(t - t<sup>o</sup>)*,
+If *vector_r<sub>ij</sub>* and *vector_v<sub>ij</sub>* point in opposite directions, the particles are approaching and may collide. We check whether *vector_r<sub>ij</sub> ∙ vector_r<sub>ij</sub>* will equal *sigma<sub>ij</sub><sup>2</sup>* after some time *(t - t<sup>o</sup>)*:
 
 <img src="img/eqn35-7.png" alt="eqn35-7" height="150"/>
 
-Here we define a variable *b<sub>ij</sub>* as a dot product,
+We define *b<sub>ij</sub>* as the dot product:
 
 <img src="img/eqn38.png" alt="eqn38" height="40"/>
 
-If *b<sub>ij</sub>* > *0*, the relative position |*r<sub>ij</sub>*| will be increasing with time. The two particles will be further away with each other. If *b<sub>ij</sub>* = *0*, the relative velocity and relative position vectors are perpendicular. If *b<sub>ij</sub>* < *0*, the relative position |*r<sub>ij</sub>*| will be decreasing and there may be a collision. So after removing the superscript "*o*" on
-*vector_r<sub>ij</sub>* and *vector_v<sub>ij</sub>*, *Eqn 3-7* can be rewritten as follows,
+If *b<sub>ij</sub>* > *0*, the particles are moving apart. If *b<sub>ij</sub>* = *0*, the relative velocity is perpendicular to the line between them. If *b<sub>ij</sub>* < *0*, they are getting closer and may collide. Dropping the superscript "*o*", the equation above becomes:
 
 <img src="img/eqn39.png" alt="eqn39" height="50"/>
 
@@ -399,46 +329,41 @@ or
 
 <img src="img/eqn310.png" alt="eqn310" height="50"/>
 
-Solving for time increment by using the quadratic formula, we can have,
+Solving this quadratic equation for the time gives:
 
 <img src="img/eqn311.png" alt="eqn311" height="100"/>
 
-where *s_<sub>time</sub> = +/- 1*. The discriminant, *b<sub>ij</sub><sup>2</sup> - v<sub>ij</sub><sup>2</sup>(r<sub>ij</sub><sup>2</sup> - sigma<sub>ij</sub><sup>2</sup>)*, in *Eqn 3-11* has to be non-negative for a collision to occur. If it is negative, then the particles will miss each other. The smaller real root *s<sub>time</sub> = - 1* is used for the solution to the quadratic as shown in *Figure 3-7*. The smaller real root occurs when the particles collide at *vector_r<sub>j</sub><sup>s-</sup>*. The location labeled *vector_r<sub>j</sub><sup>s+</sup>* is the root that will not occur physically.
+where *s<sub>time</sub> = ±1*. The term under the square root, *b<sub>ij</sub><sup>2</sup> - v<sub>ij</sub><sup>2</sup>(r<sub>ij</sub><sup>2</sup> - sigma<sub>ij</sub><sup>2</sup>)*, must not be negative for a collision to happen; if it is negative, the particles miss each other. The smaller root, *s<sub>time</sub> = -1*, is the physical one (*Figure 3-7*): the particles touch at *vector_r<sub>j</sub><sup>s-</sup>*. The other root, *vector_r<sub>j</sub><sup>s+</sup>*, would be reached only if the particles could pass through each other.
 
 <img src="img/Collide.jpg" alt="collide" height="200"/>
 
-*Figure 3-7 Only the smaller real root, s<sub>time</sub> = - 1 is used.*
-<br><br>
+*Figure 3-7 Only the smaller root, s<sub>time</sub> = -1, is used.*
 
-If the particle has a potential shell (See *Figure 3-8*), the equation for the event time can be modified to,
+When the potential has steps (shells, see *Figure 3-8*), the event time is found the same way:
 
 <img src="img/eqn312.png" alt="eqn312" height="100"/>
 
-where *d<sub>ij</sub>* is the actual distance of centers for the event.
+where *d<sub>ij</sub>* is the distance of the step where the event happens.
 
 <img src="img/CollideSituation.jpg" alt="CollideSituation" height="200"/>
 
-*Figure 3-8 (a) Approaching particles that will enter the potential shell; (b) particles in the shell that will have a hard sphere collision; (c) particles in the shell that will miss a hard sphere collision, but experience a shell interaction event after they pass;
-(d) particles moving away that will experience a potential change event at the shell boundary.*
-<br><br>
+*Figure 3-8 (a) Particles approaching that will enter a shell; (b) particles inside a shell that will collide as hard spheres; (c) particles inside a shell that miss each other and reach the shell edge on the way out; (d) particles moving apart that will cross a step on the way out.*
 
-Calculation of velocity changes upon an event will be a little more complex. We use prime (') to denote the state after the event. The
-change in potential energy for the event is indicated by *Δepsilon = epsilon' - epsilon*, which may be zero, positive or negative depending on whether it is a hard sphere collision, or particles enter or escape from a potential shell.
+Finding the new velocities after an event takes a bit more work. A prime (') marks values after the event. The change in potential energy is *Δepsilon = epsilon' - epsilon*. It is zero for a hard-sphere collision, and positive or negative when the particles cross a step.
 
-Total energy is conserved upon an event between particles *i* and *j*,
+Total energy is conserved at the event:
 
 <img src="img/eqn313.png" alt="eqn313" height="70"/>
 
-which can be rearranged,
+which can be rearranged to:
 
 <img src="img/eqn314.png" alt="eqn314" height="60"/>
 
-When the two particles contact, the relative position will be,
+At the moment of the event, the relative position is:
 
 <img src="img/eqn315.png" alt="eqn315" height="50"/>
 
-The change in momentum for an event is proportional to the collision
-vector *vector_r<sub>ij</sub><sup>c</sup>*,
+The change in momentum points along the line between the particles, *vector_r<sub>ij</sub><sup>c</sup>*:
 
 <img src="img/eqn316.png" alt="eqn316" height="50"/>
 
@@ -446,12 +371,11 @@ or
 
 <img src="img/eqn317.png" alt="eqn317" height="60"/>
 
-*phi* is the parameter we will try to determine. Insert *Eqn 5-14* into
-*Eqn 5-11*,
+*phi* is the unknown we want to find. Putting this into the energy equation gives:
 
 <img src="img/eqn318.png" alt="eqn318" height="60"/>
 
-Rearrange *Eqn 5-14* also leads to,
+The momentum equation can also be rearranged to:
 
 <img src="img/eqn319.png" alt="eqn319" height="50"/>
 
@@ -459,85 +383,71 @@ and
 
 <img src="img/eqn320.png" alt="eqn320" height="50"/>
 
-Plugging *Eqn 5-16* and *Eqn 5-17* into *Eqn 5-15* to eliminate the
-primed variables,
+Putting these two into the energy equation removes the primed (after-event) velocities:
 
 <img src="img/eqn321.png" alt="eqn321" height="75"/>
 
-Define
-*d<sub>ij</sub><sup>2</sup> = vector_r<sub>ij</sub><sup>c</sup>* ∙ vector_r<sub>ij</sub>*<sup>c</sup>*, *vector_v<sub>ij</sub> = vector_v<sub>i</sub> - vector_v<sub>j</sub>* and *b<sub>ij</sub>*<sup>c</sup> = vector_r<sub>ij</sub>*<sup>c</sup> ∙ vector_v<sub>ij</sub>*,
-and rearrange *Eqn 5-18*,
+We define *d<sub>ij</sub><sup>2</sup> = vector_r<sub>ij</sub><sup>c</sup> ∙ vector_r<sub>ij</sub><sup>c</sup>*, *vector_v<sub>ij</sub> = vector_v<sub>i</sub> - vector_v<sub>j</sub>* and *b<sub>ij</sub><sup>c</sup> = vector_r<sub>ij</sub><sup>c</sup> ∙ vector_v<sub>ij</sub>*, and rearrange:
 
 <img src="img/eqn322.png" alt="eqn322" height="75"/>
 
-Applying the quadratic formula,
+Solving this quadratic equation:
 
 <img src="img/eqn323.png" alt="eqn323" height="100"/>
 
-Define the reduced mass, <img src="img/otherEqn.png" alt="otherEqn" height="50"/>, then,
+With the reduced mass, , this becomes:
 
 <img src="img/eqn324.png" alt="eqn324" height="100"/>
 
-where the sign of *s<sub>vel</sub>* depends on the context of the event (See *Figure 3-9*). For an event where *Δepsilon* = *0*, *s<sub>vel</sub>* = *- 1* is the only reasonable solution. For a hard sphere collision event, the distance is the inter-particle radius, *d<sub>ij</sub>* = *sigma<sub>ij</sub>* and the relation becomes,
+The sign *s<sub>vel</sub>* depends on the type of event (*Figure 3-9*). When *Δepsilon* = *0*, only *s<sub>vel</sub>* = *-1* makes physical sense. For a hard-sphere collision, *d<sub>ij</sub>* = *sigma<sub>ij</sub>* and the result simplifies to:
 
 <img src="img/eqn325.png" alt="eqn325" height="70"/>
 
-Based on the context of the event, the interaction calculation will follow the flowsheet below,
+Each kind of event is handled as shown in this flow chart:
 
 <img src="img/FlowSheet.png" alt="FlowSheet" height="500"/>
 
-*Figure 3-9 Flowsheet for DMD with wells.<sup id="c39">[9](#c39)</sup>*
-<br><br>
+*Figure 3-9 Flow chart for DMD with wells.<sup id="c39"></sup>*
 
 ### **Energy Minimization**
 
-Theoretically, sDMD can import any PDB file of proteins to create the simulation system. In the PDB file, the original coordinates of
-atoms may violate the ranges of bond lengths or the minimum distances between pairs of atoms in sDMD's library. To eliminate these conflicts, sDMD uses steepest descent algorithm.
+sDMD can in principle start from any protein PDB file. The coordinates in such a file may break the allowed bond-length ranges or put atoms closer than the library allows. To fix this, sDMD first runs a steepest-descent energy minimization.
 
-In DMD, the potential function is a step function, then the first-order derivative would not be possible. However, by computing the relative
-positions of a pair of atoms, we could obtain the vectors that can guide the atoms to move closer or further; based on their distance, then, we can find at which step the potential currently locates, as well as to which direction the potential will decrease. From these information, we can decide the next move of an atom to approach the local minimum of potential energy.
+A step function has no slope, so the usual gradient cannot be used. Instead, for each pair of atoms the program looks at which step they are on and in which direction the energy goes down, and moves the atoms that way.
 
-In practice, to achieve a fast energy minimization, sDMD will only eliminate the bond length violations and atom diameter overlapping. In other words, the program will only vibrate an atom if it has bond that is too short or too long and if it overlaps any surrounding atoms. User can follow a short simulation under a low temperature to further relax the system.
-<br><br>
+To keep this fast, the minimization only fixes bonds that are too short or too long and atoms that overlap. You can relax the structure further with a short run at low temperature.
+
+The minimized structure is written to *MiniEnergy.gro* **in the input folder** (it overwrites any existing file). If you run several simulations at the same time, give each one its own copy of the input folder so they do not overwrite each other's file.
 
 ### **Confined Walls**
 
-sDMD is able to simulate a system in various types of confined environments, such as parallel pores, cylindrical tubes, and spherical
-cavities. Currently the confined walls can be only smooth surfaces, which means there are no explicit atoms on the walls. The wall surface is like a multi-layer shell, and each layer represents a potential step.
+sDMD can simulate a system in confined spaces such as between parallel plates, inside a cylindrical tube or inside a spherical cavity. These walls are smooth surfaces without explicit atoms. A wall works like a set of layers, one layer per potential step.
 
-To simulate the parallel pores is very straightforward: once the positions of a wall is set, the event time in the nearest future
-when an atom interact with the wall can be easily determined, and the after-interaction velocity can be computed directly: it is just a one-dimension problem and only the velocity perpendicular to the wall's surface will be changed.
+Parallel plates are simple: once the wall positions are set, the time when an atom reaches a wall layer is easy to compute, and only the velocity component perpendicular to the wall changes. It is a one-dimensional problem.
 
-However, for a cylindrical tube or a spherical cavity, the situation will become a little bit more complex. Due to the curvature of surface and the implicit atoms, it would be difficult to determine the exact direction and position on the wall at which the atom will interact at the nearest event, both of which are required to compute the interaction potential and the after-interaction velocities.
+A tube or a sphere is harder. Because the surface is curved and has no atoms, it is not obvious where on the wall an atom will hit, yet that is needed for both the energy and the new velocity.
 
-To deal with this issue, sDMD uses an indirect way, see *Figure 3-10*: it is easy, instead, to compute the instant distance of an atom from the center of either a cylinder tube or a spherical cavity, *L*. Then the distance between the atom and the wall will be *D = R - L*, where *R* is the diameter of the tube or cavity. Thus, the potential region in the potential step can be determined by *D*. Next, instead of doing a lot of trigonometric calculations or trying to find a pseudo-atom on the wall to model the interaction, sDMD considers this as an interaction between the target atom and a huge pseudo-atom at the center of the tube or cavity. In other words, any interaction between an atom and the wall will be like the atom inside another huge atom interacts internally with the shell of the huge atom. The interaction types, however, must be switched. For example, the well-capture event between the atom and the pseudo-atom will become a well-escape event between the atom and the wall; similarly, a hard-sphere collision event will become a well-bounce event, etc. Thus, sDMD could use the same algorithm to compute both the interactions (a) between a pair of atoms and (b) between an atom and the wall.
+sDMD solves this indirectly (*Figure 3-10*). It is easy to compute the distance *L* from an atom to the centre (axis) of the tube or cavity. The distance from the atom to the wall is then *D = R - L*, where *R* is the radius of the tube or cavity, and *D* tells which wall layer the atom is in. The program then treats the wall as one huge pseudo-atom at the centre, and the atom as moving inside that pseudo-atom's shell. The event types are simply swapped: entering a well of the pseudo-atom becomes leaving the wall's well, a hard-sphere collision becomes a bounce at the wall, and so on. This way the same code handles atom–atom and atom–wall events.
 
 <img src="img/wall.jpg" alt="Wall" height="300"/>
 
-*Figure 3-10 Schematic diagram of wall interaction in a cylindrical tube or a spherical cavity. The big solid circle is the wall boundary, which is infinitely repulsive; the big dashed circle is the potential shell of wall. The small black dashed circle is the original position of the target atom; the small black solid circle is the future position of the target atom after time t. The small read circle is the pseudo-atom at the center. The black line is the diameter of the wall, R; the red line is the distance between the target atom and the pseudo-atom, L; the blue line is the distance between the target atom and the wall, D = R - L.*
-<br><br>
+*Figure 3-10 Wall interaction in a cylindrical tube or a spherical cavity. The big solid circle is the wall, which cannot be crossed; the big dashed circle is the edge of the wall's potential. The small black dashed circle is the atom now; the small black solid circle is the atom after time t. The small red circle is the pseudo-atom at the centre. The black line is the radius of the wall, R; the red line is the distance from the atom to the pseudo-atom, L; the blue line is the distance from the atom to the wall, D = R - L.*
 
-sDMD also allows users to use the obstruction wall. The obstruction wall is an infinite wall parallel to the *xy-*, *xz-* or *yz-* planes. Multiple obstruction wall can be inserted into the system box at any positions. This can be used to construct close-end cylindrical tubes, cuboid confined environments, and tunnel and reservoirs (combined with tunnel function), see Figure 3-11, or divide the system box into different regions.
+sDMD also supports *obstruction walls*: flat, impenetrable walls parallel to the *xy*, *xz* or *yz* plane. Any number of them can be placed anywhere in the box. They can be used to close the ends of a tube, build box-shaped confinements, divide the box into regions, or, together with the tunnel option, build a tube between two reservoirs (*Figure 3-11*).
 
 <img src="img/Flow.png" alt="Flow" height="300"/>
 
-*Figure 3-11 Combination of obstruction walls and cylindrical tube confinement can create a tube between two reservoirs, which can be used
-to model protein translocations. The solid rectangle represents the boundary of the system box; the black dashed rectangles represent the
-obstruction walls; the red dashed rectangle represents the cylindrical tube.*
-<br><br>
+*Figure 3-11 Obstruction walls combined with a cylindrical tube make a tube between two reservoirs, which can be used to model protein translocation. The solid rectangle is the edge of the simulation box; the black dashed rectangles are obstruction walls; the red dashed rectangle is the cylindrical tube.*
 
 ### **Replica Exchange Molecular Dynamics Simulation (REMD)**
 
-sDMD allows users to perform REMD. The results can be analyzed by T-WHAM<sup id="c310">[10-11](#c310)</sup> in the analysis executable.
+sDMD can run REMD. The results can be analyzed with T-WHAM<sup id="c310"></sup> in the analysis program.
 
-REMD can be used to efficiently explore the potential energy landscape of molecular systems. The ruggedness and the slope toward the energy
-minimum in the landscape govern sampling efficiency at a given temperature. Although escape out of local minima is accelerated at higher temperatures, the free energy landscape is altered due to large entropic contributions. To efficiently overcome energy barriers while maintaining conformational sampling corresponding to a relevant free energy surface, sDMD employs the replica exchange sampling
-scheme<sup id="c38">[8](#c38)</sup><sup>,</sup><sup id="c312">[12-13](#c12)</sup>.
+REMD helps a simulation explore the energy landscape of a molecule. At low temperature a molecule can get stuck in a local energy minimum for a long time. At high temperature it escapes easily, but the high-temperature landscape is not the one we care about. REMD combines the two<sup id="c38"></sup><sup>,</sup><sup id="c312"></sup>.
 
-In REMD, multiple simulations/replicas of the same system are performed in parallel at different temperatures. Individual simulations are
-coupled through Monte Carlo-based exchanges of simulation temperatures between replicas at periodic time intervals. Temperatures are exchanged between two replicas, *i* and *j*, maintained at temperatures T<sub>i</sub> and T<sub>j</sub> and with energies E<sub>i</sub> and E<sub>j</sub>, according to the canonical Metropolis criterion with the exchange probability *P*, where *P* = *1* if <img src="img/otherEqn2.png" alt="otherEqn2" height="50"/>, and *P* = *e<sup>-Δ</sup>*, if *Δ* > *0*. To achieve this, sDMD uses a Socket server to send and receive the temperature and energy data between pairs of replicas at the preset time intervals. sDMD would suggest the exchange rate to be every 1 x 10<sup>3</sup> time units.
+Several copies (replicas) of the same system run at the same time, each at a different temperature. Every so often, two replicas *i* and *j*, at temperatures T<sub>i</sub> and T<sub>j</sub> and with energies E<sub>i</sub> and E<sub>j</sub>, try to swap temperatures. The swap is accepted with the Metropolis probability: *P* = *1* if , and *P* = *e<sup>-Δ</sup>* if *Δ* > *0*. When a swap is accepted, each replica simply continues with the new target temperature; velocities are not rescaled, and the thermostat brings the replica to its new temperature. The replicas exchange their temperatures and energies through a small socket server, *sServer*. A swap every 1000 time units is a good starting point.
 
-<br><br>
+
 *Reference*
 
 <b id="c31">[1]</b> Voegler Smith, A.; Hall, C. K., alpha-helix formation: discontinuous molecular dynamics on an intermediate-resolution protein model. *Proteins* **2001,** *44* (3), 344-60.[↩](#c31)
@@ -550,7 +460,7 @@ coupled through Monte Carlo-based exchanges of simulation temperatures between r
 
 <b id="c35">[5]</b> Buldyrev, S. V., Application of Discrete Molecular Dynamics to Protein Folding and Aggregation. In *Aspects of Physical Biology: Biological Water, Protein Solutions, Transport and Replication*, Franzese, G.; Rubi, M., Eds. Springer Berlin Heidelberg: Berlin, Heidelberg, 2008; pp 97-131.[↩](#c35)
 
-<b id="c36">[6]</b> S. Takada, Z. L.-S., P. G. Wolynes, Folding dynamics with nonadditive forces: A simulation study of a designed helical protein and a random heteropolymer. *J. Chem. Phys.* **1999,** *110* (23), 11616-11629.[↩](#c36)
+<b id="c36">[6]</b> Takada, S.; Luthey-Schulten, Z.; Wolynes, P. G., Folding dynamics with nonadditive forces: A simulation study of a designed helical protein and a random heteropolymer. *J. Chem. Phys.* **1999,** *110* (23), 11616-11629.[↩](#c36)
 
 <b id="c37">[7]</b> Andersen, H. C., Molecular dynamics simulations at constant pressure and/or temperature. *The Journal of Chemical Physics* **1980,** *72* (4), 2384-2393.[↩](#c37)
 
@@ -561,300 +471,326 @@ coupled through Monte Carlo-based exchanges of simulation temperatures between r
 
 <b id="c310">[10]</b> Kumar, S.; Rosenberg, J. M.; Bouzida, D.; Swendsen, R. H.; Kollman, P. A., The weighted histogram analysis method for free-energy calculations on biomolecules. I. The method. *Journal of Computational Chemistry* **1992,** *13* (8), 1011-1021.[↩](#c310)
 
-<b id="c310">[11]</b> Gallicchio, E.; Andrec, M.; Felts, A. K.; Levy, R. M., Temperature weighted histogram analysis method, replica
-exchange, and transition paths. *J Phys Chem B* **2005,** *109* (14), 6722-31.[↩](#c310)
+<b id="c310">[11]</b> Gallicchio, E.; Andrec, M.; Felts, A. K.; Levy, R. M., Temperature weighted histogram analysis method, replica exchange, and transition paths. *J Phys Chem B* **2005,** *109* (14), 6722-31.[↩](#c310)
 
 <b id="c312">[12]</b> Zhou, R.; Berne, B. J.; Germain, R., The free energy landscape for beta hairpin folding in explicit water. *Proc Natl Acad Sci U S A* **2001,** *98* (26), 14931-6.[↩](#c312)
 
 <b id="c312">[13]</b> Okamoto, Y., Generalized-ensemble algorithms: enhanced sampling techniques for Monte Carlo and molecular dynamics simulations. *J Mol Graph Model* **2004,** *22* (5), 425-39.[↩](#c312)
-<br><br><br>
-<br><br><br>
 
 
 **Program Structure**
-=====================
+=================
 
-This section will briefly describe the structure of the program.
+This section explains how the simulation program is organized. All shared data structures are defined in `src/DMD.h`.
 
-struct AtomStr{} is the most important data structure in sDMD. It stores almost all the information of an individual atom.
+**Data Structures**
+---------------
+
+The most important structure is `struct AtomStr`. There is one per atom, and it holds two pointers:
 
 ```C
 struct AtomStr {
-    struct PropertyStr *property;
-    struct DynamicStr *dynamic;
+    struct PropertyStr *property;   // things that never change: name, mass, type, bonds ...
+    struct DynamicStr  *dynamic;    // things that change: position, velocity, next event ...
 };
 ```
 
-"property" stores all the static information, like mass and atom number; "dynamic" stores all the dynamic information, like coordinate and
-velocity.
+**`PropertyStr`** holds what stays fixed during a run: the atom's name, residue name, mass and charge; its atom type (an atom has an "original" type and a "reacted" type that it uses while it is in a hydrogen bond); and two lists of `ConstraintStr`, one for its bonds and one for its other constraints (auxiliary bonds and dihedral constraints).
 
-sDMD has been optimized by Pthreads Library for the future development of parallel computing. The program will establish single/multiple threads and each of the thread can perform the calculation by its own. Thus, the data in sDMD have two layers, one is the raw data and the other is the data copy within each thread. *Figure 4-1* shows a diagram of a single-core simulation.
+**`DynamicStr`** holds what changes:
 
-<img src="img/Process.jpg" alt="process" height="300"/>
+- `coordinate` and `velocity`
+- `lastUpdateTime`: the simulation time at which this atom's position was last brought up to date (see [How the Program Stays Fast](#how-the-program-stays-fast))
+- `cellIndex`: the cell the atom is in
+- `HB`: its hydrogen-bond state, including its current partner
+- `event`: the atom's next scheduled event: its time, partner and type
 
-*Figure 4-1 Single-core simulation process*
-<br><br>
+**`ConstraintStr`** describes one bonded pair or constrained pair: the partner atom, the smallest and largest allowed distance, and a linked list of potential steps (`StepPotenStr`). Each step stores its distance (squared), the energy change at that step, and the accumulated energy of the shell just inside it. Non-bonded and hydrogen-bond potentials use the same step lists, looked up by the pair's atom types.
 
-At the beginning of a simulation, the thread will make a copy of the data of the target atom(s) involving in the nearest event and do the calculation only on this copy, i.e. the raw data will not be touched. Since DMD is an event-driven simulation, the results of the previous events would have voided the prediction of the current. Thus, any hazards that would have affected the current event will be evaluated. If there exist any hazards, the prediction of the current event will be voided. In this case, the program will re-predict the event for the target atom(s). Otherwise, the prediction for the current event will be committed and then the thread will predict a new future event for the target atom(s). After that, the raw data will be updated and the time tree (stores the event sequence) will be re-scheduled. The thread will keep looping this process until finishing the assigned simulation time.
-<br><br>
+The event types (collision, bond, hydrogen bond, thermostat, cell crossing, wall, and so on) are listed in `enum EEventType` and `enum EInteractionType` in `DMD.h`.
+
+**The Event Loop**
+--------------
+
+The simulation is one loop, `SingleThreadRun()` in `SGThread.c`. Normal runs and REMD replicas use the same loop. Each pass:
+
+1. **Take the next event.** The event calendar (a complete binary tree, see below) always has the earliest event at its top.
+2. **Advance the time** to that event, and bring the atom and its partner up to that time.
+3. **Check that the event is still valid** (`HazardCheck()`). An event was predicted some time ago; since then, the atom or its partner may have taken part in another event. If so, the prediction is out of date and is thrown away. The program then uses one of the atom's backup events, if a valid one exists, or predicts a new event.
+4. **Carry out the event** (`DoEvent()` in `Events.c`): compute the new velocities, form or break hydrogen bonds, and update cells.
+5. **Predict the next event** for the atoms involved (`Predict()`), using the functions in `TimePrediction.c`, and put it into the calendar.
+6. **Save output** when it is time to write a frame.
+
+Safety counters stop the run with an error message if the simulation gets stuck, for example if events keep happening at the same moment without time moving forward.
+
+**How the Program Stays Fast**
+--------------------------
+
+- **Event calendar.** All upcoming events are stored in a complete binary tree that keeps the earliest event at the top. Event times are stored as absolute times, so after an event only the atoms involved need to be updated in the tree, never all atoms.
+- **Positions are updated only when needed.** Between events every atom moves in a straight line, so its position at any time can be computed from its last position and velocity. sDMD therefore does not move all atoms after every event. An atom is moved forward, with `UpdateAtom()`, only when it is needed: when it takes part in an event, when a neighbour needs its position, or when a frame is written. Every piece of code that reads the position of another atom must first bring that atom up to date.
+- **Neighbour cells.** The box is divided into cells, and the program records which atoms are in which cell. To find possible partners of an atom, it only looks in the cells around it, within the cut-off distance. By default a cell is as wide as the cut-off (27 cells are searched); with `-cell 2` or `-cell 3` cells are 1/2 or 1/3 of that, which saves work in dense systems.
+- **Backup events.** When an atom's next event is predicted, a few runner-up events are kept as well. If the first one becomes invalid, a backup can often be used instead of searching all neighbours again.
+- **Short step lists.** Each pair potential has only 3–8 steps, so the program finds the right step by walking the short list. (A large lookup table was tried and turned out slower and much more memory-hungry.)
+
 
 **Program Usage**
-=================
+=============
 
 **Installation**
-----------------
+------------
 
-The package includes three folders: simulation source code folder, *src*, analysis source code folder, *analysis*, and an *input* folder. Each source code folder has its dedicated *Make* file, *Makefile*. The *input* folder contains the configuration file, *parameter.txt*, and the force filed library folder, *Library*.
+The package has three main folders:
 
-To compile the simulation source code, use the following command,
+- `src` — the simulation source code
+- `analysis` — the analysis source code
+- `input` — example input: the configuration file *parameter.txt*, example structures (*ala10.gro*, *insulin.gro*), and the force-field folders `Library_<name>` (for example `Library_Ding`)
+
+Each source folder has its own *Makefile*. The code is written in C99 and needs only `pthreads` and the math library (plus OpenGL if you want live visualization).
+
+To build the simulation programs, run this in the `src` folder:
 
 ```bash
 $ make all
 ```
 
-It will generate three executables, *sDMD*, *sServer*, and *sREMD*. *sDMD* is the core program to run the simulation; *sREMD* is the program to perform REMD simulation, only; *sServer* is an assistant program to create a socket server for REMD simulation, and will be executed by sREMD automatically.
+This builds three programs: *sDMD*, the simulation itself; *sREMD*, which starts and manages an REMD simulation; and *sServer*, the small server that the replicas use to talk to each other (sREMD starts it for you).
 
-If users only would like to perform regular DMD simulations, which means only *sDMD* executable will be required, simply use the command,
+If you only need normal simulations, build only *sDMD*:
 
 ```bash
 $ make sDMD
 ```
 
-Note that if users would like to enable the visualization feature, which can visualize the simulation on the fly, he/she would need to install OpenGL utility library independently, and then use the following command to make,
-
-```bash
-$ make all VIS=yes
-```
-
-or
+To watch the simulation live, install the OpenGL utility library (GLUT) and build with: (Not support anymore)
 
 ```bash
 $ make sDMD VIS=yes
 ```
 
-To compile the analysis source code, use the following command in *analysis* folder,
+To build the analysis program, run this in the `analysis` folder:
 
 ```bash
 $ make
 ```
 
-It will generate only one executable, *analysis*.
-<br><br>
+This builds one program, *sAnalysis*.
 
 **Parameters**
-------------------
+----------
 
 ### **Non-REMD simulation**
 
-sDMD will need a coordinate file, *\*.gro* or *\*.pdb*, the configuration file, *parameter.txt*, and the force field library folder, *Library*, to start a simulation.
+sDMD needs a coordinate file (*\*.gro* or *\*.pdb*), the configuration file *parameter.txt*, and a force-field folder `Library_<name>`, all in the input folder.
 
-Below is an example of the configuration file,
+Example *parameter.txt*:
 
 ```txt
-Continue?            new
-Time                 50
-T(reduced)           0.65
-Dump_Rate            10
-CutOff_R(A)          9.0
-Force_Field          Ding
-Thermostat           Andersen
-sDMD_Method          1
-ThreadNo             1
-WallExist?           no
-WallType             sphere
-WallDyn              no
-Flow                 charge 1, 150.0 50.0 50.0 1.0 1.0
-Obstruct?            4, x 50.0, x 150, y 0.0, y 100
-Tunnel?              1, 50 150 50 50 30
-SphObst?             1, 30 50 50 20
+Continue?          new
+Time               2000
+Temp               0.4
+Dump_Rate          10
+CutOff_R           10.0
+Force_Field        Ding
+Thermostat         Andersen
+Thermo_Freq        6.0
+CGModel            no no
+SurfExist?         no
+SurfType           no
+WallDyn            no
+Flow               no
+Obstruct?          no
+Tunnel?            no
+SphObst?           no
 ```
 
-**Item**        | **Description**
---------------- | ----------------
-continue?       | If users would like to perform a new simulation, use "new"; if users would like to extend/continue the previous <br>run, which may have not finished yet, or would like to extend the current simulation, use "continue". Both <br>process will back up the old files. The backup files will have a suffix representing the backing up time and date.
-Time            | Simulation time.
-T(reduced)      | Reduced system temperature, *T\** = *T* / 502 K. If set to "no", the program will keep using the temperature set at <br>the last time.
-Dump\_Rate      | How often the data will dump. Here is each 10 time units.
-CutOff\_R(A)    | The cutoff radius of VDW interaction. Unit is A.
-Force\_Field    | The force field employed in the simulation. Currently only support "Ding"<sup id="c51">[1](#c51)</sup>.
-Thermostat      | The thermostat algorithm. Currently only support "Andersen"<sup id="c52">[2](#c52)</sup>. If set to "no", the thermostat will be turned off, <br>and the simulation will use a microcanonical (NVE) ensemble instead.
-sDMD\_Method    | Parallel algorithm. Currently only support "1", which means only one CPU core will be used.
-ThreadNo        | Number of cores employed to perform the parallel computing. Currently only support "1".
-WallExist?      | If users would like to perform a simulation under bulk conditions, use "no". If users would like to perform a <br>simulation in confined environments, use "smooth".
-WallType        | Shape of the wall. Support "parallel", "cylinder", and "sphere".
-WallDyn         | If the confined walls are fixed, use "no". If the confined walls are dynamic, use "compress", "extend", or "repulse".
-Flow            | Driving force of the flow. Currently support "velocity", "force" and "charge". <br>If use "velocity", every atom in the system will be applied by a constant velocity. <br>if use "force", every atom in the system will be applied by a constant force during thermostat interaction. <br>if use "charge", the charged atom in the system will be attracted or repulsed by defined charges. <br>Follow the keyword "velocity" follows the velocities on *x-*, *y-* and *z-* axis, unit is 0.02 Å \/ ps. Exp: 50.0 0.0 0.0 <br>Follow the keyword "force" follows the forces on *x-*, *y-* and *z-* axis, unit is pN. Exp: 5.0 0.0 0.0. <br>Follow the keyword "charge" follows the total charge number and the charge coordinates on *x-*, *y-* and *z-* axis <br>and the potential gradient (unit kcal \/ mol) and the interaction distance (unit Å). Exp: 1, 150.0 50.0 50.0 1.0 1.0
-Obstruct?       | If there exists any impenetrable wall in the system. If no, use "no". Otherwise, the first number represents how <br>many walls will be placed in the system, following the axis type and coordinate of each wall, separating <br>by commas.
-Tunnel?         | If there will be any tunnel in the system. This is only used for translocation simulations. If no, use "no". Otherwise, <br>the first number represents how many tunnels will be placed in the system, following the start *x-* coordinate, the <br>end *x-* coordinate, the *y-* and *z-* coordinates, and the diameter of tunnel, separating each tunnel by commas.
-SphObst?        | If there will be any spherical obstacles in the system, following the total obstacle number, the coordinates on *x-*, <br>*y-* and *z-* axis, and the diameter of obstacle, separating each obstacle by commas.
-<br>
+| **Item** | **Description**                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Continue?      | `new` starts a new simulation. `continue` extends an earlier run from its saved state (*savedData.dat*). In both cases old output files are kept as backups, with the date and time added to their names.                                                                                                                                                                                                                                                                                                                         |
+| Time           | Simulation time, in time units (1 unit ≈ 48.88 fs). With `continue`, this is the new total time.                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| Temp           | Reduced temperature, *T\** = *k<sub>B</sub>T* / (1 kcal/mol), so *T\** = 1 ≈ 503 K. Use `no` to keep the temperature of the previous run (and for REMD).                                                                                                                                                                                                                                                                                                                                                                       |
+| Dump\_Rate     | How often a frame is written, in time units.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| CutOff\_R      | Cut-off distance for non-bonded interactions, in Å.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| Force\_Field   | The force field and its program logic. Currently `Ding`<sup id="c51"></sup>.                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| FF\_Library    | (optional) Read parameters from `Library_<name>` instead of `Library_<Force_Field>`.                                                                                                                                                                                                                                                                                                                                                                                                     |
+| Thermostat     | `Andersen`<sup id="c52"></sup> for constant temperature (NVT), or `no` for constant energy (NVE).                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| Thermo\_Freq   | How often each atom meets the thermostat, in time units. The time between two thermostat events of one atom is this value times a random number (about 0.8 on average). A larger value means weaker coupling.                                                                                                                                                                                                                                                                                                                           |
+| CGModel        | Coarse-grained options (experimental). Use `no no` for normal all-atom runs.                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| SurfExist?     | `no` for a system in bulk. `implicit` for smooth walls (see SurfType). `explicit` for a surface built from atoms (currently graphene).                                                                                                                                                                                                                                                                                                                                                                                            |
+| SurfType       | Shape of an `implicit` wall: `parallel`, `cylinder` or `sphere`. For an `explicit` surface: `graphene`. Use `no` otherwise.                                                                                                                                                                                                                                                                                                                                                                                               |
+| WallDyn        | `no` for fixed walls. `compress`, `extend` or `repulse` for walls that move (see the flags `-Wsz` and `-Wrt`).                                                                                                                                                                                                                                                                                                                                                                                                              |
+| Flow           | A driving force for flow. `no`, or one of: `velocity vx vy vz` — every atom gets this constant extra velocity (unit 0.02 Å/ps), e.g. `velocity 50.0 0.0 0.0`; `force fx fy fz` — every atom feels this constant force at thermostat events (unit pN), e.g. `force 5.0 0.0 0.0`; `charge n, x y z gradient distance` — *n* fixed charges at positions (x, y, z) that attract or repel charged atoms, with the potential gradient (kcal/mol) and interaction distance (Å), e.g. `charge 1, 150.0 50.0 50.0 1.0 1.0`. |
+| Obstruct?      | Obstruction walls. `no`, or the number of walls followed by the axis and position of each wall, separated by commas, e.g. `2, x 50.0, x 150.0`.                                                                                                                                                                                                                                                                                                                                                                                     |
+| Tunnel?        | Tunnels, used for translocation. `no`, or the number of tunnels followed by, for each tunnel, the start *x*, end *x*, *y*, *z* and diameter, separated by commas.                                                                                                                                                                                                                                                                                                                                                             |
+| SphObst?       | Spherical obstacles. `no`, or the number of obstacles followed by, for each one, its *x*, *y*, *z* and diameter, separated by commas.                                                                                                                                                                                                                                                                                                                                                                                           |
+|                |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 
-To run the executable sDMD, use the following command,
+To run a simulation:
 
 ```bash
-$ ./sDMD [FLAGS]
+$ ./src/sDMD -i input/ -o output/ -f input/ala10.gro
 ```
 
-Use the flag *-h* or *-help* to show the supported *FLAG*s,
+Use *-h* or *-help* to list all flags:
 
-**Flag**        | **Description**
---------------- | ---------------
--i              | directory of the parameter folder
--o              | directory of the output folder
--f              | (optional) follow the file name of the input coordinate file
--si             | (optional) follow the file name of the input saved data for continuity
--so             | (optional) follow the file name of the output saved data for continuity
--trj            | (optional) follow the file name of the output trajectory file
--cnt            | (optional) follow the file name of the output connection map
--log            | (optional) follow the file name of the output Log file 
--sys            | (optional) follow the file name of the output SysInfo file
--pot            | (optional) output potential energy, follow the file name, otherwise will use the default name
--kin            | (optional) output kinetic energy, follow the file name, otherwise will use the default name
--tem            | (optional) output temperature, follow the file name, otherwise will use the default name
--HBn            | (optional) output hydrogen bond number, follow the file name, otherwise will use the default name
--xyz            | (optional) output xyz trajectory, follow the file name, otherwise will use the default name
--pdb            | (optional) output pdb trajectory, follow the file name, otherwise will use the default name
--box            | (required only if the coordinate file is a .PDB file) the simulation box dimensions, x, y, z
--Wsz            | (required only if WallDyn is assigned) follow the maximum changing size of the wall, default 5 A
--Wrt            | (required only if WallDyn is assigned) follow the total time needed for the size change, default 200
--ter            | (optional) interactive termini selection, instead of charged (default)
--arg            | (optional) interactive arginine selection, instead of charged (default)
--asp            | (optional) interactive aspartic acid selection, instead of charged (default)
--glu            | (optional) interactive glutamic acid acid selection, instead of charged (default)
--his            | (optional) interactive histidine selection, instead of charged (default)
--lys            | (optional) interactive lysine selection, instead of charged (default)
--AlC            | (optional) charge all the atoms with 1 proton
--AlP            | (optional) charge the atoms in each peptide with [peptide net charge / peptide atom number]
--npC            | (optional) charge source will have no PBC
--COM            | (optional) keep the velocity of center of mass of the molecules
--REMD           | only use during REMD, follow the server name, the port number, the temperature, the exchange rate, <br>and the suffix name of saving files <br>(this flag will be set automatically by REMD executable)
--visual         | (optional) enable real-time visualization, default disabled
-<br><br>
+| **Flag** | **Description**                                                                                             |
+| -------------- | ----------------------------------------------------------------------------------------------------------------- |
+| -i             | input folder (with *parameter.txt* and the `Library_<name>` folder)                                           |
+| -o             | output folder                                                                                                     |
+| -f             | (optional) the coordinate file                                                                                    |
+| -seed          | (optional) random number seed, for reproducible runs. Default: taken from the clock.                              |
+| -si            | (optional) the saved-state file to continue from                                                                  |
+| -so            | (optional) the name of the saved-state file to write                                                              |
+| -trj           | (optional) the name of the trajectory file                                                                        |
+| -cnt           | (optional) the name of the connection (bond and hydrogen-bond) map file                                           |
+| -log           | (optional) the name of the log file                                                                               |
+| -sys           | (optional) the name of the system-information file                                                                |
+| -pot           | (optional) write the potential energy; optionally followed by a file name                                         |
+| -kin           | (optional) write the kinetic energy; optionally followed by a file name                                           |
+| -tem           | (optional) write the temperature; optionally followed by a file name                                              |
+| -HBn           | (optional) write the number of hydrogen bonds; optionally followed by a file name                                 |
+| -xyz           | (optional) also write the trajectory in *.xyz* format; optionally followed by a file name                       |
+| -pdb           | (optional) also write the trajectory in *.pdb* format; optionally followed by a file name                       |
+| -box           | (needed only for a *.pdb* coordinate file) the box size in *x*, *y* and *z*                               |
+| -cell          | (optional) cells per cut-off distance for the neighbour search: 1, 2 or 3. Default 0 = choose automatically       |
+| -pre           | (optional) start with the bonds (hydrogen bonds or disulfide bonds) listed in *PreBond.txt* in the input folder |
+| -fix           | (optional) keep the atoms listed in *FixedAtoms.txt* in the input folder fixed                                  |
+| -Wsz           | (needed only if WallDyn is set) how much the wall size changes, default 5 Å                                      |
+| -Wrt           | (needed only if WallDyn is set) how long the size change takes, default 200 time units                            |
+| -ter           | (optional) choose the charge state of the termini interactively, instead of charged (default)                     |
+| -arg           | (optional) choose the charge state of arginines interactively, instead of charged (default)                       |
+| -asp           | (optional) choose the charge state of aspartic acids interactively, instead of charged (default)                  |
+| -glu           | (optional) choose the charge state of glutamic acids interactively, instead of charged (default)                  |
+| -his           | (optional) choose the charge state of histidines interactively, instead of charged (default)                      |
+| -lys           | (optional) choose the charge state of lysines interactively, instead of charged (default)                         |
+| -AlC           | (optional) give every atom a charge of +1                                                                         |
+| -AlP           | (optional) spread each peptide's net charge evenly over its atoms                                                 |
+| -npC           | (optional) the fixed charges of the `charge` flow have no periodic images                                       |
+| -COM           | (optional) keep the centre-of-mass velocity of the molecules                                                      |
+| -REMD          | used only inside REMD; set automatically by *sREMD*                                                             |
+| -visual        | (optional) show the simulation live (needs a `VIS=yes` build)                                                   |
+|                |                                                                                                                   |
+
+Every file and folder path may be up to 4096 characters long. The input and output folder names may use up to half of that and file names up to a quarter, so a folder plus a file name always fits.
 
 ### **REMD Simulation**
 
-Besides the required files and commands mentioned above, to perform a REMD simulation, sDMD needs another configuration file, *REMDConfig.txt*, and the other two executables, *sServer* and *sREMD*. The configuration file must be in the *input* folder and the two executables must be in the same folder of executable *sDMD*. The *T(reduced)* item in *parameter.txt* should be set to "no".
+An REMD run needs, besides the files above, the configuration file *REMDConfig.txt* and the programs *sServer* and *sREMD* in the same folder as *sDMD*. Set *Temp* in *parameter.txt* to `no`; each replica gets its temperature from *REMDConfig.txt*.
 
-Below is an example of the configuration file (the first line is just a comment),
+Example *REMDConfig.txt* (the first line is a comment):
 
 ```txt
 #REPLICA EXCHANGE MD CONFIGURATION FILE
-ReplicaNum   = 3
-Temperatures = 275 350 450
-SocketPort   = 20202
-ExchangeRate = 50
+ReplicaNum              = 3
+Temperatures            = 275 350 450
+SocketPort              = 20202
+ExchangeRate            = 1000
 ```
 
-**Item**        | **Description**
-----------   | ----------
-ReplicaNum   | The number of replicas.
-Temperatures | The temperature of each replica. Unit is K.
-SocketPort   | The port number of the socket server.
-ExchangeRate | How often the temperature will be exchanged. Unit is the time unit.
-<br>
+| **Item** | **Description**                                       |
+| -------------- | ----------------------------------------------------------- |
+| ReplicaNum     | Number of replicas.                                         |
+| Temperatures   | Temperature of each replica, in K.                          |
+| SocketPort     | Port number of the socket server.                           |
+| ExchangeRate   | How often replicas try to swap temperatures, in time units. |
+|                |                                                             |
 
-
-To run the executable *sREMD*, use the following command,
+Run *sREMD* from the `src` folder. It starts *./sDMD* and *./sServer* from there:
 
 ```bash
-$ ./sREMD [distribute T or not] -f [configuration file] -args [args of executable without flag -REMD]
+$ cd src
+$ ./sREMD -f ../input/REMDConfig.txt -args -i ../input/ -o ../output/ -f ala10.gro -end
 ```
 
-**Flag**        | **Description**
------------- | ---------
--nodist      | [yes] Default is yes, if absent. Otherwise, the program will NOT distribute the preset <br>temperature to each replica. Use this flag if users would like to extend/restart the simulation.
--f           | follow the file name of the REMD configuration file
--args        | flags used in each individual replica
-<br>
+| **Flag** | **Description**                                                                  |
+| -------------- | -------------------------------------------------------------------------------------- |
+| -f             | the REMD configuration file                                                            |
+| -args          | the flags passed to every replica's *sDMD* (without *-REMD*), ending with `-end` |
+|                |                                                                                        |
 
-The flags of executable *sServer* and the *-REMD* flag of executable *sDMD* will be set by *sREMD* automatically.
-<br><br>
+*sREMD* adds the *-REMD* flag for each replica and starts *sServer* by itself. Each replica's screen output goes to *outputData_\<n\>.txt* in the folder where *sREMD* was started, and its data files get the replica number in their names. If all replicas stop before finishing, *sREMD* also stops the server.
 
 ### **Analysis**
 
-To perform an analysis, use the following command,
+To analyze a simulation:
 
 ```bash
-$ ./analysis [FLAGS]
+$ ./analysis/sAnalysis -path output/ -trj out_trj.gro -cnt out_cnt.txt -rPBC -HB -Ramach
 ```
 
-Use the flag *-h* or *-help* to show the supported *FLAGs*,
+Use *-h* or *-help* to list all flags:
 
-**Flag**    | **Description**
------------ | -----------
--path       | exact path of the data folder
--trj        | trajectory input file
--cnt        | connect map input file
--sys        | (optional) system info input file
--log        | (optional) log input file
--obs        | (optional) exact path of the obstacle info input file
--nPP        | (optional) only analyze this specific number of peptide
--sum        | (optional) ignore the old time record in .log file
--rPBC       | remove PBC, call at the beginning. require -trj input file
--HB         | analyze HB info. require -cnt input file
--En         | analyze energy info
--Ag         | analyze aggregation info
--RG         | calculate RG (not support yet)
--MSD        | calculate MSD (not support yet)
--Ramach     | (require -HB) plot Ramachandran plots for each amino acid
--ConMap     | (require -HB) plot contact maps for atoms and amino acids
--REMD       | analyze REMD data. follow the flags below:
--reNo       | number of replicas
--bin        | (optional) number of bins in histogram. default 10
--aHB        | (optional) use alpha HB number as the reaction coordinate
--bHB        | (optional) use beta HB number as the reaction coordinate
--tHB        | (optional) use total HB number as the reaction coordinate
--maxE       | (optional) max value of potential energy (most negative). default -150
--minE       | (optional) min value of potential energy (least negative). default 0
--rate       | (optional) data dumping rate, unit is the time unit. default 10
--temp       | (optional) target temperature. default 300
--st         | (optional) start frame of analyzing. default 0
--et         | (optional) end frame of analyzing. default -1 (the final frame)
-<br>
+| **Flag** | **Description**                                                                         |
+| -------------- | --------------------------------------------------------------------------------------------- |
+| -path          | the folder with the simulation output                                                         |
+| -trj           | the trajectory file                                                                           |
+| -cnt           | the connection map file                                                                       |
+| -sys           | (optional) the system-information file                                                        |
+| -log           | (optional) the log file                                                                       |
+| -ref           | (optional) a reference structure, for RMSD                                                    |
+| -obs           | (optional) the obstruction-wall information file                                              |
+| -nPP           | (optional) analyze only this peptide (by number)                                              |
+| -sum           | (optional) analyze all output files in the folder, including continued runs                   |
+| -rPBC          | remove periodic boundary conditions. Run this first; needs -trj                               |
+| -HB            | hydrogen-bond analysis; needs -cnt                                                            |
+| -En            | energies and temperature                                                                      |
+| -Ag            | aggregation (cluster counting)                                                                |
+| -RG            | radius of gyration                                                                            |
+| -RMSD          | root-mean-square deviation from the structure given with -ref (backbone atoms; proteins only) |
+| -PotMap        | potential energy as a function of RMSD to two reference structures (needs -ref)               |
+| -Ramach        | Ramachandran plot of each amino acid (needs -HB)                                              |
+| -ConMap        | contact maps of atoms and of amino acids (needs -HB)                                          |
+| -dens          | density profile along `x`, `y` or `z`                                                   |
+| -PSD           | pore-size distribution; followed by the number of grid cells in *x*, *y* and *z*        |
+| -dis           | distance analysis; currently only `CG2Wall`                                                 |
+| -MSD           | mean-square displacement (accepted, but not implemented yet)                                  |
+| -REMD          | analyze REMD data, with these extra flags:                                                    |
+| -reNo          | number of replicas                                                                            |
+| -bin           | (optional) number of histogram bins, default 10                                               |
+| -aHB           | (optional) use the number of α-helix hydrogen bonds as the reaction coordinate               |
+| -bHB           | (optional) use the number of β-sheet hydrogen bonds as the reaction coordinate               |
+| -tHB           | (optional) use the total number of hydrogen bonds as the reaction coordinate                  |
+| -rmsd          | (optional) use the RMSD as the reaction coordinate (needs -RMSD and -ref)                     |
+| -rate          | (optional) how often frames were written, in time units, default 10                           |
+| -temp          | (optional) target temperature, default 300                                                    |
+| -st            | (optional) first frame to analyze, default 0                                                  |
+| -et            | (optional) last frame to analyze, default -1 (the final frame)                                |
+|                |                                                                                               |
 
-The analysis program is also highly modularized and optimized. It will be easy to add more analysis functions into it.
+The analysis program is modular, so new analyses are easy to add. It reads the binary files written by sDMD (see [Output Files](#output-files)), including files written by older versions.
 
 
-<br><br>
 *Reference*
 
 <b id="c51">[1]</b> Ding, F.; Tsao, D.; Nie, H.; Dokholyan, N. V., Ab initio folding of proteins with all-atom discrete molecular dynamics. *Structure* **2008,** *16* (7), 1010-8.[↩](#c51)
 
 <b id="c52">[2]</b> Andersen, H. C., Molecular dynamics simulations at constant pressure and/or temperature. *The Journal of Chemical Physics* **1980,** *72* (4), 2384-2393.[↩](#c52)
-<br><br><br>
-<br><br><br>
-
 
 
 **Format**
-==========
+======
 
 **Coordinate File**
--------------------
+---------------
 
-sDMD supports *.pdb* and *.gro* files as the coordinate input file. But it recommends to use a *.gro* file as the coordinate file, since the *.pdb* file has too many alternative formats.
+sDMD reads *.gro* and *.pdb* coordinate files. We recommend *.gro*, because *.pdb* files come in many variants.
 
-Users can install Gromacs independently and use the following command to convert *.pdb* file to *.gro* format.
+You can convert a *.pdb* file to *.gro* with GROMACS:
 
 ```bash
 $ gmx pdb2gmx -f coor.pdb -o coor.gro -ignh
 ```
 
-During the converting process, Gromacs would ask users to choose a force field type, i.e. GROMOS, CHARMM, and OPLS, it recommands to choose any GROMOS force field since the defined atom names in the library is similar to those applied in sDMD. After converting, users would need to delete all the solvent molecules in the *.gro* file if there exists and remember to renew the total atom number at the 2nd line of the file.
+GROMACS will ask for a force field. Choose a GROMOS force field, because its atom names are the closest to the names used in sDMD. For a protein simulation with the protein library, delete any water molecules from the *.gro* file afterwards and update the total number of atoms on the second line.
 
-When sDMD imports the coordinate file, it will first read the original *.pdb* or *.gro* file. During this process, the program will remove the atoms those are not in the model library, such as the light hydrogens and one of the carboxylic oxygen on the C terminal of a peptide. At the same time, the program will extract the atom information and assign them onto the internal variables about protein/peptide, amino acid and atom.
+When sDMD reads the coordinate file, it removes atoms that are not in the model library, such as non-polar hydrogens and one of the two oxygens at the C-terminus. It then works out the molecules, residues and atoms and stores this information. Some of it can only be finished after the whole file has been read, so the program writes an intermediate *coordinate.xyz* file to the input folder and reads it back.
 
-After read through the whole coordinate file, some data will be dumped into a *.xyz* file. The program will then read the *.xyz* file in order to finish the final assignments for some other variables. The reason of such process is that some of the variables can be correctly assigned only after the program has read through and modified the original coordinate file.
-
-The output trajectory file will be of *.gro* format. It consists of multiple continuous snapshots of the atoms' coordinates. The snapshot/data dumping rate is defined in *parameter.txt*.
-<br><br>
+The trajectory is written in *.gro* format: a series of snapshots of all atom positions, written every *Dump_Rate* time units.
 
 ### **GRO File**
 
-Pay attention that the coordinate unit of *.gro* file is nm. The length unit in sDMD, however, is Å. The program will convert the unit
-automatically.
+Note that coordinates in a *.gro* file are in nm, while sDMD works in Å. The program converts them automatically.
 
-The following is an example of the *.gro* file,
+Example *.gro* file:
 
 ```txt
 model
@@ -879,62 +815,71 @@ model
    7.00000   7.00000   7.00000
 ```
 
-The first line is a comment, can be a brief description of the system. Only one line of comment will be allowed.
+The first line is a comment, for example a short description of the system. Only one comment line is allowed.
 
-The second line has only one number represents the total atom number in the system. In this example it has 375 atoms. To save pages here does not show them all.
+The second line is the total number of atoms (375 here; not all are shown).
 
-The line after the second contains the information of each atom. Use the line below as an example,
+Each following line describes one atom. Take this line as an example:
 
 ```txt
     2ALA     N    9    1.256 2.353 3.680
 ```
 
-The first term describes at which amino acid in a protein/peptide the atom locates. Here is the second amino acid whose name is "ALA". Pay attention that the amino acid number here is not continuous between proteins/peptides, which means that if there are multiple molecules in the system, this number will start from 1 for each individual molecule. This will help the program to judge how many molecules there are in the system. The second term is the atom's name. The third term is the sequence number of this atom in the whole system. This number is continuous in the whole system. The following three terms are the atom's coordinates on *x-*, *y-* and *z-* axis, respectively. If this is a output *.gro* file from the simulation, there will be three more terms following the coordinates. They are the atom's velocities on *x-*, *y-* and *z-* axis, respectively.
+The first field says which residue the atom belongs to: here the second residue, alanine (ALA). Residue numbers start again from 1 for every molecule; this is how the program tells where one molecule ends and the next begins. The second field is the atom name. The third is the atom's number in the whole system, which runs continuously. The last three fields are the *x*, *y* and *z* coordinates. In a trajectory written by sDMD, three more fields follow: the *x*, *y* and *z* velocities.
 
-The three numbers on the last line of the *.gro* file are the dimensions of the simulation box, on *x-*, *y-* and *z-* axis, respectively.
-<br><br>
+The last line gives the box size in *x*, *y* and *z*.
 
 ### **PDB File**
 
-The following is an example of the supported *.pdb* file,
+Example *.pdb* file:
 
 ```txt
 REMARK    THIS IS A SIMULATION BOX
 CRYST1  150.000  150.000  150.000  90.00  90.00  90.00 P 1        1
-ATOM      1  N   ASP X   1      60.227  61.745  83.465  0.00  0.00            
-ATOM      2  CA  ASP X   1      61.467  61.725  82.715  0.00  0.00            
-ATOM      3  C   ASP X   1      61.197  61.205  81.305  0.00  0.00            
-ATOM      4  O   ASP X   1      60.557  60.165  81.135  0.00  0.00            
-ATOM      5  CB  ASP X   1      62.497  60.795  83.365  0.00  0.00            
-ATOM      6  CG  ASP X   1      61.967  59.415  83.755  0.00  0.00            
-ATOM      7  OD1 ASP X   1      61.087  59.365  84.635  0.00  0.00            
-ATOM      8  OD2 ASP X   1      62.457  58.435  83.165  0.00  0.00            
-ATOM      9  N   ALA X   2      61.687  61.945  80.325  0.00  0.00            
+ATOM      1  N   ASP X   1      60.227  61.745  83.465  0.00  0.00
+ATOM      2  CA  ASP X   1      61.467  61.725  82.715  0.00  0.00
+ATOM      3  C   ASP X   1      61.197  61.205  81.305  0.00  0.00
+ATOM      4  O   ASP X   1      60.557  60.165  81.135  0.00  0.00
+ATOM      5  CB  ASP X   1      62.497  60.795  83.365  0.00  0.00
+ATOM      6  CG  ASP X   1      61.967  59.415  83.755  0.00  0.00
+ATOM      7  OD1 ASP X   1      61.087  59.365  84.635  0.00  0.00
+ATOM      8  OD2 ASP X   1      62.457  58.435  83.165  0.00  0.00
+ATOM      9  N   ALA X   2      61.687  61.945  80.325  0.00  0.00
 ATOM     10  CA  ALA X   2      61.497  61.565  78.925  0.00  0.00
 …
 END
 ```
 
-The *.pdb* file can have several lines of comments/descriptions at the head. The useful information is on the lines starting with the keyword "ATOM". Use the following line as an example,
+A *.pdb* file can start with several comment lines. Only lines starting with "ATOM" are read. Take this line as an example:
 
 ```txt
-ATOM      9  N   ALA X   2      61.687  61.945  80.325  0.00  0.00            
+ATOM      9  N   ALA X   2      61.687  61.945  80.325  0.00  0.00
 ```
 
-The first term is the keyword. The second term is the sequence number of this atom in the whole system, which is continuous. The third term is the atom's name. The fourth term is the amino acid name at which the atom locates. The fifth term is just an arbitrary symbol for the protein molecule. The atoms in the same molecule will share the same symbol. Different molecules can have the same symbol, but not the adjoining two. The sixth term is the amino acid's sequence number in the protein. This number is not continuous between different molecules. The following three terms are the atom's coordinates on *x-*, *y-* and *z-* axis, respectively. sDMD will ignore all the terms behind.
+The first field is the keyword. The second is the atom's number in the whole system. The third is the atom name and the fourth the residue name. The fifth is a label for the molecule: all atoms of one molecule share the same label; different molecules may reuse a label, but two neighbouring molecules must not have the same one. The sixth is the residue number, which starts again for each molecule. The next three fields are the *x*, *y* and *z* coordinates in Å. Everything after that is ignored.
 
-To import the coordinates from a *.pdb* format file, users need to specify the dimensions of the simulation box by using -box flag while executing sDMD.
-<br><br>
+A *.pdb* file does not reliably carry the box size, so give it with the *-box* flag.
 
-**Force Field File**
---------------------
+**Force Field Files**
+-----------------
 
-The force field consists of two types of files: one contains the parameters of amino acid and the other contains the potential table.
-<br><br>
+A force-field folder, `Library_<name>`, contains:
 
-### **Parameters of amino acid**
+- *FF_Info.txt* — the lists of residues and atom types
+- one file per residue, for example *ALA.txt* — the atoms, bonds and constraints of that residue
+- *NonbondedPotentialTable.txt* — the step potentials between non-bonded atom pairs
+- *HBPotentialTable.txt* — the step potentials used for hydrogen bonds
+- *Wall.txt* — the atom type used for smooth walls
 
-There are 22 parameter files for the 21 types of amino acids. Proline has 2. The file's name indicates which amino acid it represents. Here use ALA.txt as an example,
+The program also writes the potentials it actually uses to the output folder (*BondedPotentialTable.txt* and one *\*_stepFun.txt* file per atom-type pair), so you can check them.
+
+### **FF_Info.txt**
+
+This file lists every residue (name, number, number of atoms) under `#Res`, and every atom type (name, number) under `#Atom`. Any new residue or atom type must be added here.
+
+### **Residue Files**
+
+There is one file per residue. Using *ALA.txt* as an example:
 
 ```txt
 RESIDUE ALA
@@ -955,199 +900,241 @@ RESIDUE ALA
 …
 CONSTR2 C      +C     2.700 2.846 1.500 2.910 0.500 4.000
 …
+ HBCNT1 H      HB_HB  D     N
+ HBCNT1 O      OZB_HB A     C
 ```
 
-The first line is the name of the amino acid. The lines starting with the keyword "ATOM" list all the atoms in this amino acid. Pay attention that all the amino acids, except for proline "PRO", share the same backbone characteristics of alaline "ALA" (glycine "GLY" skips the sidechain "CB" in "ALA"). So for those amino acids the "ATOM" lines only list their own dedicated atoms and the backbone data will be read from *ALA.txt*. Use the following line as an example,
+The first line names the residue. Every amino acid except proline (PRO) has the same backbone as alanine (ALA); glycine (GLY) has no CB. So the other amino-acid files list only their own side-chain atoms, bonds and constraints, and the backbone is read from *ALA.txt*.
+
+**ATOM** lines list the atoms. For example:
 
 ```txt
    ATOM CA     CA1    12.0  N N
 ```
 
-The second term is the atom's name. The third term is the atom's type. (All the supporting types of atoms can be find in *InteractionPotentialTable.txt* in the library folder.) The fourth term is the atom's mass. Pay attention that the mass of hydrogen is set as 12.0, as the author suggests.<sup id="c61">[1](#c61)</sup> This can avoid over-vibration of hydrogen atoms due to its small mass and accelerate the simulation speed. If users would like to change the mass back to 1.0, he/she can modify the source code of function *ScanAA* in *initialization.c*. The last two terms are left for the future development. They can be assigned by any values which gives the atom extra properties.
+The fields are the atom name (CA), the atom type (CA1; all types are listed in *FF_Info.txt*), and the mass. The mass of hydrogen is set to 12.0, as the authors of the force field recommend.<sup id="c61"></sup> Light hydrogens would vibrate very fast and slow down the simulation. The last two fields are reserved for future use.
 
-The lines starting with the keyword "BOND" list all the bonds in this amino acid. Again, all the amino acids except "ALA", "GLY" and "GRO" only list their own dedicated bonds. Use the following line as an example,
+**BOND** lines list covalent bonds. For example:
 
 ```txt
    BOND N      H      1.000 0.020
 ```
 
-This line means there is a covalent bond between atom N and atom H. The bond length is 1.000 Å and can vibrate between *1.0 x (1 - 0.02)* and *1.0 x (1 + 0.02)*.
+means atoms N and H are bonded, with a length of 1.000 Å that may vary between *1.0 x (1 - 0.02)* and *1.0 x (1 + 0.02)*.
 
-The format of the lines starting with the keywords "ANGLE" and "INTER" are similar to "BOND" lines. They are however auxiliary bonds. The "+" symbol in front of the atom name means this atom locates in the next amino acid.
+**ANGLE** and **INTER** lines have the same format, but they are auxiliary bonds: ANGLE holds a bond angle inside the residue, and INTER links an atom to an atom of the next residue. A "+" in front of an atom name means the atom belongs to the next residue.
 
-The line starting with the keyword "CONSTR" list all the dihedral constraints in the amino acid. Use the following line as an example.
+**CONSTR** lines are dihedral constraints, which have several steps. For example:
 
 ```txt
 CONSTR2 C      +C     2.700 2.846 1.500 2.910 0.500 4.000
 ```
 
-The number after the keyword "CONSTR" represents the number of steps there will be in the potential function. The second and the third terms are the head and tail atoms in the dihedral angle. Starting from the fourth term are the values construct the potential function. The first and the last values represent the minimum and the maximum distance between the two atoms; the values in the middle are presented as pairs: the first values are the discontinuity positions in the step function and the second values are the energy change crossing the steps. In this example, the maximum distance is 4.000 Å; when the two atoms move closer than 2.910 Å, the potential energy will decrease 0.500 kcal / mol, or become less negative by 0.500 kcal / mol; when they move even closer than 2.846 Å, the potential energy will further decrease 1.500 kcal / mol. The distance between the two atoms cannot be smaller than 2.700 Å.
+The number after "CONSTR" is the number of steps (2). Then come the two atoms. The first number (2.700 Å) is the closest the two atoms may get, and the last (4.000 Å) the farthest. In between are pairs of numbers: the distance of a step, and the change in energy when the atoms move inward across that step. The energy is zero in the outermost shell. In this example:
 
-sDMD allows users to use any supporting atom to construct the wall surface. Simply copy the atom info from the library into the file *wall.txt* locates in the library folder. The default is "CA". Users can change it at will. Below is an example,
+- from 2.910 to 4.000 Å the energy is 0
+- from 2.846 to 2.910 Å it is 0 + 0.500 = 0.500 kcal/mol
+- from 2.700 to 2.846 Å it is 0.500 + 1.500 = 2.000 kcal/mol
+
+**HBCNT** lines say which atoms can form hydrogen bonds. For example, `HBCNT1 H HB_HB D N` means: atom H is a donor (`D`); while in a hydrogen bond it becomes type `HB_HB`; and it has one neighbour (`N`) that is used to check the bond's orientation. The digit after HBCNT is the number of neighbours. Acceptors use `A`.
+
+Smooth walls are made of one atom type, given in *Wall.txt* (default CA):
 
 ```txt
 Wall
    ATOM CA      CA    12.0  N N
 ```
-<br><br>
 
 
-### **Potential Table**
+### **Potential Tables**
 
-There are two types of potential table: one is for VDW interaction, called "InteractionPotentialTable.txt", and the other is for hydrogen bond interaction, called *HBPotentialTable.txt*. They share the same format and are similar to that used in "CONSTR" line aforementioned. Any lines starting with "\#" symbol are the comments. Use the following line from *InteractionPotentialTable.txt* as an example,
+*NonbondedPotentialTable.txt* and *HBPotentialTable.txt* use the same step format as the CONSTR lines. Lines starting with "#" are comments. Example from *NonbondedPotentialTable.txt*:
 
 ```txt
-HB   CA   2.000000 2.50000 0.20000 4.50000 0.02000 6.50000 0.01000
+H    CA   2.000000 2.50000 0.20000
 ```
 
-The first two terms represent the pair of atoms that holds the following potential function. The only difference from the "CONSTR" line is that there is no maximum distance here, which means the number of values after the atom names is always odd, while in the "CONSTR" line it is even.
+The first two fields are the atom types of the pair. Then comes the closest allowed distance (2.0 Å), followed by step distance and energy pairs. Unlike CONSTR lines, there is no largest distance: beyond the last step the energy is zero and the atoms simply do not interact.
+
+*HBPotentialTable.txt* starts with one scale factor per class of hydrogen bond (backbone–backbone, backbone–side chain, side chain–side chain), followed by the number of hydrogen-bond types and a block for each type. Each block gives the potential between the hydrogen and the acceptor, and the potentials of the neighbour pairs that check the bond's orientation:
+
+```txt
+#Potential Energy(rate, value)
+ Backbone-Backbone	0.806	0.000
+ Backbone-Sidechain	1.000	0.000
+ Sidechain-Sidechain	1.000	0.000
+
+#Total number of types
+11
+
+#1 Backbone - Backbone
+HB     OZB    1.72  1.80  1.00  2.20 -0.60  2.40 -1.20
+HB     CRB    2.80  2.90  1.00  3.27 -0.40  3.42 -0.40  3.75 -10.00  4.00  10.80
+NZB    OZB    2.69  2.76  1.00  3.13 -0.40  3.30 -0.40  3.50 -10.00  4.00  10.80
+…
+```
+
+**Important rule for anyone who writes or generates a potential table:** never write a step whose energy change is 0. If two neighbouring shells have the same energy, merge them into one shell. The program skips any pair whose steps on both sides of a shell have zero energy change. If this happens at the innermost shell, the hard core disappears and atoms can pass through each other.
 
 
-<br><br>
 *Reference*
 
 <b id="c61">[1]</b> Ding, F.; Tsao, D.; Nie, H.; Dokholyan, N. V., Ab initio folding of proteins with all-atom discrete molecular dynamics. *Structure* **2008,** *16* (7), 1010-8.[↩](#c61)
-<br><br><br>
-<br><br><br>
+
+**Output Files**
+------------
+
+sDMD writes these files to the output folder. When a file with the same name already exists, the old file is kept as a backup with the date and time added to its name, for example *out_trj@2026_06_07_19_52_58.gro*.
+
+| **File**             | **Written**    | **Content**                                                                               |
+| -------------------------- | -------------------- | ----------------------------------------------------------------------------------------------- |
+| out_trj.gro                | always               | trajectory, with positions and velocities, every *Dump_Rate*                                  |
+| out_cnt.txt                | always               | connection map: the bonds and hydrogen bonds of every atom (one line per atom, water included)  |
+| savedData.dat              | always               | the full state of the system, used by `continue` to extend a run                              |
+| out_log.txt                | always               | run settings and summary (including the random seed)                                            |
+| SysInfo.dat                | new runs             | system information (atoms, residues, constraints, hydrogen-bond classes), read by *sAnalysis* |
+| out_pot.txt                | with -pot            | potential energy                                                                                |
+| out_kin.txt                | with -kin            | kinetic energy                                                                                  |
+| out_tem.txt                | with -tem            | temperature                                                                                     |
+| out_HBn.txt                | with -HBn            | number of hydrogen bonds                                                                        |
+| out_xyz.xyz                | with -xyz            | trajectory in *.xyz* format                                                                   |
+| out_pdb.pdb                | with -pdb            | trajectory in *.pdb* format                                                                   |
+| WallInfo.dat, ObstInfo.dat | with walls/obstacles | wall and obstacle information for *sAnalysis*                                                 |
+| timeEvaluation.dat         | always               | run-time statistics                                                                             |
+
+*SysInfo.dat* and *savedData.dat* start with a marker and a version number. Newer versions of sDMD and sAnalysis use it to read files written by older versions.
+
+Remember that sDMD also writes *MiniEnergy.gro* and *coordinate.xyz* to the **input** folder.
 
 
 **Functions**
-=============
+=========
 
-This section will briefly describe the core functions in the main source code files. Most functions can be identified by their names.
-<br><br>
+This section briefly describes each source file. Most functions are named after what they do.
 
 **Simulation Source Code**
---------------------------
+----------------------
+
+#### DMD.h
+
+Defines all shared data structures, constants and enumerations (see [Data Structures](#data-structures)).
 
 #### DMD.c
 
-This file contains the main function.
-<br><br>
-
-#### CBT.c
-This file contains the functions to maintain the complete binary tree (CBT).
-<br><br>
-
-#### DataSave.c
-
-The functions in this file manage naming, backing up, creating, initializing and saving. All the saving processes will call the function *SaveData()*.
-<br><br>
-
-#### Event.c
-
-This file contains all the functions used to process the different events. The *DoEvent()* manages which event function will be called. The events like collision, bonding, formation and breaking of hydrogen bonds all call the function *InteractionEvent()*. Hydrogen bonding also has its own event function, *HBEvent()*. Other events have their own event functions: *ThermostatEvent()* for thermostat event, *PBCandCrossCellEvent()* for period boundary crossing and cell crossing event, *WallEvent()* for regular wall interaction event, *ObstEvent()* for additional obstacle wall interaction event, *TunnelEvent()* for tunnel interaction event, *ChargeEvent()* for electrostatic interaction event, and *SphObstEvent()* for spherical obstacle interaction event.
-
-The function *LinkList()* manages the linked list between cells. To increase the calculation speed, sDMD divides the simulation box into many cells and keeps tracking the cell number in which an atom locates. Thus, by using the linked list between the atom number and the cell number, it will be easy to find which atoms are in the target cell. Combining the linked list and the cut off radius, it is easy and fast to scan the 27 cells surrounding the target atom by which its next event can be computed.
-<br><br>
+Contains the main function. It reads the input, prints a summary of the settings, and starts the simulation.
 
 #### Initialization.c
 
-The functions in this file are used to read and import all the configurations, parameters and coordinates. They also allocate the memory for most of the variables in the simulation.
+Reads the command-line flags, *parameter.txt*, the coordinate file and the force-field library, and sets up all variables: atoms, bonds, constraints, potential tables, hydrogen-bond rules, walls and the initial energy minimization. `BuildStencil()` builds the list of neighbour cells that the neighbour search looks at, from the cell size and the cut-off distance.
 
-The functions are designed based on the formats of the force field.
-<br><br>
+#### FF.c
 
-#### List.c
-
-This file contains the functions to manage the dynamic linked list.
-<br><br>
-
-#### Models.c
-
-The functions in this file are used to convert the models' names (of atoms and amino acids) into numbers.
-<br><br>
-
-#### REMD.c
-
-The functions in this file are only used to perform the calculations for just one replica in a REMD simulation. *REMD()* initializes the variables. *REMDRun()* does the main jobs. *ReplicaExchange()* manages the data exchange, and *client\_open()* initializes a socket client for this replica.
-
-There are two other files to create replicas and server, *REMDExec.c* and *Server.c*, respectively.
-<br><br>
+Reads *FF_Info.txt* and the residue files (atoms, bonds, angles, dihedral constraints and the HBCNT hydrogen-bond lines), and writes the bonded potentials it builds to *BondedPotentialTable.txt*.
 
 #### SGThread.c
 
-This is the core file to perform a single-core non-REMD simulation. *SingleThread()* initializes the variables and *SingleThreadRun()* does the main jobs.
-<br><br>
+The core of the simulation. `SingleThread()` prepares the run and `SingleThreadRun()` runs the event loop (see [The Event Loop](#the-event-loop)). It also contains `Predict()`, `HazardCheck()` and `AssignJob()`, which picks the next event from the calendar.
 
-#### ThreadProcess.c
+#### CBT.c
 
-The functions to perform the main procedures of a DMD simulation are in this file. *FirstRun()* is only used when start a fresh new simulation. It will calculate the coming events for all the atoms for the first time and create a complete binary tree to manage the events sequence. *ProcessEvent()* is used by each thread to process the event, by the function *DoEvent()* (located in *Events.c*), and predict the future event, by the function *Predict()*. These two procedures will be done only if there exists no hazard for the current event, checked by the function *HazardCheck()*. Otherwise, the current event is marked as invalid and need to be re-predicted. *CommitEvent()* is used to commit the updated atom data to the raw data.
-<br><br>
+Maintains the event calendar: a complete binary tree that always keeps the earliest event at the top.
+
+#### Events.c
+
+Carries out every kind of event. `DoEvent()` decides which event function to call. Collisions, bonds, constraints and hydrogen-bond formation and breaking are handled by the interaction-event functions; there are separate functions for thermostat, cell-crossing and periodic-boundary, wall, obstacle, tunnel and charge events.
+
+`LinkList()` keeps track of which atoms are in which cell.
 
 #### TimePrediction.c
 
-This file contains all the functions used to predict the event time. Different events have their own time prediction functions. The function name indicates the event type.
-<br><br>
+Predicts when the next event of each kind will happen. Each event type has its own prediction function, named after the event. It also keeps the backup events (`KeepBackup()`, `TakeBackupEvent()`).
 
 #### ToolFunctions.c
 
-This file contains all the helper functions. The function FindPair() is used to find the right potential step at which the target atom pair locates.
-<br><br>
+Helper functions. `FindPair()` finds which potential step a pair of atoms is in, and `UpdateAtom()` brings an atom's position up to the current time.
 
-#### sREMD.c
+#### DataSave.c
 
-The functions in this file are only used to perform REMD simulation. It helps to establish multiple replicas and import arguments and flags into the executables *sDMD* and *sServer*.
-<br><br>
+Names, backs up, creates and writes all output files. Every save goes through `SaveData()`.
 
-#### sServer.c
+#### Models.c
 
-The functions in this file are only used to perform REMD simulation. It helps to create and maintain a socket server for the data exchanging between replicas.
-<br><br>
+Converts atom and residue names to numbers, and holds the hydrogen-bond rules (which atom pairs can form a bond and how strong it is).
 
-**Analysis Source Code**
-------------------------
+#### CG.c
 
-#### Analysis.c
-
-This file contains the main function.
-<br><br>
-
-#### FileManage.c
-
-The functions in this file help to assign names to files.
-<br><br>
-
-#### SystemInformation.c
-
-The functions in this file are used to read the system information data from the *.dat* file and *.log* file output from the simulation.
-<br><br>
-
-#### Cluster.c
-
-The functions in this file are used to calculate the cluster evolution during aggregation.
-<br><br>
-
-#### Energy.c
-
-Th functions in this file are used to calculate the total kinetic energy by *CalKeEnergy()*, and potential energy by *CalPoEnergy()*, of the individual protein/peptide or the whole system, as well as the potential energy between the proteins/peptides and the confinement walls by *CalWlEnergy()*. *CalTemp()* is used to calculate the system temperature, and *FindPair()* and *RightPair()* are used to find the right potential step at which a pair of atoms locates.
-<br><br>
-
-#### HBRamach.c
-
-The functions in this file are used to calculate the numbers of different types of hydrogen bonds. *RamachandranPlot()* is used to compute the Ramachandran plot of amino acids. If the flag *-ConMap* is set, *HBInfo()* will also produce the contact maps for both pairs of amino acids and pairs of atoms.
-<br><br>
-
-#### PBCAdjust.c
-
-The functions in this file are used to remove the period boundary condition in the trajectory file.
-<br><br>
+Experimental coarse-grained options, for example coarse-grained surfaces.
 
 #### REMD.c
 
-The functions in this file are used to perform WHAM<sup id="c71">[1-2](#c71)</sup> analysis for the results from REMD simulations.
-<br><br>
+Runs one replica of an REMD simulation. It connects to the server, plugs the temperature exchange into the normal event loop, and handles each exchange.
+
+#### REMDExec.c (*sREMD*)
+
+Starts the server and all replicas of an REMD simulation, and passes the flags on to each *sDMD*.
+
+#### Server.c (*sServer*)
+
+The socket server that passes temperatures and energies between replicas and decides whether two replicas swap.
+
+#### Visual.c
+
+Live OpenGL visualization (only built with `VIS=yes`).
+
+**Analysis Source Code**
+--------------------
+
+#### Analysis.h
+
+The analysis program's own copy of the data structures. It must match the layout of the files that sDMD writes.
+
+#### Analysis.c
+
+Contains the main function and reads the flags.
+
+#### FileManage.c
+
+Names input and output files, and finds all parts of a run that was continued.
+
+#### SystemInformation.c
+
+Reads the system information from *SysInfo.dat* and *out_log.txt*, in both the current and the older file formats.
+
+#### PBCAdjust.c
+
+Removes periodic boundary conditions from the trajectory, so molecules are not cut at the box edge.
+
+#### Energy.c
+
+Computes the kinetic energy (`CalKeEnergy()`), the potential energy (`CalPoEnergy()`) of each molecule or of the whole system, the energy between molecules and walls (`CalWlEnergy()`), and the temperature (`CalTemp()`).
+
+#### HBRamach.c
+
+Counts the different types of hydrogen bonds, computes Ramachandran plots (`RamachandranPlot()`), and with *-ConMap* also contact maps of atoms and of amino acids.
+
+#### Cluster.c
+
+Counts clusters during aggregation.
+
+#### RG.c, RMSD.c
+
+Radius of gyration, and RMSD from a reference structure (also used by *-PotMap*).
+
+#### Density.c, PSD.c, Distance.c
+
+Density profiles, pore-size distributions, and distances between coarse-grained beads and walls.
+
+#### REMD.c
+
+WHAM<sup id="c71"></sup> analysis of REMD results.
 
 #### Tools.c
 
-This file contains all the helper functions.
+Helper functions.
 
 
-<br><br>
 *Reference*
 
-<b id="c71">[1]</b> Kumar, S.; Rosenberg, J. M.; Bouzida, D.; Swendsen, R. H.; Kollman, P. A., THE weighted histogram analysis method for free-energy calculations on biomolecules. I. The method. *Journal of Computational Chemistry* **1992,** *13* (8), 1011-1021.[↩](#c71)
+<b id="c71">[1]</b> Kumar, S.; Rosenberg, J. M.; Bouzida, D.; Swendsen, R. H.; Kollman, P. A., The weighted histogram analysis method for free-energy calculations on biomolecules. I. The method. *Journal of Computational Chemistry* **1992,** *13* (8), 1011-1021.[↩](#c71)
 
 <b id="c71">[2]</b> Gallicchio, E.; Andrec, M.; Felts, A. K.; Levy, R. M., Temperature weighted histogram analysis method, replica exchange, and transition paths. *J Phys Chem B* **2005,** *109* (14), 6722-31.[↩](#c71)
-
-<br><br><br>

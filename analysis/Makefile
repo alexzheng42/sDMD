@@ -11,16 +11,19 @@ OBJ = Analysis.o 		  \
 	  RG.o 				  \
 	  RMSD.o              \
 	  SystemInformation.o \
-	  Tools.o             \
-	  Distance.o
+	  Tools.o 			  \
+	  Distance.o 		  \
+	  PSD.o 			  \
+	  Density.o 		  \
 
 all: sAnalysis
 
 sAnalysis: $(OBJ)
 	$(CC) -o $@ $^ -lm
 
+# $< compiles only the .c file; listing the header as a prerequisite still rebuilds on header edits
 %.o: %.c $(DEPS)
-	$(CC) -c $(CFLAGS) $^
+	$(CC) -c $(CFLAGS) $<
 
 clean:
 	rm -f *.o *.h.gch sAnalysis

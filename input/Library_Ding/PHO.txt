@@ -1,0 +1,2 @@
+MOL PHO # represents hydrophobic wall particles
+   ATOM   C     CA1    12.0  N N

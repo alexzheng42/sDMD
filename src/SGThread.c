@@ -8,13 +8,12 @@
 
 #include "DMD.h"
 
-void SingleThreadRun(void);
 void CGResidueRenew(int *renewList, struct AtomListStr *thisList);
 
 
 void SingleThread(void) {
 	Prepare();
-	SingleThreadRun();
+	SingleThreadRun(NULL, NULL);
 	return;
 }
 
@@ -28,19 +27,25 @@ void Prepare(void) {
     SaveData(lgf, fileList);
 
     atomList.ptr = (struct AtomStr **)calloc(atomnum + 1, sizeof(struct AtomStr *));
+    InitBackupEvents();
     for (int i = 1; i <= atomnum; i ++) {
         atomList.ptr[i] = &atom[i];
     }
     
     if (strcmp("new", neworcontinue) == 0) {
         SaveData(sysInfo, fileList);
-        if (strcmp(wallExist, "smooth") == 0) SaveData(wallInfo, fileList);
-        if (obstObj.mark) SaveData(obstInfo, fileList);
-        if (CG.mark)      SaveData(CGInfo, fileList);
+        if (strcmp(surfInfo.style, "implicit") == 0)
+            SaveData(wallInfo, fileList);
+        if (obstObj.mark)
+            SaveData(obstInfo, fileList);
+        if (CG.mark)
+            SaveData(CGInfo,   fileList);
         
 #ifndef GEL
+        BuildSurfaceConnection();
         SDEnergyMin(20000, &atomList);
 #endif
+        
         PBC("full", NULL, &atomList); //check if any of the coordinates would satisfy PBC
         LinkList("full", NULL, NULL, &atomList); //create link list
         
@@ -64,25 +69,36 @@ void Prepare(void) {
 }
 
 
-void SingleThreadRun(void) {
+// The event loop of every run. REMD plugs its replica exchange in through the hooks, so
+// it uses exactly the same event handling (backup events, CG renewal, stuck detection):
+//   afterEvent: called after each executed event (after the output files are written)
+//   beforeFree: called at the end, after all atoms are advanced to the final time
+void SingleThreadRun(void (*afterEvent)(void), void (*beforeFree)(void)) {
     int hazardType;
     int renewList[256] = {0};
     double processratio, gap = 0;
     struct AtomListStr *thisList = &atomList;
     struct AtomStr  *target;
     struct AtomStr  *partner;
+    int error_count = 0;
+    int hazard_count = 0;
+    long int last_warningsum = warningsum;
+    int warning_count = 0;
     
     while (currenttime <= timestep) {
         
         AssignJob(&target, &partner, renewList, thisList);
-        UpdateData(thisList->timeInr);
-        TimeForward(thisList->timeInr); //update the node time
-        currenttime += thisList->timeInr;
+        if (thisList->timeInr < 1E-14) {
+            error_count++;
+        }
 
-        hazardType = HazardCheck(target, partner,
-                                 thisList->ptr[target->dynamic->HB.neighbor],
-                                 (partner != NULL ? thisList->ptr[partner->dynamic->HB.neighbor] : NULL),
-                                 thisList);
+        currenttime += thisList->timeInr;
+        UpdateAtom(target, currenttime);
+        if (partner != NULL) {
+            UpdateAtom(partner, currenttime);
+        }
+
+        hazardType = HazardCheck(target, partner, thisList);
 
 #ifdef DEBUG_PRINTF
         printf("frame = %4li, target atom = %5i, partner = %5i, %6s:%6s, type = %2i",
@@ -100,12 +116,18 @@ void SingleThreadRun(void) {
             frame++;
             DoEvent(thisList); //calculate the after-event velocities
             target->dynamic->event.counter ++;
-            if (renewList[0] == 2 && strcmp(partner->property->extraProperty[1], "_CONS"))
+            if (renewList[0] == 2 && !FindStrInList(partner->property->extraProperty, "_CONS", 0))
                 partner->dynamic->event.counter ++;
             
+            // Reset loop-prevention counters upon successful event execution
+            error_count = 0;
+            hazard_count = 0;
+            warning_count = 0;
+            last_warningsum = warningsum;
+
 			if (CG.mark && target->dynamic->event.eventType == CGSu_Event) {
 				//if the target atom is a fixing atom and the event is a CGEvent, then all the atoms in the neighboring cells will be renewed
-				if (strcmp(target->property->extraProperty[1], "_CONS") == 0) {
+				if (FindStrInList(target->property->extraProperty, "_CONS", 0)) {
 					FixAssignRenewList(renewList, thisList);
 				}
 
@@ -126,10 +148,11 @@ void SingleThreadRun(void) {
                 gap += 0.01;
             }
             
-            if (strcmp(wallDyn.mark, "no")) DoWallDyn();
+            if (strcmp(wallDyn.mark, "no") != 0) DoWallDyn();
             
             //save data to the output files
             if (unlikely(currenttime >= outputrecord)) {
+                UpdateAllAtoms(currenttime);
                 for (int i = 0; i < lenFileType; i ++) {
                     if (fileList[i].mark) {
                         SaveData(i, fileList);
@@ -137,20 +160,46 @@ void SingleThreadRun(void) {
                 }
                 outputrecord += outputrate;
             }
+
+            if (afterEvent) afterEvent();
         } else {
 #ifdef DEBUG_PRINTF
             printf(", denied, self/partner changed!\n");
 #endif
+            hazard_count++;
+            if (hazard_count > 10000) {
+                printf("!!ERROR!!: too many consecutive HazardCheck failures! Potential infinite loop in lazy update.\n");
+                printf("           %s:%i\n", __FILE__, __LINE__);
+                exit(EXIT_FAILURE);
+            }
+
             renewList[0] = 1;
             renewList[2] = 0;
             renewList[3] = 0;
             
-            Predict(renewList, thisList);
+            if (TakeBackupEvent(target, thisList)) {
+                countBackup ++;
+            } else {
+                Predict(renewList, thisList);
+                countReCal ++;
+            }
             UpdateCBT(renewList);
-            countReCal ++;
+        }
+
+        if (warningsum > last_warningsum) {
+            warning_count += (int)(warningsum - last_warningsum);
+            last_warningsum = warningsum;
+        }
+
+        if (warningsum > 1000 && error_count > 10) {
+            printf("!!ERROR!!: warnings (%li) exceeded 1000 and errors exceeded 10 — simulation appears stuck.\n", warningsum);
+            printf("           %s:%i\n", __FILE__, __LINE__);
+            exit(EXIT_FAILURE);
         }
     }
     
+    UpdateAllAtoms(timestep);
+    if (beforeFree) beforeFree();
     FreeVariables();
     return;
 }
@@ -162,7 +211,7 @@ void Predict(int *renewList, struct AtomListStr *thisList) {
     for (int n = 1; renewList[n]; n ++) {
         target = thisList->ptr[renewList[n]];
         
-        if (strcmp(target->property->extraProperty[1], "_CONS") == 0) {
+        if (FindStrInList(target->property->extraProperty, "_CONS", 0)) {
             target->dynamic->event.time = INFINIT;
             continue;
         }
@@ -180,7 +229,7 @@ void Predict(int *renewList, struct AtomListStr *thisList) {
         HBNeighborTime(target, thisList);
 #endif
         
-        if (strcmp(wallExist, "no")) {
+        if (strcmp(surfInfo.style, "implicit") == 0) {
             WallTime(target);
         }
         
@@ -189,8 +238,8 @@ void Predict(int *renewList, struct AtomListStr *thisList) {
         }
         
         if (obstObj.mark && CG.mark == 2 && // CG surface, only the CG beads will calculate the time
-            (strcmp(target->property->extraProperty[0], "CG") == 0 ||
-             strcmp(target->property->extraProperty[1], "CONS") == 0)) {
+            (FindStrInList(target->property->extraProperty, "CG", 0) ||
+             FindStrInList(target->property->extraProperty, "CONS", 0))) {
                 CGSurfaceTime(target);
             }
         
@@ -212,25 +261,23 @@ void Predict(int *renewList, struct AtomListStr *thisList) {
 
 
 //!this function should be called before DoEvent!
-int HazardCheck(struct AtomStr *target, struct AtomStr *partner, struct AtomStr *targetNeighbor, struct AtomStr *partnerNeighbor, struct AtomListStr *thisList) {
-    int targetNum, partnerNum;
-    //0: no hazard; -1: partner changed
-    
-    targetNum = target->property->num;
+int HazardCheck(struct AtomStr *target, struct AtomStr *partner, struct AtomListStr *thisList) {
+    int partnerNum = -1;
+
     if (partner != NULL) partnerNum = partner->property->num;
-    else partnerNum = 0;
-    
-    //partner changed
+
+    // Check if the partner's state has changed since this event was predicted.
+    // target->dynamic->event.partnerCounter stores the partner's counter at prediction time.
     if (partnerNum > 0 &&
-        ( target->dynamic->event.partnerCounter < thisList->ptr[partnerNum]->dynamic->event.counter ||
-         partner->dynamic->event.counter        < thisList->ptr[partnerNum]->dynamic->event.counter))
+        target->dynamic->event.partnerCounter < partner->dynamic->event.counter)
         return -1;
-    
-    //self changed
-    if (target->dynamic->event.counter  < thisList->ptr[targetNum]->dynamic->event.counter ||
-        target->dynamic->event.partner != thisList->ptr[targetNum]->dynamic->event.partner)
+
+    // In a single-threaded environment, target's own counter and partner identity 
+    // shouldn't change between AssignJob and HazardCheck, but we keep the partner 
+    // check for consistency with the prediction logic.
+    if (target->dynamic->event.partner != (partner ? partner->property->num : INVALID))
         return -1;
-    
+
     return 0;
 }
 
@@ -242,7 +289,7 @@ void AssignJob(struct AtomStr **target, struct AtomStr **partner, int *renewList
     
     thisList->targetNum = CBT.node[1];
     thisList->target    = thisList->ptr[thisList->targetNum];
-    thisList->timeInr   = thisList->target->dynamic->event.time;
+    thisList->timeInr   = thisList->target->dynamic->event.time - currenttime;
     renewList[1]        = thisList->targetNum;
     
     if (thisList->target->dynamic->event.partner > 0) {

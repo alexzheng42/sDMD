@@ -1,7 +1,10 @@
 #Potential Energy(rate, value)
- Backbone-Backbone         1.000	0.000
- Backbone-Sidechain        1.000	0.000
-Sidechain-Sidechain        1.000	0.000
+ Backbone-Backbone	0.806	0.000
+ Backbone-Sidechain	1.000	0.000
+ Sidechain-Sidechain	1.000	0.000
+
+#Total number of types
+11
 
 #1 Backbone - Backbone
 HB     OZB    1.72  1.80  1.00  2.20 -0.60  2.40 -1.20

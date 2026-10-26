@@ -140,17 +140,22 @@ File List:
 
 	input (folder of the model library and the configuration files)
 	|-	Library_Ding
-		|-	AA (folder of the amino acid model)
-			|-	*.txt
-				model file of each amino acid.
+		|-	FF_Info.txt
+			list of the residues and atom types in the library.
+		|-	*.txt (e.g. ALA.txt)
+			model file of each amino acid / molecule.
 		|-	HBPotentialTable.txt
 			potential table for hydrogen bonding calculation.
-		|-	InteractionPotentialTable.txt
-			potential table for non-bonded and bonded interactions.
+		|-	NonbondedPotentialTable.txt
+			potential table for non-bonded interactions.
 		|-	Wall.txt
 			parameters of wall/surface.
 	|-	ala10.gro
 		coordinate input file of a poly-alanine in its native structure.
+	|-	insulin.gro
+		coordinate input file of insulin.
+	|-	PreBond.txt
+		list of bonds that exist before the simulation starts (used with -pre).
 	|-	parameter.txt
 		configuration file to perform the simulation.
 	|-	REMDConfig.txt

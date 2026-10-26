@@ -9,6 +9,48 @@
 #include "Analysis.h"
 
 
+int FindElemInList(int *list, int value, int start, int end, int add) {
+    if (end >= 0 && start >= 0 && end >= start) {
+        for (int i = start; i <= end; i ++) {
+            if (list[i] == value) {
+                return i;
+            } else if (list[i] == 0) {
+                if (add) list[i] = value;
+                return 0;
+            }
+        }
+    } else {
+        if (add) {
+            printf("!!ERROR!!: unbounded search does not support \"add\"!\n");
+            printf("%s:%i\n", __FILE__, __LINE__);
+            exit(EXIT_FAILURE);
+        }
+        
+        int i = 0;
+        while (list[++i]) {
+            if (list[i] == value) {
+                return i;
+            }
+        }
+    }
+    return 0;
+}
+
+
+int FindStrInList(char thisList[10][16], char *str, int add) {
+    for (int i = 1; i < 9; i++) {
+        if (strcmp(thisList[i], str) == 0) {
+            return i;
+        } else if (strcmp(thisList[i], "\0") == 0) {
+            if (add)
+                sprintf(thisList[i], "%s", str);
+            return 0;
+        }
+    }
+    return 0;
+}
+
+
 double absvalue_vector(double * vector)
 {
     double v12, v22 ,v32;
@@ -261,4 +303,50 @@ void PrintStep(struct StepPotenStr *thisStep) {
         thisStep = thisStep->next;
     }
     printf("\n");
+}
+
+void CreateGroup(void) {
+    int thisAtomNum;
+
+    if (group.molNum == 0) {
+        group.molNum = numofMol;
+        group.atomNum = atomnum;
+
+        group.list_Mol = (int *)calloc(group.molNum + 2, sizeof(int));
+        group.molList = (struct MolStr **)calloc(group.molNum + 2, sizeof(struct MolStr *));
+        for (int i = 1; i <= group.molNum; i++) {
+            group.list_Mol[i] = i;
+            group.molList[i] = &molecule[group.list_Mol[i]];
+        }
+
+        group.list_Atom = (int *)calloc(group.atomNum + 2, sizeof(int));
+        group.atomList = (struct AtomStr **)calloc(group.atomNum + 2, sizeof(struct AtomStr *));
+        for (int i = 1; i <= group.atomNum; i++) {
+            group.list_Atom[i] = i;
+            group.atomList[i] = &atom[group.list_Atom[i]];
+        }
+    } else { // group mol num and group list_mol has been assigned
+        group.molList = (struct MolStr **)calloc(group.molNum + 2, sizeof(struct MolStr *));
+        for (int i = 1; i <= group.molNum; i++) {
+            group.molList[i] = &molecule[group.list_Mol[i]];
+            thisAtomNum = group.molList[i]->endAtomNum - group.molList[i]->startAtomNum + 1;
+            group.atomNum += thisAtomNum;
+        }
+
+        group.list_Atom = (int *)calloc(group.atomNum + 2, sizeof(int));
+        group.atomList = (struct AtomStr **)calloc(group.atomNum + 2, sizeof(struct AtomStr *));
+        for (int i = 1, n = 1; i <= group.molNum; i++) {
+            for (int m = group.molList[i]->startAtomNum; m <= group.molList[i]->endAtomNum; m++, n++) {
+                if (n > group.atomNum) {
+                    printf("!!ERROR!!: group atom number exceeds the expected value! %s:%i\n", __FILE__, __LINE__);
+                    exit(EXIT_FAILURE);
+                }
+
+                group.list_Atom[n] = m;
+                group.atomList[n] = &atom[group.list_Atom[n]];
+            }
+        }
+    }
+
+    return;
 }

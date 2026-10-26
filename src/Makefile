@@ -1,6 +1,6 @@
 CC = gcc
 CFLAGS = -I. -O2 -std=c99 -w
-DEPS = List.h DMD.h
+DEPS = DMD.h
 OBJ = CBT.o \
       DataSave.o \
       DMD.o \
@@ -11,7 +11,8 @@ OBJ = CBT.o \
       ToolFunctions.o \
       SGThread.o \
       REMD.o \
-      CG.o
+      CG.o \
+      FF.o
 
 VISOBJ = Visual.o
 VISFLAG = -D VIS
@@ -44,7 +45,7 @@ sDMD: $(OBJ) $(VISOBJ)
 	$(CC) -o $@ $^ -lm -pthread $(LDFLAGS)
 
 %.o: %.c $(DEPS)
-	$(CC) -c $(CFLAGS) $^ $(VISFLAG)
+	$(CC) -c $(CFLAGS) $< -o $@ $(VISFLAG)
 
 else
 
@@ -53,7 +54,7 @@ sDMD: $(OBJ)
 	$(CC) -o $@ $^ -lm -pthread
 
 %.o: %.c $(DEPS)
-	$(CC) -c $(CFLAGS) $^
+	$(CC) -c $(CFLAGS) $< -o $@
 endif
 
 clean:

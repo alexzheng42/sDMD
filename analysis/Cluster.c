@@ -38,15 +38,15 @@ void ClusterInfo(int id) {
 }
 
 static void InitializeVariables(void) {
-    proteinList = (int *)calloc(numofprotein + 1, sizeof(int));
-    LONG_2CALLOC(interaction, (atomnum + 1), (atomnum + 1));
-    INT_2CALLOC(cluster, (numofprotein + 1), (numofprotein + 1));
+    proteinList = (int *)calloc(numofMol + 1, sizeof(int));
+    _CALLOC2(long, interaction, (atomnum  + 1), (atomnum  + 1));
+    _CALLOC2(int,  cluster,     (numofMol + 1), (numofMol + 1));
 }
 
 static void FreeVar() {
     free(proteinList); proteinList = NULL;
-    _2FREE(interaction);
-    _2FREE(cluster);
+    _FREE2(interaction);
+    _FREE2(cluster);
 }
 
 void CalCluster(int id) {
@@ -86,11 +86,11 @@ void CalCluster(int id) {
             PrintProcess(step);
             
             sect = &sectInfo[sectNum];
-            for (int i1 = 1; i1 <= numofprotein; i1 ++) {
-                for (int n1 = protein[i1].startAtomNum; n1 <= protein[i1].endAtomNum; n1 ++) {
+            for (int i1 = 1; i1 <= numofMol; i1 ++) {
+                for (int n1 = molecule[i1].startAtomNum; n1 <= molecule[i1].endAtomNum; n1 ++) {
                     
-                    for (int i2 = i1 + 1; i2 <= numofprotein; i2 ++) {
-                        for (int n2 = protein[i2].startAtomNum; n2 <= protein[i2].endAtomNum; n2 ++) {
+                    for (int i2 = i1 + 1; i2 <= numofMol; i2 ++) {
+                        for (int n2 = molecule[i2].startAtomNum; n2 <= molecule[i2].endAtomNum; n2 ++) {
                             if (CheckInteraction(&atom[n1], &atom[n2], connectionMap)) {
                                 if (interaction[n1][n2] == -1) {
                                     interaction[n1][n2] = step;
@@ -105,16 +105,16 @@ void CalCluster(int id) {
             
             if (step * sect->outputRate > gapTime) {
                 SetClusterZero(cluster);
-                SetListZero(proteinList, numofprotein);
-                cluster[0][0] = numofprotein;
-                for (int i1 = 1; i1 <= numofprotein; i1 ++) {
-                    for (int n1 = protein[i1].startAtomNum; n1 <= protein[i1].endAtomNum; n1 ++) {
+                SetListZero(proteinList, numofMol);
+                cluster[0][0] = numofMol;
+                for (int i1 = 1; i1 <= numofMol; i1 ++) {
+                    for (int n1 = molecule[i1].startAtomNum; n1 <= molecule[i1].endAtomNum; n1 ++) {
                         
-                        for (int i2 = i1 + 1; i2 <= numofprotein; i2 ++) {
+                        for (int i2 = i1 + 1; i2 <= numofMol; i2 ++) {
                             if (cluster[i1][i2] == 0) {
-                                for (int n2 = protein[i2].startAtomNum; n2 <= protein[i2].endAtomNum; n2 ++) {
+                                for (int n2 = molecule[i2].startAtomNum; n2 <= molecule[i2].endAtomNum; n2 ++) {
                                     if (interaction[n1][n2] > 0 && (step - interaction[n1][n2] > gapTime / sect->outputRate)) {
-                                        if (!CheckListandAdd(proteinList, numofprotein, i2)) {
+                                        if (!CheckListandAdd(proteinList, numofMol, i2)) {
                                             cluster[0][0] --;
                                             cluster[i1][i2] = 1;
                                             cluster[i2][i1] = 1;
@@ -167,8 +167,8 @@ void SetListZero(int *list, int listLen) {
 
 
 void SetClusterZero(int **cluster) {
-    for (int i = 0; i <= numofprotein; i ++) {
-        for (int n = 0; n <= numofprotein; n ++) {
+    for (int i = 0; i <= numofMol; i ++) {
+        for (int n = 0; n <= numofMol; n ++) {
             cluster[i][n] = 0;
         }
     }
@@ -201,7 +201,7 @@ void PrintInteraction(long **inter) {
         if (i <= atomnum / 2) {
             for (int n = 1; n <= atomnum; n ++) {
                 if (inter[i][n] > 0) {
-                    printf("atom %i : %i, protein %i : %i\n", i, n, atom[i].property->sequence.proteinNum, atom[n].property->sequence.proteinNum);
+                    printf("atom %i : %i, protein %i : %i\n", i, n, atom[i].property->sequence.molNum, atom[n].property->sequence.molNum);
                 }
             }
         }
@@ -211,8 +211,8 @@ void PrintInteraction(long **inter) {
 }
 
 void PrintCluster(int **cluster) {
-    for (int i = 1; i <= numofprotein; i ++) {
-        for (int n = 1; n <= numofprotein; n ++) {
+    for (int i = 1; i <= numofMol; i ++) {
+        for (int n = 1; n <= numofMol; n ++) {
             printf("%i ", cluster[i][n]);
         }
         printf("\n");

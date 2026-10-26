@@ -1,0 +1,7 @@
+WATER
+   ATOM OW     OW     16.0  N N
+   ATOM HW1	   HW     12.0  N N
+   ATOM HW2    HW     12.0  N N
+   BOND OW     HW1    0.957 0.020
+   BOND OW     HW2    0.957 0.020
+  ANGLE HW1    HW2    1.514 0.001

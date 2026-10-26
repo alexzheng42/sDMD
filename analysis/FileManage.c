@@ -33,7 +33,7 @@ void InitializeFiles(int row, int column) {
 
 
 void AssignName(char *oldName, char *newName, char *extra, int row) {
-    long len = strlen(oldName);
+    unsigned long len = strlen(oldName);
     
     if (len <= 4) {
         return;
@@ -41,10 +41,9 @@ void AssignName(char *oldName, char *newName, char *extra, int row) {
     
     strncpy(newName, oldName, len - 4);
 
-    if (row > 6 && nPP &&
-        strcmp(newName, "rPBCGRO")) { //for analyzing specific peptide
-        strcat(newName, "_p");
-        strcat(newName, targetPeptideNum);
+    if (row > 6 && (group.molNum > 0) &&
+        strcmp(newName, "rPBCGRO") != 0) { //for analyzing specific peptide
+        strcat(newName, "_group");
     }
 
     strcat(newName, extra);
@@ -63,7 +62,7 @@ void AssignFileList(int id) {
     }
     
     if (freshStart) {
-        long len = strlen(files[inLog][id].name);
+        unsigned long len = strlen(files[inLog][id].name);
         DIR *dir;
         struct dirent *dp;
         

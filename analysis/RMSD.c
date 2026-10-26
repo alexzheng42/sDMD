@@ -32,14 +32,13 @@ struct PESurStr {
 struct RMSDReadStr rmsd;
 
 static int nRow, nCol;
-static int beginP, endP, offSet, thisAtomNum;
 static double **curCoor, ***refCoor;
 static double **omega, **om, **vh, **vk, **u;
 static double *backboneMass;
 struct PESurStr **EnSurGrid;
 
 static int CheckBackbone(int num);
-static void InitializeVariables(void);
+static int InitializeVariables(void);
 static void FreeVar(void);
 static void ReadRef(char *fileName, int ndim, int natoms, double **ref);
 static void DoTranslation(int ndim, int natoms, double **coor);
@@ -74,7 +73,7 @@ void RMSDInfo(int id) {
     printf("Analyzing RMSD... ");
     fflush(stdout);
     
-    InitializeVariables();
+    if (!InitializeVariables()) return;
     
     if (RMSDFile.count == 0) {
         printf("!!ERROR!! no reference structure, which is required by RMSD calculation. please provide a valid reference structure by -ref! %s:%i\n", __FILE__, __LINE__);
@@ -145,7 +144,7 @@ void PESurfaceInfo(int id) {
         exit(EXIT_FAILURE);
     }
     
-    InitializeVariables();
+    if (!InitializeVariables()) return;
     
     //there would be multiple reference structures
     for (int i = 0; i < RMSDFile.count; i ++) {
@@ -277,7 +276,7 @@ void PESurfaceInfoPerT(void) {
     
     for (int id = 0; id < RE.numReplica; id ++) {
         
-        InitializeVariables();
+        if (!InitializeVariables()) return;
         
         //there would be multiple reference structures
         for (int i = 0; i < RMSDFile.count; i ++) {
@@ -456,37 +455,34 @@ void REMDPESurfaceCombine(void) {
     return;
 }
 
-void InitializeVariables(void) {
-    beginP = 1;
-    endP = numofprotein;
-    thisAtomNum = atomnum;
-    offSet = 0;
-    
-    if (nPP) {
-        beginP = endP = nPP;
-        thisAtomNum = protein[nPP].endAtomNum - protein[nPP].startAtomNum + 1;
-        offSet = protein[nPP].startAtomNum - 1;
-    }
-    
+// returns the number of backbone atoms; 0 (nothing allocated) if the system has no protein
+// backbone, e.g. pure water: RMSD and the PE surface are defined on backbone atoms only
+int InitializeVariables(void) {
+   
     nRow = 0;
     nCol = DIM;
-    for (int i = 1 + offSet; i <= offSet + thisAtomNum; i ++) {
+    for (int n = 1; n <= group.atomNum; n ++) {
+        int i = group.list_Atom[n];
         if (CheckBackbone(i)) {
             nRow ++;
         }
     }
+    if (nRow == 0) {
+        printf("!!ERROR!!: RMSD / PotMap use protein backbone atoms, and this system has none; skipped. %s:%i\n", __FILE__, __LINE__);
+        return 0;
+    }
     
     backboneMass = (double *)calloc(nRow, sizeof(double));
-    DOUBLE_2CALLOC(curCoor, nRow, nCol);
-    DOUBLE_2CALLOC(omega, 2 * DIM, 2 * DIM);
-    DOUBLE_2CALLOC(om,    2 * DIM, 2 * DIM);
-    DOUBLE_2CALLOC(vh,    2 * DIM, 2 * DIM);
-    DOUBLE_2CALLOC(vk,    2 * DIM, 2 * DIM);
-    DOUBLE_2CALLOC(u,     2 * DIM, 2 * DIM);
+    _CALLOC2(double, curCoor, nRow, nCol);
+    _CALLOC2(double, omega, 2 * DIM, 2 * DIM);
+    _CALLOC2(double, om,    2 * DIM, 2 * DIM);
+    _CALLOC2(double, vh,    2 * DIM, 2 * DIM);
+    _CALLOC2(double, vk,    2 * DIM, 2 * DIM);
+    _CALLOC2(double, u,     2 * DIM, 2 * DIM);
 
     refCoor = (double ***)calloc(RMSDFile.count, sizeof(double **));
     for (int i = 0; i < RMSDFile.count; i ++) {
-        DOUBLE_2CALLOC(refCoor[i], nRow, nCol);
+        _CALLOC2(double, refCoor[i], nRow, nCol);
     }
     
     if (analysisList[CalculatePotMap]) {
@@ -501,20 +497,20 @@ void InitializeVariables(void) {
         }
     }
     
-    return;
+    return nRow;
 }
 
 static void FreeVar(void) {
     free(backboneMass); backboneMass = NULL;
-    _2FREE(curCoor);
-    _2FREE(omega);
-    _2FREE(om);
-    _2FREE(vh);
-    _2FREE(vk);
-    _2FREE(u);
+    _FREE2(curCoor);
+    _FREE2(omega);
+    _FREE2(om);
+    _FREE2(vh);
+    _FREE2(vk);
+    _FREE2(u);
     
     for (int i = 0; i < RMSDFile.count; i ++) {
-        _2FREE(refCoor[i]);
+        _FREE2(refCoor[i]);
     }
     free(refCoor); refCoor = NULL;
     
@@ -584,8 +580,8 @@ void DoTranslation(int ndim, int natoms, double **coor) {
 
 void DoRotation(int ndim, int natoms, double **curCoordinate, double **refCoordinate) {
     double **clnCoor, **R;
-    DOUBLE_2CALLOC(clnCoor, natoms, ndim);
-    DOUBLE_2CALLOC(R, 3, 3);
+    _CALLOC2(double, clnCoor, natoms, ndim);
+    _CALLOC2(double, R, 3, 3);
     
     CalFitRotMatrix(3, natoms, refCoordinate, curCoordinate, R);
     DoTranspose(R, 3, 3); //the original coordinate matrix has been transposed:
@@ -594,15 +590,16 @@ void DoRotation(int ndim, int natoms, double **curCoordinate, double **refCoordi
     memcpy(clnCoor[0], curCoordinate[0], sizeof(double) * natoms * ndim);
     DoMultiply(clnCoor, R, curCoordinate, natoms, ndim, 3, 3);
     
-    _2FREE(clnCoor);
-    _2FREE(R);
+    _FREE2(clnCoor);
+    _FREE2(R);
     return;
 }
 
 void Coor2Matrix(double **matrix) {
     int m = 0;
     
-    for (int i = 1 + offSet; i <= thisAtomNum + offSet; i ++) {
+    for (int n = 1; n <= group.atomNum; n ++) {
+        int i = group.list_Atom[n];
         if (CheckBackbone(i)) {
             for (int n = 1; n <= 3 ; n ++) {
                 matrix[m][n - 1] = atom[i].dynamic->coordinate[n];
@@ -623,13 +620,17 @@ void SaveMatrix(double **matrix, char *fileName) {
     sprintf(directory, "%s%s", path, fileName);
     saveFile = fopen(directory, "w");
     
-    fprintf(saveFile, "Protein %i\n", nPP);
+    fprintf(saveFile, "mol %i: ", group.molNum);
+    for (int i = 1; i <= group.molNum; i ++) {
+        fprintf(saveFile, "%5i ", group.list_Mol[i]);
+    }
     fprintf(saveFile, "%5i\n", nRow);
     
-    for (int i = 1 + offSet; i <= thisAtomNum + offSet; i ++) {
+    for (int n = 1; n <= group.atomNum; n ++) {
+        int i = group.list_Atom[n];
         if (!CheckBackbone(i)) continue; //only consider the backbone atoms
         fprintf(saveFile, "%5i%-5s%5s%5i%8.3f%8.3f%8.3f\n",
-                atom[i].property->sequence.aminoacidNum, atom[i].property->nameofAA, atom[i].property->name, m + 1,
+                atom[i].property->sequence.resNum, atom[i].property->resName, atom[i].property->name, m + 1,
                 matrix[m][0] / 10, matrix[m][1] / 10, matrix[m][2] / 10);
         m ++;
     }
@@ -676,9 +677,9 @@ static void DoMultiply(double **LMatrix, double **RMatrix, double **result, int 
 }
 
 int CheckBackbone(int num) {
-    if (strcmp(atom[num].property->name, "N") == 0 ||
-        strcmp(atom[num].property->name, "CA") == 0 ||
-        strcmp(atom[num].property->name, "C") == 0) {
+    if (strcmp(atom[num].property->typeName[1], "NZB") == 0 ||
+        strcmp(atom[num].property->typeName[1], "CA1") == 0 ||
+        strcmp(atom[num].property->typeName[1], "CRB") == 0) {
         return 1;
     }
     

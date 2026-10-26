@@ -50,7 +50,11 @@ void InitializeFiles(char *extra, struct FileStr* fileList) {
     }
     
     for (int i = 0; i < lenFileType; i ++) {
-        AssignName(defaultName[i], fileList[i].name, extraName);
+        // keep a name given on the command line (-trj, -log, ...), otherwise use the default
+        char baseName[PATH_LEN];
+        snprintf(baseName, sizeof(baseName), "%s", fileList[i].name[0] ? fileList[i].name : defaultName[i]);
+        memset(fileList[i].name, '\0', sizeof(fileList[i].name));
+        AssignName(baseName, fileList[i].name, extraName);
     }
     
     fileList[trj].mark = 1;
@@ -62,7 +66,7 @@ void InitializeFiles(char *extra, struct FileStr* fileList) {
 
 
 void AssignName(char *oldName, char *newName, char *extra) {
-    long len = strlen(oldName);
+    unsigned long len = strlen(oldName);
     
     if (len <= 4) {
         return;
@@ -79,8 +83,8 @@ void AssignName(char *oldName, char *newName, char *extra) {
 void BackupFile(struct FileStr *file) {
     char *name = file->name;
     char extraName[256];
-    char newName[256];
-    char directory[1024], newDir[1024];
+    char newName[PATH_LEN];
+    char directory[PATH_LEN], newDir[PATH_LEN];
     
     sprintf(extraName, "@%s", timer);
     memset(newName, '\0', sizeof(newName));
@@ -96,7 +100,7 @@ void BackupFile(struct FileStr *file) {
 }
 
 void GenerateFile(struct FileStr *file) {
-    char directory[1024];
+    char directory[PATH_LEN];
     sprintf(directory, "%s/%s", savedir, file->name);
     file->file = fopen(directory, "w");
 }
@@ -153,55 +157,59 @@ void SaveData(enum FileType type, struct FileStr *fileList) {
             break;
             
         default:
-            printf("!!WARNING!!: unrecognized file type! %s:%i\n", __FILE__, __LINE__);
-            warningsum ++;
+            printf("!WARNING![%li]: unrecognized file type! %s:%i\n", ++warningsum, __FILE__, __LINE__);
             break;
     }
 }
 
 
-void GlobalCloseFree() {    
+void GlobalCloseFree(void) {
     for (int i = 0; i <= atomnum; i ++) {
         free(atom[i].property);
         free(atom[i].dynamic);
     }
     free(atom);
     
-    FREE2(connectionMap);
+    _FREE2(connectionMap);
     
-    if (strcmp(wallExist, "no")) {
-        if (strcmp(wallType, "smooth")) {
-            free(wall[0].dynamic);
-            free(wall[0].property);
-            free(wall);
-        }
+    if (strcmp(surfInfo.style, "implicit") == 0) {
+        free(wall[0].dynamic);
+        free(wall[0].property);
+        free(wall);
     }
     
     if (CG.mark) {
         free(CG.list);
         free(CG.thisCG);
+        free(CGMatrix.CGBead);
+    }
+    
+    if (fixedAtomInfo.mark &&
+        fixedAtomInfo.list) {
+        free(fixedAtomInfo.list);
     }
     
     free(flow.force.timeRec);
-    FREE2(flow.force.a);
+    _FREE2(flow.force.a);
     if (flow.mark == 3) {
-        FREE2(flow.charge.position);
-        FREE2(flow.charge.velocity);
+        _FREE2(flow.charge.position);
+        _FREE2(flow.charge.velocity);
         
         free(flow.charge.potGrad);
         free(flow.charge.gap);
     }
     
-    if (obstObj.mark)
-        FREE2(obstObj.position);
+    if (obstObj.mark) {
+        _FREE2(obstObj.position);
+    }
     
     if (tunlObj.mark) {
-        FREE2(tunlObj.position);
+        _FREE2(tunlObj.position);
         free(tunlObj.diameter);
     }
     
     if (SphObstObj.mark) {
-        FREE2(SphObstObj.position);
+        _FREE2(SphObstObj.position);
         free(SphObstObj.radius);
     }
     
@@ -209,11 +217,53 @@ void GlobalCloseFree() {
     free(CBT.leaf);
     free(CBT.time);
     
-    free(protein);
-    free(aminoacid);
+    free(molecule);
+    free(residue);
     free(celllist);
+
+    _FREE2(potentialPairCollision);
+    _FREE2(potentialPairCG);
+    for (int i = 0; i <= HBPotential.typeNum && HBPotential.typeNum > 0; i ++) {
+        _FREE2(potentialPairHB[i]);
+    }
+    free(potentialPairHB);
+    
+    free(FFInfo.group);
+    free(FFInfo.bead);
+    
+    if (FFInfo.LJ)       {  free(FFInfo.LJ);      }
+    if (FFInfo.bond)     {_FREE2(FFInfo.bond);    }
+    if (FFInfo.angle)    {_FREE2(FFInfo.angle);   }
+    if (FFInfo.dihedral) {_FREE2(FFInfo.dihedral);}
+    
+    for (int i = 0; i < lenFileType; i ++) {
+        if (fileList[i].mark &&
+            fileList[i].file &&
+            i != savedData) { //savedData.dat will be rewrited and closed every time
+            fclose(fileList[i].file);
+        }
+    }
+    
+    return;
 }
 
+
+// one constraint / potential table: its fields, the number of steps, then (d, e, accumulated) per step
+static void WriteConstraint(const struct ConstraintStr *c, FILE *out) {
+    fwrite(&c->connection, sizeof(int), 1, out);
+    fwrite(&c->dmin, sizeof(double), 1, out);
+    fwrite(&c->dmax, sizeof(double), 1, out);
+    fwrite(&c->e, sizeof(double), 1, out);
+    fwrite(&c->accumulated, sizeof(double), 1, out);
+    int nStep = 0;
+    for (struct StepPotenStr *s = c->step; s; s = s->next) nStep++;
+    fwrite(&nStep, sizeof(int), 1, out);
+    for (struct StepPotenStr *s = c->step; s; s = s->next) {
+        fwrite(&s->d, sizeof(double), 1, out);
+        fwrite(&s->e, sizeof(double), 1, out);
+        fwrite(&s->accumulated, sizeof(double), 1, out);
+    }
+}
 
 void SaveSysInfo(struct FileStr *file) {
     if (file->file == NULL) {
@@ -221,54 +271,96 @@ void SaveSysInfo(struct FileStr *file) {
         GenerateFile(file);
     }
     FILE *SysInfoFile = file->file;
-    
+
+    // format marker and version (sAnalysis: ReadSysInfo). Lists are written with explicit counts.
+    int formatTag[2] = {SYSINFO_MAGIC, SYSINFO_VERSION};
+    fwrite(formatTag, sizeof (int), 2, SysInfoFile);
     fwrite(&atomnum, sizeof (int), 1, SysInfoFile);
-    fwrite(&numofprotein, sizeof (int), 1, SysInfoFile);
-    fwrite(&totalAminoAcids, sizeof (int), 1, SysInfoFile);
-    fwrite(aminoacid, sizeof (struct AAStr), (totalAminoAcids + 1), SysInfoFile);
-    fwrite(protein, sizeof (struct PepStr), (numofprotein + 1), SysInfoFile);
+    fwrite(&numofMol, sizeof (int), 1, SysInfoFile);
+    fwrite(&numofRes, sizeof (int), 1, SysInfoFile);
+    fwrite(residue, sizeof (struct ResidueStr), (numofRes + 1), SysInfoFile);
+    fwrite(molecule, sizeof (struct MolStr), (numofMol + 1), SysInfoFile);
+    
+    //force field info
+    int num[4] = {FFInfo.group[0].val[0] + 1, FFInfo.bead[0].val[0] + 1, 0, 1};
+    fwrite(&FFInfo.group[0].val[0], sizeof(int),                  1,               SysInfoFile);
+    fwrite(&FFInfo.bead[0].val[0],  sizeof(int),                  1,               SysInfoFile);
+    fwrite(FFInfo.group,            sizeof(struct FFBeadStr),     num[0],          SysInfoFile);
+    fwrite(FFInfo.bead,             sizeof(struct FFBeadStr),     num[1],          SysInfoFile);
+    if (FFInfo.bond) {
+        fwrite(&num[3], sizeof(int), 1, SysInfoFile);
+        fwrite(FFInfo.bond[0],     sizeof(struct FFBondStr),     num[1] * num[1], SysInfoFile);
+    } else {
+        fwrite(&num[2], sizeof(int), 1, SysInfoFile);
+    }
+    if (FFInfo.angle) {
+        fwrite(&num[3], sizeof(int), 1, SysInfoFile);
+        fwrite(FFInfo.angle[0],    sizeof(struct FFAngleStr),    num[1] * num[1], SysInfoFile);
+    } else {
+        fwrite(&num[2], sizeof(int), 1, SysInfoFile);
+    }
+    if (FFInfo.dihedral) {
+        fwrite(&num[3], sizeof(int), 1, SysInfoFile);
+        fwrite(FFInfo.dihedral[0], sizeof(struct FFDihedralStr), num[1] * num[1], SysInfoFile);
+    } else {
+        fwrite(&num[2], sizeof(int), 1, SysInfoFile);
+    }
+    if (FFInfo.LJ) {
+        fwrite(&num[3], sizeof(int), 1, SysInfoFile);
+        fwrite(FFInfo.LJ,          sizeof(struct FFLJStr),       num[1],          SysInfoFile);
+    } else {
+        fwrite(&num[2], sizeof(int), 1, SysInfoFile);
+    }
     
     for (int i = 0; i <= atomnum; i++) {
-        fwrite(atom[i].property, sizeof(struct PropertyStr), 1, SysInfoFile);
+        struct PropertyStr *p = atom[i].property;
+        fwrite(p->name, sizeof(char), 8, SysInfoFile);
+        fwrite(p->extraProperty, sizeof(char), 10 * 16, SysInfoFile);
+        fwrite(p->resName, sizeof(char), 8, SysInfoFile);
+        fwrite(p->typeName, sizeof(char), 3 * 16, SysInfoFile);
+        fwrite(&p->num, sizeof(int), 1, SysInfoFile);
+        fwrite(p->typeofAtom, sizeof(int), 3, SysInfoFile);
+        fwrite(&p->typeofRes, sizeof(int), 1, SysInfoFile);
+        fwrite(&p->charge, sizeof(double), 1, SysInfoFile);
+        fwrite(&p->mass, sizeof(double), 1, SysInfoFile);
+        fwrite(p->color, sizeof(double), 3, SysInfoFile);
+        fwrite(&p->sequence, sizeof(struct AtomSeqStr), 1, SysInfoFile);
         
-        struct ConstraintStr *thisConstr = atom[i].property->constr;
-        while (thisConstr) {
-            fwrite(thisConstr, sizeof(struct ConstraintStr), 1, SysInfoFile);
-            struct StepPotenStr *thisStep = thisConstr->step;
-            while (thisStep) {
-                fwrite(thisStep, sizeof(struct StepPotenStr), 1, SysInfoFile);
-                thisStep = thisStep->next;
-            }
-            thisConstr = thisConstr->next;
-        }
+        int nConstr = 0;
+        for (struct ConstraintStr *c = atom[i].property->constr; c; c = c->next) nConstr++;
+        fwrite(&nConstr, sizeof(int), 1, SysInfoFile);
+        for (struct ConstraintStr *c = atom[i].property->constr; c; c = c->next)
+            WriteConstraint(c, SysInfoFile);
         
-        fwrite(&atom[i].dynamic->HB, sizeof(struct HBStr), 1, SysInfoFile);
+        // keep the single-partner record layout that sAnalysis reads
+        struct HBStrLegacy HBRecord;
+        memset(&HBRecord, 0, sizeof(HBRecord));
+        HBRecord.bondConnection = atom[i].dynamic->HB.bondConnection[1];
+        memcpy(HBRecord.neighbor, atom[i].dynamic->HB.neighbor, sizeof(HBRecord.neighbor));
+        HBRecord.role = atom[i].dynamic->HB.role;
+        HBRecord.interactionType = atom[i].dynamic->HB.interactionType;
+        fwrite(&HBRecord, sizeof(HBRecord), 1, SysInfoFile);
     }
     
-    fwrite(&HBPotential, sizeof(struct HBPotentialStr), 1, SysInfoFile);
+    // HB classes: scale and barrier per class, and the class of every HB type
+    fwrite(&HBPotential.typeNum, sizeof(int), 1, SysInfoFile);
+    fwrite(HBPotential.scale, sizeof(double), HB_CLASSNUM, SysInfoFile);
+    fwrite(HBPotential.barrier, sizeof(double), HB_CLASSNUM, SysInfoFile);
+    for (int type = 0; type <= HBPotential.typeNum; type++) {
+        int cls = (HBPotential.classOf && type > 0) ? HBPotential.classOf[type] : 0;
+        fwrite(&cls, sizeof(int), 1, SysInfoFile);
+    }
     
-    for (int i = 0; i < NATOMTYPE; i++) {
-        for (int n = 0; n < NATOMTYPE; n++) {
-            fwrite(&potentialPairCollision[i][n], sizeof(struct ConstraintStr), 1, SysInfoFile);
-            
-            struct StepPotenStr *thisStep = potentialPairCollision[i][n].step;
-            while (thisStep) {
-                fwrite(thisStep, sizeof(struct StepPotenStr), 1, SysInfoFile);
-                thisStep = thisStep->next;
-            }
+    for (int i = 0; i <= FFInfo.bead[0].val[0]; i++) {
+        for (int n = 0; n <= FFInfo.bead[0].val[0]; n++) {
+            WriteConstraint(&potentialPairCollision[i][n], SysInfoFile);
         }
     }
     
-    for (int type = 0; type < 11; type ++) {
-        for (int i = 0; i < NATOMTYPE; i++) {
-            for (int n = 0; n < NATOMTYPE; n++) {
-                fwrite(&potentialPairHB[type][i][n], sizeof(struct ConstraintStr), 1, SysInfoFile);
-                
-                struct StepPotenStr *thisStep = potentialPairHB[type][i][n].step;
-                while (thisStep) {
-                    fwrite(thisStep, sizeof(struct StepPotenStr), 1, SysInfoFile);
-                    thisStep = thisStep->next;
-                }
+    for (int type = 0; type <= HBPotential.typeNum && HBPotential.typeNum > 0; type ++) {
+        for (int i = 0; i <= FFInfo.bead[0].val[0]; i++) {
+            for (int n = 0; n <= FFInfo.bead[0].val[0]; n++) {
+                WriteConstraint(&potentialPairHB[type][i][n], SysInfoFile);
             }
         }
     }
@@ -284,8 +376,10 @@ void SaveWallInfo(struct FileStr *file) {
     }
     FILE *WallInfoFile = file->file;
     
+    struct DynamicStrLegacy old;   // layout read by sAnalysis
     fwrite(wall[0].property, sizeof(struct PropertyStr), 1, WallInfoFile);
-    fwrite(wall[0].dynamic, sizeof(struct DynamicStr), 1, WallInfoFile);
+    DynamicToLegacy(wall[0].dynamic, &old);
+    fwrite(&old, sizeof(struct DynamicStrLegacy), 1, WallInfoFile);
     
     fclose(WallInfoFile);
     return;
@@ -298,9 +392,11 @@ void SaveObstInfo(struct FileStr *file) {
     }
     FILE *ObstInfoFile = file->file;
     
+    struct DynamicStrLegacy old;   // layout read by sAnalysis
     for (int i = 0; i < obstObj.num; i ++) {
         fwrite(obstObj.obst[i].property, sizeof(struct PropertyStr), 1, ObstInfoFile);
-        fwrite(obstObj.obst[i].dynamic, sizeof(struct DynamicStr), 1, ObstInfoFile);
+        DynamicToLegacy(obstObj.obst[i].dynamic, &old);
+        fwrite(&old, sizeof(struct DynamicStrLegacy), 1, ObstInfoFile);
     }
     
     fclose(ObstInfoFile);
@@ -314,8 +410,8 @@ void SaveCGInfo(struct FileStr *file) {
     }
     FILE *CGInfoFile = file->file;
     
-    for (int i = 0; i <= NATOMTYPE; i ++) {
-        for (int n = 0; n <= NATOMTYPE; n ++) {
+    for (int i = 0; i <= FFInfo.bead[0].val[0]; i ++) {
+        for (int n = 0; n <= FFInfo.bead[0].val[0]; n ++) {
             fwrite(&potentialPairCG[i][n], sizeof(struct ConstraintStr), 1, CGInfoFile);
             
             struct StepPotenStr *thisStep = potentialPairCG[i][n].step;
@@ -341,12 +437,12 @@ void SaveLog(struct FileStr *file) {
     
     fprintf(Logfile, "#Log file at %s\n", timer);
     fprintf(Logfile, "System:\n");
-    fprintf(Logfile, "Protein Num         = %i\n", numofprotein);
-    fprintf(Logfile, "Protein Seq         = \n");
-    for (int i = 1; i <= numofprotein; i++) {
+    fprintf(Logfile, "Molecule Num         = %i\n", numofMol);
+    fprintf(Logfile, "Molecule Seq         = \n");
+    for (int i = 1; i <= numofMol; i++) {
     fprintf(Logfile, "                    ");
-        for (int n = protein[i].startAANum; n <= protein[i].endAANum; n++) {
-            fprintf(Logfile, "%5s", aminoacid[n].nameofAA);
+        for (int n = molecule[i].startResNum; n <= molecule[i].endResNum; n++) {
+            fprintf(Logfile, "%5s", residue[n].name);
         }
         fprintf(Logfile, "\n");
     }
@@ -360,12 +456,12 @@ void SaveLog(struct FileStr *file) {
     fprintf(Logfile, "ThermostatType      = %s\n",      thermostatType);
     fprintf(Logfile, "ThermostatParameter = %-5.3lf\n", thermoF);
     fprintf(Logfile, "CGModel             = %s, %s\n",  CG.type[0], CG.type[1]);
-    fprintf(Logfile, "WallExist           = %s\n",      wallExist);
-    fprintf(Logfile, "WallType            = %s\n",      wallType);
+    fprintf(Logfile, "SurfExist           = %s\n",      surfInfo.style);
+    fprintf(Logfile, "SurfType            = %s\n",      surfInfo.type);
     fprintf(Logfile, "WallDyn             = %s\n",      wallDyn.mark);
     fprintf(Logfile, "WallDynSize         = %-5.2lf\n", wallDyn.size);
     fprintf(Logfile, "WallDynRate         = %-5.2lf\n", wallDyn.rate);
-    if (strcmp(wallDyn.mark, "no")) {
+    if (strcmp(wallDyn.mark, "no") != 0) {
         fprintf(Logfile, "OrigBoxSize         = %-8.2lf%-8.2lf%-8.2lf\n", wallDyn.origBoxDim[1], wallDyn.origBoxDim[2], wallDyn.origBoxDim[3]);
     } else {
         fprintf(Logfile, "OrigBoxSize         = CurtBoxSize\n");
@@ -443,6 +539,9 @@ void SaveLog(struct FileStr *file) {
         fprintf(Logfile, "\n");
     }
     
+    // after the fields sAnalysis reads by position (ReadLog), so they do not shift
+    if (strcmp(FFLibrary, Methodtype) != 0)
+        fprintf(Logfile, "FF_Library          = %s\n", FFLibrary);
     fprintf(Logfile, "RandomSeed          = %i\n", seed);
     
     fprintf(Logfile, "REMDPortNum         = %i\n",    REMDInfo.REMD_PortNum);
@@ -518,9 +617,11 @@ void SaveDAT(struct FileStr *file) {
     
     //-------------------------
     //General Variables
+    int formatTag[2] = {SAVED_DATA_MAGIC, SAVED_DATA_VERSION};
+    fwrite(formatTag, sizeof (int), 2, continuedata);
     fwrite(&atomnum, sizeof (int), 1, continuedata);
-    fwrite(&numofprotein, sizeof (int), 1, continuedata);
-    fwrite(&totalAminoAcids, sizeof (int), 1, continuedata);
+    fwrite(&numofMol, sizeof (int), 1, continuedata);
+    fwrite(&numofRes, sizeof (int), 1, continuedata);
     
     for (int i = 0; i <= atomnum; i ++) {
         for (int n = 0; n <= atomnum; n ++) {
@@ -537,8 +638,8 @@ void SaveDAT(struct FileStr *file) {
     fwrite(Methodtype, sizeof (char), 20, continuedata);
     fwrite(boxDimension, sizeof (double), 4, continuedata);
     
-    fwrite(aminoacid, sizeof (struct AAStr), (totalAminoAcids + 1), continuedata);
-    fwrite(protein, sizeof (struct PepStr), (numofprotein + 1), continuedata);
+    fwrite(residue, sizeof (struct ResidueStr), (numofRes + 1), continuedata);
+    fwrite(molecule, sizeof (struct MolStr), (numofMol + 1), continuedata);
     
     for (int i = 0; i <= atomnum; i++) {
         fwrite(atom[i].property, sizeof(struct PropertyStr), 1, continuedata);
@@ -598,9 +699,9 @@ void SavePDB(struct FileStr *file) {
     
     for (int i = 1; i <= atomnum; i ++) {
         fprintf(saveFile, "ATOM  %5i  %-4s%3s %c%4i    %8.3lf%8.3lf%8.3lf%6.2lf%6.2lf           %c\n",
-                i, atom[i].property->name, atom[i].property->nameofAA,
-                atom[i].property->sequence.proteinNum + 'A' - '1' + '0',
-                atom[i].property->sequence.aminoacidNum,
+                i, atom[i].property->name, atom[i].property->resName,
+                atom[i].property->sequence.molNum + 'A' - '1' + '0',
+                atom[i].property->sequence.resNum,
                 atom[i].dynamic->coordinate[1], atom[i].dynamic->coordinate[2], atom[i].dynamic->coordinate[3],
                 1.0, 0.0, atom[i].property->name[0]);
     }
@@ -613,7 +714,7 @@ void SavePDB(struct FileStr *file) {
 }
 
 
-void SaveGRO(struct FileStr *file) {
+void SaveGRO(struct FileStr *file) {    
     if (unlikely(file->file == NULL)) {
         BackupFile(file);
         GenerateFile(file);
@@ -624,14 +725,25 @@ void SaveGRO(struct FileStr *file) {
     fprintf(saveFile, "%5i\n", atomnum);
     
     for (int i = 1; i <= atomnum; i++) {
-        fprintf(saveFile, "%5i%-5s%5s%5i%8.3f%8.3f%8.3f%10.4f%10.4f%10.4f\n",
-                atom[i].property->sequence.aminoacidNum, atom[i].property->nameofAA, atom[i].property->name, i,
-                atom[i].dynamic->coordinate[1] / 10,
-                atom[i].dynamic->coordinate[2] / 10,
-                atom[i].dynamic->coordinate[3] / 10,
-                atom[i].dynamic->velocity[1],
-                atom[i].dynamic->velocity[2],
-                atom[i].dynamic->velocity[3]);
+        if (FindStrInList(atom[i].property->extraProperty, "_HBRMV", 0)) {
+            fprintf(saveFile, "%5i%-5s%4sv%5i%8.3f%8.3f%8.3f%10.4f%10.4f%10.4f\n",
+                    atom[i].property->sequence.resNum, atom[i].property->resName, atom[i].property->name, i,
+                    atom[i].dynamic->coordinate[1] / 10,
+                    atom[i].dynamic->coordinate[2] / 10,
+                    atom[i].dynamic->coordinate[3] / 10,
+                    atom[i].dynamic->velocity[1],
+                    atom[i].dynamic->velocity[2],
+                    atom[i].dynamic->velocity[3]);
+        } else {
+            fprintf(saveFile, "%5i%-5s%5s%5i%8.3f%8.3f%8.3f%10.4f%10.4f%10.4f\n",
+                    atom[i].property->sequence.resNum, atom[i].property->resName, atom[i].property->name, i,
+                    atom[i].dynamic->coordinate[1] / 10,
+                    atom[i].dynamic->coordinate[2] / 10,
+                    atom[i].dynamic->coordinate[3] / 10,
+                    atom[i].dynamic->velocity[1],
+                    atom[i].dynamic->velocity[2],
+                    atom[i].dynamic->velocity[3]);
+        }
     }
     
     fprintf(saveFile, "%10.5f%10.5f%10.5f\n",

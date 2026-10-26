@@ -11,7 +11,6 @@
 
 struct EnergyReadStr energy;
 
-static int HBModel(struct AtomStr *atom1, struct AtomStr *atom2);
 static int AtomTypeChange(int originalType, int direct);
 static double CalKeEnergy(void);
 static double CalPoEnergy(void);
@@ -19,11 +18,7 @@ static double CalWlEnergy(struct SectionStr *sect);
 static double CalCGSurEnergy(struct SectionStr *sect);
 static double CalTemp(double TKE);
 static double FindPair (struct AtomStr *atom1, struct AtomStr *atom2, char *type, void *obstInfo);
-static double HBBarrier(struct AtomStr *atom1, struct AtomStr *atom2);
 static struct ConstraintStr *RightPair(int type1, int type2, int flag);
-
-
-static int beginP, endP, offSet, thisAtomNum;
 
 
 void EnergyInfo(int id) {
@@ -33,17 +28,6 @@ void EnergyInfo(int id) {
     struct SectionStr *sect;
     FILE *TrjInputFile, *CntInputFile;
     FILE *EneOutputFile;
-    
-    beginP = 1;
-    endP = numofprotein;
-    thisAtomNum = atomnum;
-    offSet = 0;
-    
-    if (nPP) {
-        beginP = endP = nPP;
-        thisAtomNum = protein[nPP].endAtomNum - protein[nPP].startAtomNum + 1;
-        offSet = protein[nPP].startAtomNum - 1;
-    }
     
     printf("Analyzing energy information... ");
     fflush(stdout);
@@ -91,7 +75,7 @@ void EnergyInfo(int id) {
             sect = &sectInfo[sectNum];
             TKE = CalKeEnergy();
             TPE = CalPoEnergy();
-            if (strcmp(sect->wallObj.wallExist, "no") ||
+            if (strcmp(sect->wallObj.wallExist, "no") != 0 ||
                 sect->tunlObj.mark) {
                 TWE = CalWlEnergy(sect);
             }
@@ -124,10 +108,11 @@ double CalKeEnergy(void) { //per frame
     double TKE = 0;
     double speed[4] = {0};
     
-    for (int n = 1 + offSet; n <= thisAtomNum + offSet; n++) {
-        TRANSFER_VECTOR(speed, atom[n].dynamic->velocity);
+    for (int m = 1; m <= group.atomNum; m ++) {
+        int num = group.list_Atom[m];
+        TRANSFER_VECTOR(speed, atom[num].dynamic->velocity);
         temp = DOT_PROD(speed, speed);
-        TKE += 0.5 * atom[n].property->mass * temp;
+        TKE += 0.5 * atom[num].property->mass * temp;
     }
     
     return TKE;
@@ -147,16 +132,17 @@ double CalPoEnergy(void) { //per frame
     
 
     for (int i = 1; i <= atomnum; i ++) {
-        atom[i].property->typeofAtom = AtomTypeChange(atom[i].property->typeofAtom, 0);
+        atom[i].property->typeofAtom[0] = 1;
         if (CheckHBConnection(i)) {
-            atom[i].property->typeofAtom = AtomTypeChange(atom[i].property->typeofAtom, 1);
+            atom[i].property->typeofAtom[0] = 2;
         }
     }
     
     LinkList();
     POINT_TO_STRUCT(boxsize, boxOrigDim);
     
-    for (int i = 1 + offSet; i <= thisAtomNum + offSet; i ++) {
+    for (int m = 1; m <= group.atomNum; m ++) {
+        int i = group.list_Atom[m];
         POINT_TO_STRUCT(atom_CellAxis, atom[i].dynamic->cellIndex);
         
         for (int n = 0; n <= 26; n ++) {
@@ -180,26 +166,15 @@ double CalPoEnergy(void) { //per frame
                         cell_neighbor[1] + 1;
             
             pair = celllist[atomnum + cellindex];
-            if (!nPP) {
-                while (pair != 0) {
-                    if (pair > i) {
-                        DOT_PLUS(atom[pair].dynamic->coordinate, positionshift, atom[pair].dynamic->coordinate);
-                        TPE += FindPair(&atom[i], &atom[pair], "normal", NULL);
-                        DOT_MINUS(atom[pair].dynamic->coordinate, positionshift, atom[pair].dynamic->coordinate);
-                    }
-                    
-                    pair = celllist[pair];
+            while (pair != 0) {
+                if (pair > i && FindElemInList(group.list_Atom, pair, -1, -1, 0) &&
+                    !(FindStrInList(atom[pair].property->extraProperty, "_CONS", 0) && FindStrInList(atom[i].property->extraProperty, "_CONS", 0))) {
+                    DOT_PLUS(atom[pair].dynamic->coordinate, positionshift, atom[pair].dynamic->coordinate);
+                    TPE += FindPair(&atom[i], &atom[pair], "normal", NULL);
+                    DOT_MINUS(atom[pair].dynamic->coordinate, positionshift, atom[pair].dynamic->coordinate);
                 }
-            } else {
-                while (pair != 0) {
-                    if (pair != i /*&& atom[pair].property->sequence.proteinNum == atom[i].property->sequence.proteinNum*/) {
-                        DOT_PLUS(atom[pair].dynamic->coordinate, positionshift, atom[pair].dynamic->coordinate);
-                        TPE += FindPair(&atom[i], &atom[pair], "normal", NULL) * 0.5;
-                        DOT_MINUS(atom[pair].dynamic->coordinate, positionshift, atom[pair].dynamic->coordinate);
-                    }
-                    
-                    pair = celllist[pair];
-                }
+                
+                pair = celllist[pair];
             }
         }
     }
@@ -218,20 +193,22 @@ double CalWlEnergy(struct SectionStr *sect) { //per frame
     double TWE = 0;
     
     for (int i = 1; i <= atomnum; i ++) {
-        atom[i].property->typeofAtom = AtomTypeChange(atom[i].property->typeofAtom, 0);
+        atom[i].property->typeofAtom[0] = 1;
         if (CheckHBConnection(i)) {
-            atom[i].property->typeofAtom = AtomTypeChange(atom[i].property->typeofAtom, 1);
+            atom[i].property->typeofAtom[0] = 2;
         }
     }
     
     if (strcmp(sect->wallObj.wallExist, "smooth") == 0) {
-        for (int i = 1 + offSet; i <= thisAtomNum + offSet; i ++) {
+        for (int m = 1; m <= group.atomNum; m ++) {
+            int i = group.list_Atom[m];
             TWE += FindPair(&atom[i], &sect->wallObj.wall, "wall", &sect->wallObj);
         }
     }
     
     if (sect->tunlObj.mark) {
-        for (int i = 1 + offSet; i <= thisAtomNum + offSet; i ++) {
+        for (int m = 1; m <= group.atomNum; m ++) {
+            int i = group.list_Atom[m];
             if (atom[i].dynamic->coordinate[1] >= sect->tunlObj.startPosition &&
                 atom[i].dynamic->coordinate[1] <= sect->tunlObj.endPosition) {
                 TWE += FindPair(&atom[i], &sect->tunlObj.tunnel, "tunnel", &sect->tunlObj);
@@ -264,9 +241,10 @@ double CalCGSurEnergy(struct SectionStr *sect) {
                 }
             }
             
-            for (int num = 1; num <= atomnum; num ++) {
-                if (strcmp(atom[num].property->extraProperty[0], "CG") == 0 &&
-					strcmp(atom[num].property->name,             "CA") == 0) {
+            for (int m = 1; m <= group.atomNum; m++) {
+                int num = group.list_Atom[m];
+                if (FindStrInList(atom[num].property->extraProperty, "CG", 0) &&
+					strcmp(atom[num].property->name, "CA") == 0) {
                     
                     struct AtomStr *target = &atom[num];
                     double distance2 = 0;
@@ -291,8 +269,8 @@ double CalCGSurEnergy(struct SectionStr *sect) {
 						direction = -1; // <- ->
 					tolerance = direction * floatzero;
                     
-                    atomType = target->property->typeofAA;
-                    surfType = AAModel(thisSurface->property->nameofAA);
+                    atomType = target->property->typeofRes;
+                    surfType = thisSurface->property->typeofRes;
                     struct ConstraintStr *thisConstr = &potentialPairCG[surfType][atomType];
                     
                     struct StepPotenStr *thisStep = thisConstr->step;                    
@@ -311,7 +289,7 @@ double CalCGSurEnergy(struct SectionStr *sect) {
 }
 
 double CalTemp(double TKE) { //per frame
-    return 2 * TKE / (3 * thisAtomNum) / BOLTZMANN; //remove "BOLTZMANN" will be the reduced T
+    return 2 * TKE / (3 * group.atomNum) / BOLTZMANN; //remove "BOLTZMANN" will be the reduced T
 }
 
 double FindPair (struct AtomStr *atom1, struct AtomStr *atom2, char *type, void *obstInfo)
@@ -381,8 +359,8 @@ double FindPair (struct AtomStr *atom1, struct AtomStr *atom2, char *type, void 
         tolerance = direction * floatzero;
         
         if (connectionMap[atom_i][atom_j] & HBConnect) {
-            PE -= HBBarrier(atom1, atom2);
             type1 = HBModel(atom1, atom2);
+            if (type1 > 0) PE -= HBPotential.barrier[HBPotential.classOf[type1]];   // class barrier, as sDMD HBBarrier
             
             thisConstr = &potentialPairHB[type1][0][0];
         } else if (connectionMap[atom_i][atom_j] & constraintConnect) {
@@ -393,21 +371,24 @@ double FindPair (struct AtomStr *atom1, struct AtomStr *atom2, char *type, void 
             int typeNum = 0;
             int HBPartner = 0;
             
-            if ((HBPartner = CheckHBConnection(atom_i)) > 0 && atom[HBPartner].dynamic->HB.neighbor == atom_j) {
+            // an atom may hold several HBs (HBMAX): the host HB is the partner whose HB neighbours
+            // include the other atom (sDMD HBNeighborHostPartner)
+            if ((HBPartner = HBNeighborHost(atom_i, atom_j)) > 0) {
                 typeNum = HBModel(atom1, &atom[HBPartner]);
-                type1 = AtomTypeChange(atom2->property->typeofAtom, 0);
-                type2 = AtomTypeChange(atom1->property->typeofAtom, 0);
+                type1 = atom2->property->typeofAtom[1];
+                type2 = atom1->property->typeofAtom[1];
             } else {
-                HBPartner = CheckHBConnection(atom_j);
+                if ((HBPartner = HBNeighborHost(atom_j, atom_i)) == 0)
+                    HBPartner = CheckHBConnection(atom_j);
                 typeNum = HBModel(atom2, &atom[HBPartner]);
-                type1 = AtomTypeChange(atom1->property->typeofAtom, 0);
-                type2 = AtomTypeChange(atom2->property->typeofAtom, 0);
+                type1 = atom1->property->typeofAtom[1];
+                type2 = atom2->property->typeofAtom[1];
             }
             
             thisConstr = &potentialPairHB[typeNum][type1][type2];
         } else {
-            type1 = atom1->property->typeofAtom;
-            type2 = atom2->property->typeofAtom;
+            type1 = atom1->property->typeofAtom[atom1->property->typeofAtom[0]];
+            type2 = atom2->property->typeofAtom[atom2->property->typeofAtom[0]];
             thisConstr = RightPair(type1, type2, 0);
         }
         
@@ -424,7 +405,45 @@ double FindPair (struct AtomStr *atom1, struct AtomStr *atom2, char *type, void 
     return 0;
 }
 
+
+// HB partner p of host whose HB-neighbour list contains other; 0 if there is none
+int HBNeighborHost(int host, int other) {
+    for (int p = 1; p <= atomnum; p++) {
+        if ((connectionMap[host][p] & HBConnect) &&
+            FindElemInList(atom[p].dynamic->HB.neighbor, other, 1, 2, 0)) {
+            return p;
+        }
+    }
+    return 0;
+}
+
+
 int HBModel(struct AtomStr *atom1, struct AtomStr *atom2) {
+    int atom1_OrigType = atom1->property->typeofAtom[1];
+    int atom2_OrigType = atom2->property->typeofAtom[1];
+    
+    for (int i = 1; i <= HBPotential.typeNum; i ++) {
+        if (potentialPairHB[i][atom1_OrigType][atom2_OrigType].dmin &&
+            potentialPairHB[i][atom1_OrigType][atom2_OrigType].step) {
+            return i;
+        }
+    }
+    
+    //need to be optimized
+    if ((atom1_OrigType == 2 && (atom2->property->typeofRes == 3 || atom2->property->typeofRes == 6)) ||
+        (atom2_OrigType == 2 && (atom1->property->typeofRes == 3 || atom1->property->typeofRes == 6))
+        )
+        return -1; //no HB between ASN/GLN and backbone H for FF_Ding
+    
+    printf("!!ERROR!!: cannot find the matched HB pair for atom %2i(%2i%2s) and atom %2i(%2i%2s)!\n",
+           atom1->property->num, atom1->property->sequence.resNum, atom1->property->name,
+           atom2->property->num, atom2->property->sequence.resNum, atom2->property->name);
+    printf("           %s:%i\n", __FILE__, __LINE__);
+    exit(EXIT_FAILURE);
+}
+
+
+int HBModel_Legacy(struct AtomStr *atom1, struct AtomStr *atom2) {
     struct AtomStr *switcher;
     
     if (atom1->dynamic->HB.role == 'A' ||
@@ -434,14 +453,14 @@ int HBModel(struct AtomStr *atom1, struct AtomStr *atom2) {
         atom2 = switcher;
     }
     
-    int atom1_OrigType = AtomTypeChange(atom1->property->typeofAtom, 0);
-    int atom2_OrigType = AtomTypeChange(atom2->property->typeofAtom, 0);
+    int atom1_OrigType = atom1->property->typeofAtom[1];
+    int atom2_OrigType = atom2->property->typeofAtom[1];
     
     if (atom1_OrigType == 2 /*HB*/ &&
         atom2_OrigType == 26 /*OZB*/) {
         return 1;
     } else if (atom1_OrigType == 2) { //backbone H, HB
-        switch (atom2->property->typeofAA) {
+        switch (atom2->property->typeofRes) {
             case 4:  //ASP
             case 7:  //GLU
                 return 2;
@@ -472,7 +491,7 @@ int HBModel(struct AtomStr *atom1, struct AtomStr *atom2) {
                atom2_OrigType == 31) { //SG
         return 9;
     } else if (atom1_OrigType == 1) { //sidechain H
-        switch (atom2->property->typeofAA) {
+        switch (atom2->property->typeofRes) {
             case 4:  //ASP
             case 7:  //GLU
                 return 6;
@@ -496,37 +515,12 @@ int HBModel(struct AtomStr *atom1, struct AtomStr *atom2) {
     }
     
     printf("!!ERROR!!: cannot find the matched HB pair for atom %2i(%2i%2s) and atom %2i(%2i%2s)!\n",
-           atom1->property->num, atom1->property->sequence.aminoacidNum, atom1->property->name,
-           atom2->property->num, atom2->property->sequence.aminoacidNum, atom2->property->name);
+           atom1->property->num, atom1->property->sequence.resNum, atom1->property->name,
+           atom2->property->num, atom2->property->sequence.resNum, atom2->property->name);
     printf("           %s:%i\n", __FILE__, __LINE__);
     exit(EXIT_FAILURE);
     
     return -1;
-}
-
-
-double HBBarrier(struct AtomStr *atom1, struct AtomStr *atom2) {
-    struct AtomStr *switcher;
-    
-    if (atom1->dynamic->HB.role == 'A' ||
-        atom1->dynamic->HB.role == 'S') { //atom1 -> donator, atom2 -> acceptor
-        switcher = atom1;
-        atom1 = atom2;
-        atom2 = switcher;
-    }
-    
-    int atom1_OrigType = AtomTypeChange(atom1->property->typeofAtom, 0);
-    int atom2_OrigType = AtomTypeChange(atom2->property->typeofAtom, 0);
-    
-    if (atom1_OrigType == 2 /*HB*/ &&
-        atom2_OrigType == 26 /*OZB*/) {
-        return HBPotential.BB_v;
-    } else if (atom1_OrigType != 2 &&
-               atom2_OrigType != 26) {
-        return HBPotential.SS_v;
-    } else {
-        return HBPotential.BS_v;
-    }
 }
 
 
@@ -595,6 +589,7 @@ int AtomTypeChange(int originalType, int direct) {
     return originalType;
 }
 
+//need to be optimized
 struct ConstraintStr *RightPair(int type1, int type2, int flag) {
     
     if (potentialPairCollision[type1][type2].dmin > 0) {
@@ -604,9 +599,9 @@ struct ConstraintStr *RightPair(int type1, int type2, int flag) {
     }
     
     struct ConstraintStr *targetPair = NULL;
-    if ((targetPair = RightPair(AtomTypeChange(type1, 0), type2, 1)) != NULL) {}
-    else if ((targetPair = RightPair(type1, AtomTypeChange(type2, 0), 1)) != NULL) {}
-    else if ((targetPair = RightPair(AtomTypeChange(type1, 0), AtomTypeChange(type2, 0), 1)) != NULL) {}
+    if ((targetPair = RightPair(AtomTypeChange(type1, 0), type2,                    1)) != NULL ||
+        (targetPair = RightPair(type1,                    AtomTypeChange(type2, 0), 1)) != NULL ||
+        (targetPair = RightPair(AtomTypeChange(type1, 0), AtomTypeChange(type2, 0), 1)) != NULL){}
     
     return targetPair;
 }

@@ -9,36 +9,10 @@
 #include "Analysis.h"
 
 
-void SystemInformationInput(int id) {
-    char directory[256];
-    FILE *SysInfoFile;
-    
-    printf("Collecting system information...");
-    fflush(stdout);
-
-    sprintf(directory, "%s%s", path, files[inSys][id].name);
-    SysInfoFile = fopen(directory,"rb");
-    if (SysInfoFile == NULL) {
-        printf("!!ERROR!!: cannot find file %s in directory %s. make sure the input path is correct and the file does exist! %s:%i\n", files[inSys][id].name, path, __FILE__, __LINE__);
-        exit(EXIT_FAILURE);
-    }
-    
-    fread(&atomnum, sizeof (int), 1, SysInfoFile);
-    fread(&numofprotein, sizeof (int), 1, SysInfoFile);
-    fread(&totalAminoAcids, sizeof (int), 1, SysInfoFile);
-    
-    if (nPP > numofprotein) {
-        printf("!!ERROR!!: target peptide number #%i cannot excess the total peptide number %i! %s:%i\n", nPP, numofprotein, __FILE__, __LINE__);
-    }
-    
-    INT_2CALLOC(connectionMap, (atomnum + 1), (atomnum + 1));
-    
-    aminoacid = (struct AAStr *)calloc(totalAminoAcids + 1, sizeof(struct AAStr));
-    fread(aminoacid, sizeof (struct AAStr), (totalAminoAcids + 1), SysInfoFile);
-    
-    protein = (struct PepStr *)calloc(numofprotein + 1, sizeof(struct PepStr));
-    fread(protein, sizeof (struct PepStr), (numofprotein + 1), SysInfoFile);
-    
+// SysInfo.dat written with raw structs (sDMD before the counted format): the stored list
+// pointers only tell whether another constraint / step follows
+static void ReadSysInfoLegacy(FILE *SysInfoFile, int nType) {
+    int num[2] = {0, nType};
     atom = (struct AtomStr *)calloc(atomnum + 1, sizeof(struct AtomStr));
     for (int i = 0; i <= atomnum; i++) {
         struct PropertyStr *property = calloc(1, sizeof(struct PropertyStr));
@@ -91,10 +65,18 @@ void SystemInformationInput(int id) {
         fread(&atom[i].dynamic->HB, sizeof(struct HBStr), 1, SysInfoFile);
     }
     
-    fread(&HBPotential, sizeof(struct HBPotentialStr), 1, SysInfoFile);
+    struct { int typeNum; double scale; double barrier; } oldHB;   // one scale and barrier for all HBs
+    fread(&oldHB, sizeof(oldHB), 1, SysInfoFile);
+    HBPotential.typeNum = oldHB.typeNum;
+    HBPotential.classOf = (int *)calloc(HBPotential.typeNum + 1, sizeof(int));
+    for (int c = 0; c < HB_CLASSNUM; c++) {
+        HBPotential.scale[c] = oldHB.scale;
+        HBPotential.barrier[c] = oldHB.barrier;
+    }
     
-    for (int i = 0; i < NATOMTYPE; i ++) {
-        for (int n = 0; n < NATOMTYPE; n ++) {
+    _CALLOC2(struct ConstraintStr, potentialPairCollision, num[1], num[1]);
+    for (int i = 0; i < num[1]; i ++) {
+        for (int n = 0; n < num[1]; n ++) {
             fread(&potentialPairCollision[i][n], sizeof(struct ConstraintStr), 1, SysInfoFile);
             struct StepPotenStr *thisStep = NULL;
             struct StepPotenStr *nextStep = potentialPairCollision[i][n].step;
@@ -118,9 +100,13 @@ void SystemInformationInput(int id) {
         }
     }
     
-    for (int type = 0; type < 11; type ++) {
-        for (int i = 0; i < NATOMTYPE; i ++) {
-            for (int n = 0; n < NATOMTYPE; n ++) {
+    potentialPairHB = (struct ConstraintStr ***)calloc(HBPotential.typeNum + 1, sizeof(struct ConstraintStr **));
+    for (int i = 0; i <= HBPotential.typeNum; i ++) {
+        _CALLOC2(struct ConstraintStr, potentialPairHB[i], num[1], num[1]);
+    }
+    for (int type = 0; type <= HBPotential.typeNum; type ++) {
+        for (int i = 0; i < num[1]; i ++) {
+            for (int n = 0; n < num[1]; n ++) {
                 fread(&potentialPairHB[type][i][n], sizeof(struct ConstraintStr), 1, SysInfoFile);
                 struct StepPotenStr *thisStep = NULL;
                 struct StepPotenStr *nextStep = potentialPairHB[type][i][n].step;
@@ -144,6 +130,164 @@ void SystemInformationInput(int id) {
             }
         }
     }
+
+}
+
+
+// one constraint / potential table in the counted format: fields, number of steps, steps
+static void ReadConstraint(struct ConstraintStr *c, FILE *in) {
+    fread(&c->connection, sizeof(int), 1, in);
+    fread(&c->dmin, sizeof(double), 1, in);
+    fread(&c->dmax, sizeof(double), 1, in);
+    fread(&c->e, sizeof(double), 1, in);
+    fread(&c->accumulated, sizeof(double), 1, in);
+    c->step = NULL;
+    c->next = NULL;
+    int nStep = 0;
+    fread(&nStep, sizeof(int), 1, in);
+    struct StepPotenStr **tail = &c->step;
+    for (int k = 0; k < nStep; k++) {
+        struct StepPotenStr *s = calloc(1, sizeof(struct StepPotenStr));
+        fread(&s->d, sizeof(double), 1, in);
+        fread(&s->e, sizeof(double), 1, in);
+        fread(&s->accumulated, sizeof(double), 1, in);
+        *tail = s;
+        tail = &s->next;
+    }
+}
+
+
+// SysInfo.dat in the counted format (sDMD SaveSysInfo, SYSINFO_VERSION 2)
+static void ReadSysInfoCounted(FILE *SysInfoFile, int nType) {
+    atom = (struct AtomStr *)calloc(atomnum + 1, sizeof(struct AtomStr));
+    for (int i = 0; i <= atomnum; i++) {
+        struct PropertyStr *p = calloc(1, sizeof(struct PropertyStr));
+        atom[i].property = p;
+        atom[i].dynamic = calloc(1, sizeof(struct DynamicStr));
+
+        fread(p->name, sizeof(char), 8, SysInfoFile);
+        fread(p->extraProperty, sizeof(char), 10 * 16, SysInfoFile);
+        fread(p->resName, sizeof(char), 8, SysInfoFile);
+        fread(p->typeName, sizeof(char), 3 * 16, SysInfoFile);
+        fread(&p->num, sizeof(int), 1, SysInfoFile);
+        fread(p->typeofAtom, sizeof(int), 3, SysInfoFile);
+        fread(&p->typeofRes, sizeof(int), 1, SysInfoFile);
+        fread(&p->charge, sizeof(double), 1, SysInfoFile);
+        fread(&p->mass, sizeof(double), 1, SysInfoFile);
+        fread(p->color, sizeof(double), 3, SysInfoFile);
+        fread(&p->sequence, sizeof(struct AtomSeqStr), 1, SysInfoFile);
+
+        int nConstr = 0;
+        fread(&nConstr, sizeof(int), 1, SysInfoFile);
+        struct ConstraintStr **tail = &p->constr;
+        for (int k = 0; k < nConstr; k++) {
+            struct ConstraintStr *c = calloc(1, sizeof(struct ConstraintStr));
+            ReadConstraint(c, SysInfoFile);
+            *tail = c;
+            tail = &c->next;
+        }
+
+        fread(&atom[i].dynamic->HB, sizeof(struct HBStr), 1, SysInfoFile);
+    }
+
+    fread(&HBPotential.typeNum, sizeof(int), 1, SysInfoFile);
+    fread(HBPotential.scale, sizeof(double), HB_CLASSNUM, SysInfoFile);
+    fread(HBPotential.barrier, sizeof(double), HB_CLASSNUM, SysInfoFile);
+    HBPotential.classOf = (int *)calloc(HBPotential.typeNum + 1, sizeof(int));
+    fread(HBPotential.classOf, sizeof(int), HBPotential.typeNum + 1, SysInfoFile);
+
+    _CALLOC2(struct ConstraintStr, potentialPairCollision, nType, nType);
+    for (int i = 0; i < nType; i++)
+        for (int n = 0; n < nType; n++)
+            ReadConstraint(&potentialPairCollision[i][n], SysInfoFile);
+
+    potentialPairHB = (struct ConstraintStr ***)calloc(HBPotential.typeNum + 1, sizeof(struct ConstraintStr **));
+    for (int i = 0; i <= HBPotential.typeNum; i++) {
+        _CALLOC2(struct ConstraintStr, potentialPairHB[i], nType, nType);
+    }
+    for (int type = 0; type <= HBPotential.typeNum && HBPotential.typeNum > 0; type++)
+        for (int i = 0; i < nType; i++)
+            for (int n = 0; n < nType; n++)
+                ReadConstraint(&potentialPairHB[type][i][n], SysInfoFile);
+}
+
+
+void SystemInformationInput(int id) {
+    char directory[256];
+    FILE *SysInfoFile;
+    
+    printf("Collecting system information...");
+    fflush(stdout);
+
+    sprintf(directory, "%s%s", path, files[inSys][id].name);
+    SysInfoFile = fopen(directory,"rb");
+    if (SysInfoFile == NULL) {
+        printf("!!ERROR!!: cannot find file %s in directory %s. make sure the input path is correct and the file does exist! %s:%i\n", files[inSys][id].name, path, __FILE__, __LINE__);
+        exit(EXIT_FAILURE);
+    }
+    
+    // files from sDMD since the counted format start with a marker and a version;
+    // older files start directly with the atom number and store raw structs (ReadSysInfoLegacy)
+    int version = 0;
+    fread(&atomnum,  sizeof (int), 1, SysInfoFile);
+    if (atomnum == SYSINFO_MAGIC) {
+        fread(&version, sizeof (int), 1, SysInfoFile);
+        if (version != SYSINFO_VERSION) {
+            printf("!!ERROR!!: unknown SysInfo.dat format version %i! %s:%i\n", version, __FILE__, __LINE__);
+            exit(EXIT_FAILURE);
+        }
+        fread(&atomnum, sizeof (int), 1, SysInfoFile);
+    }
+    fread(&numofMol, sizeof (int), 1, SysInfoFile);
+    fread(&numofRes, sizeof (int), 1, SysInfoFile);
+
+    _CALLOC2(int, connectionMap, (atomnum + 1), (atomnum + 1));
+    
+    residue = (struct ResidueStr *)calloc(numofRes + 1, sizeof(struct ResidueStr));
+    fread(residue, sizeof (struct ResidueStr), (numofRes + 1), SysInfoFile);
+    
+    molecule = (struct MolStr *)calloc(numofMol + 1, sizeof(struct MolStr));
+    fread(molecule, sizeof (struct MolStr), (numofMol + 1), SysInfoFile);
+    
+    //read force field info
+    int num[3];
+    fread(&num[0], sizeof(int), 1, SysInfoFile); num[0] ++;
+    fread(&num[1], sizeof(int), 1, SysInfoFile); num[1] ++;
+    FFInfo.group = (struct FFBeadStr *)calloc(num[0], sizeof(struct FFBeadStr));
+    FFInfo.bead  = (struct FFBeadStr *)calloc(num[1], sizeof(struct FFBeadStr));
+    FFInfo.LJ    = (struct FFLJStr   *)calloc(num[1], sizeof(struct FFLJStr));
+    _CALLOC2(struct FFBondStr,     FFInfo.bond,     num[1], num[1]);
+    _CALLOC2(struct FFAngleStr,    FFInfo.angle,    num[1], num[1]);
+    _CALLOC2(struct FFDihedralStr, FFInfo.dihedral, num[1], num[1]);
+    fread(FFInfo.group,    sizeof(struct FFBeadStr),     num[0],          SysInfoFile);
+    fread(FFInfo.bead,     sizeof(struct FFBeadStr),     num[1],          SysInfoFile);
+    fread(&num[2], sizeof(int), 1, SysInfoFile);
+    if (num[2]) {
+        fread(FFInfo.bond[0],     sizeof(struct FFBondStr),     num[1] * num[1], SysInfoFile);
+    }
+    fread(&num[2], sizeof(int), 1, SysInfoFile);
+    if (num[2]) {
+        fread(FFInfo.angle[0],    sizeof(struct FFAngleStr),    num[1] * num[1], SysInfoFile);
+    }
+    fread(&num[2], sizeof(int), 1, SysInfoFile);
+    if (num[2]) {
+        fread(FFInfo.dihedral[0], sizeof(struct FFDihedralStr), num[1] * num[1], SysInfoFile);
+    }
+    fread(&num[2], sizeof(int), 1, SysInfoFile);
+    if (num[2]) {
+        fread(FFInfo.LJ,          sizeof(struct FFLJStr),       num[1],          SysInfoFile);
+    }
+
+    for (int i = 0; i < num[1] * num[1]; i++) FFInfo.dihedral[0][i].list = NULL;   // stale pointer in the file
+
+    if (version >= 2) {
+        ReadSysInfoCounted(SysInfoFile, num[1]);
+    } else {
+        ReadSysInfoLegacy(SysInfoFile, num[1]);
+    }
+
+    CreateGroup();
+
     fclose(SysInfoFile);
         
     printf("Done!\n");
@@ -175,7 +319,7 @@ int ReadLog(int id) {
                 fgets(buffer, bufferSize, inputFile);   //Protein Num
                 fgets(buffer, bufferSize, inputFile);   //Protein Seq
                 
-                for (int i = 0; i < numofprotein; i ++) {
+                for (int i = 0; i < numofMol; i ++) {
                     fgets(buffer, bufferSize, inputFile);
                 }
                 
@@ -205,7 +349,7 @@ int ReadLog(int id) {
                 if (strncmp(buffer, "CGModel", 7) == 0) { //considering the compatibility
                     char tmp[1024] = { 0 };
                     sscanf(buffer, "%s%s%s%s\n", tmp, sign, CG.type[0], CG.type[1]);
-                    if (strncmp(CG.type[0], "no", 2)) CG.mark = 1;
+                    if (strncmp(CG.type[0], "no", 2) != 0) CG.mark = 1;
                     fgets(buffer, bufferSize, inputFile);
                 }
 
@@ -222,7 +366,7 @@ int ReadLog(int id) {
                 fscanf(inputFile, "%s%s%lf\n", buffer, sign, &sect->wallDyn.rate);
                 
                 if (sectNum == 0) { //original box size cannot change between sections
-                    if (strcmp(sect->wallDyn.mark, "no")) {
+                    if (strcmp(sect->wallDyn.mark, "no") != 0) {
                         fscanf(inputFile, "%s%s%lf%lf%lf\n", buffer, sign,
                                &boxOrigDim[1],
                                &boxOrigDim[2],
@@ -254,8 +398,8 @@ int ReadLog(int id) {
                 } else if (sect->flow.mark == 3) {
                     fscanf(inputFile, "%s%s%i", buffer, sign, &sect->flow.charge.num);
                     
-                    DOUBLE_2CALLOC(sect->flow.charge.position, sect->flow.charge.num, 4);
-                    DOUBLE_2CALLOC(sect->flow.charge.velocity, sect->flow.charge.num, 4);
+                    _CALLOC2(double, sect->flow.charge.position, sect->flow.charge.num, 4);
+                    _CALLOC2(double, sect->flow.charge.velocity, sect->flow.charge.num, 4);
                     sect->flow.charge.potGrad = (double *)calloc(sect->flow.charge.num, sizeof(double));
                     sect->flow.charge.gap     = (double *)calloc(sect->flow.charge.num, sizeof(double));
                     
@@ -277,7 +421,7 @@ int ReadLog(int id) {
                 fscanf(inputFile, "%s%s%i\n", buffer, sign, &sect->obstObj.num);
                 if (sect->obstObj.num) {
                     sect->obstObj.mark = 1;
-                    DOUBLE_2CALLOC(sect->obstObj.position, sect->obstObj.num, 4);
+                    _CALLOC2(double, sect->obstObj.position, sect->obstObj.num, 4);
                     sect->obstObj.obst = (struct AtomStr *)calloc(sect->obstObj.num, sizeof(struct AtomStr));
                     fscanf(inputFile, "%s%s", buffer, sign);
                     
@@ -407,8 +551,9 @@ void ReadCGPot(int id) {
         exit(EXIT_FAILURE);
     }
     
-    for (int i = 0; i <= NATOMTYPE; i ++) {
-        for (int n = 0; n <= NATOMTYPE; n ++) {
+    _CALLOC2(struct ConstraintStr, potentialPairCG, (FFInfo.bead[0].val[0] + 1), (FFInfo.bead[0].val[0] + 1));
+    for (int i = 0; i <= FFInfo.bead[0].val[0]; i ++) {
+        for (int n = 0; n <= FFInfo.bead[0].val[0]; n ++) {
             fread(&potentialPairCG[i][n], sizeof(struct ConstraintStr), 1, CGInfoFile);
             struct StepPotenStr *thisStep = NULL;
             struct StepPotenStr *nextStep = potentialPairCG[i][n].step;
@@ -440,8 +585,8 @@ void ReadCGPot(int id) {
 }
 
 void FreeVariables(void) {
-    free(aminoacid);    aminoacid = NULL;
-    free(protein);      protein   = NULL;
+    free(residue);    residue = NULL;
+    free(molecule);      molecule   = NULL;
     
     for (int i = 0; i <= atomnum; i ++) {
         free(atom[i].dynamic);
@@ -457,7 +602,26 @@ void FreeVariables(void) {
     free(fileList);     fileList     = NULL;
     free(analysisList); analysisList = NULL;
     
-    _2FREE(connectionMap);
+    free(FFInfo.group);
+    free(FFInfo.bead);
+    
+    if (FFInfo.LJ)       {  free(FFInfo.LJ);}
+    if (FFInfo.bond)     {_FREE2(FFInfo.bond);}
+    if (FFInfo.angle)    {_FREE2(FFInfo.angle);}
+    if (FFInfo.dihedral) {_FREE2(FFInfo.dihedral);}
+    if (potentialPairCG) {_FREE2(potentialPairCG);}
+    
+    _FREE2(connectionMap);
+    _FREE2(potentialPairCollision);
+    for (int i = 0; i <= HBPotential.typeNum; i ++) {
+        _FREE2(potentialPairHB[i]);
+    }
+    free(potentialPairHB);
+
+    free(group.list_Mol);
+    free(group.list_Atom);
+    free(group.molList);
+    free(group.atomList);
     
     return;
 }

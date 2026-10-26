@@ -7,14 +7,14 @@
 //
 
 #include "Analysis.h"
+#include <stdio.h>
 
 static void SaveGRO(FILE *saveFile);
 static void SaveGROMono(FILE *saveFile);
 
 
-void AdjustPBC(int id)
-{
-    int dim = 3, step = 1;
+void AdjustPBC(int id) {
+    int dim = 3, step = 1, flag = 0;
     long frameCount, totalFrame;
     double gap[4];
     char directory[1024], buffer[1024];
@@ -28,9 +28,10 @@ void AdjustPBC(int id)
     sprintf(directory, "%s%s", path, files[outTrj][id].name);
     positionOutput = fopen(directory, "w");
 
-	if (nPP) {
-		sprintf(directory, "%srPBCGRO_p%i.gro", path, nPP);
+	if (group.atomNum != atomnum) {
+		sprintf(directory, "%srPBCGRO_group.gro", path);
 		positionOutputMono = fopen(directory, "w");
+        flag = 1;
 	}
     
     for (int sectNum = 0; sectNum < fileList[id].count; sectNum ++) {
@@ -44,7 +45,7 @@ void AdjustPBC(int id)
             exit(EXIT_FAILURE);
         }
         
-        if (strcmp(sectInfo[sectNum].wallObj.wallExist, "no")) {
+        if (strcmp(sectInfo[sectNum].wallObj.wallExist, "no") != 0) {
             if (strncmp(sectInfo[sectNum].wallObj.wallType, "sphere", 1) == 0)
                 dim = 0;
             if (strncmp(sectInfo[sectNum].wallObj.wallType, "parallel", 1) == 0)
@@ -63,10 +64,14 @@ void AdjustPBC(int id)
             gap[2] = boxCurtDim[2] / 2;
             gap[3] = boxCurtDim[3] / 2;
             
-            for (int j = 1; j <= numofprotein; j ++) {
-                int target = (protein[j].startAtomNum + protein[j].endAtomNum) * 0.5;
+            for (int j = 1; j <= numofMol; j ++) {
+                int target = (molecule[j].startAtomNum + molecule[j].endAtomNum) * 0.5;
                 
-                for (int i = target + 1; i <= protein[j].endAtomNum; i ++) {
+                for (int i = target + 1; i <= molecule[j].endAtomNum; i ++) {
+                    if (FindStrInList(atom[i].property->extraProperty, "_CONS", 0)) {
+                        break;
+                    }
+
                     for (int n = 1; n <= dim; n += step) {
                         if (atom[i].dynamic->coordinate[n] - atom[i - 1].dynamic->coordinate[n] > gap[n]) {
                             atom[i].dynamic->coordinate[n] -= boxCurtDim[n];
@@ -76,7 +81,11 @@ void AdjustPBC(int id)
                     }
                 }
                 
-                for (int i = target - 1; i >= protein[j].startAtomNum; i --) {
+                for (int i = target - 1; i >= molecule[j].startAtomNum; i --) {
+                    if (FindStrInList(atom[i].property->extraProperty, "_CONS", 0)) {
+                        break;
+                    }
+                    
                     for (int n = 1; n <= dim; n += step) {
                         if (atom[i].dynamic->coordinate[n] - atom[i + 1].dynamic->coordinate[n] > gap[n]) {
                             atom[i].dynamic->coordinate[n] -= boxCurtDim[n];
@@ -88,7 +97,7 @@ void AdjustPBC(int id)
             }
             SaveGRO(positionOutput);
 
-			if (nPP) {
+			if (flag) {
 				SaveGROMono(positionOutputMono);
 			}
         }
@@ -152,12 +161,17 @@ int ReadGro(FILE *inputFile) { //per frame
 
 
 void SaveGROMono(FILE *saveFile) {
-    fprintf(saveFile, "Protein %i\n", nPP);
-    fprintf(saveFile, "%5i\n", protein[nPP].endAtomNum - protein[nPP].startAtomNum + 1);
+    fprintf(saveFile, "group: ");
+    for (int i = 1; i <= group.molNum; i ++) {
+        fprintf(saveFile, "%5i ", group.list_Mol[i]);
+    }
+    fprintf(saveFile, "\n");
+    fprintf(saveFile, "%5i\n", group.atomNum);
     
-    for (int i = protein[nPP].startAtomNum; i <= protein[nPP].endAtomNum; i++) {
+    for (int n = 1; n <= group.atomNum; n ++) {
+        int i = group.list_Atom[n];
         fprintf(saveFile, "%5i%-5s%5s%5i%8.3f%8.3f%8.3f%10.4f%10.4f%10.4f\n",
-                atom[i].property->sequence.aminoacidNum, atom[i].property->nameofAA, atom[i].property->name, i,
+                atom[i].property->sequence.resNum, atom[i].property->resName, atom[i].property->name, n,
                 atom[i].dynamic->coordinate[1] / 10,
                 atom[i].dynamic->coordinate[2] / 10,
                 atom[i].dynamic->coordinate[3] / 10,
@@ -180,7 +194,7 @@ void SaveGRO(FILE *saveFile) {
 
 	for (int i = 1; i <= atomnum; i++) {
 		fprintf(saveFile, "%5i%-5s%5s%5i%8.3f%8.3f%8.3f%10.4f%10.4f%10.4f\n",
-                atom[i].property->sequence.aminoacidNum, atom[i].property->nameofAA, atom[i].property->name, i,
+                atom[i].property->sequence.resNum, atom[i].property->resName, atom[i].property->name, i,
                 atom[i].dynamic->coordinate[1] / 10,
                 atom[i].dynamic->coordinate[2] / 10,
                 atom[i].dynamic->coordinate[3] / 10,

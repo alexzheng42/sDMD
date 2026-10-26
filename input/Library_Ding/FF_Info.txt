@@ -1,0 +1,68 @@
+# The information of the FF
+
+#Res
+25
+ALA		1		6
+ARG		2		17
+ASN		3		11
+ASP		4		9
+CYS		5		8
+GLN		6		12
+GLU		7		10
+GLY		8		5
+HIS		9		12
+ILE		10		9
+LEU		11		9
+LYS		12		13
+MET		13		9
+PHE		14		12
+PRO		15		7
+SER		16		8
+THR		17		9
+TRP		18		16
+TYR		19		14
+VAL		20		8
+SOL		21		3
+GEL		22		1
+PHO		23		1
+PHI		24		1
+RPH		25		1
+
+#Atom
+36
+H		1
+HW 		1
+HS 		1
+HO		1
+HN 		1
+HB 		2
+H_HB 	3
+HB_HB	4
+CR		5
+CRB		6
+CRN 	7
+CRNP	8
+CA		9
+CA1		10
+CA2		11
+CA3		12
+CM1		13
+CA1P	14
+CA2P	15
+CM1P	16
+NZ		17
+NZB		18
+NZNP	19
+NZNQ	20
+NCK		21
+NCR		22
+NR 		23
+OZ		24
+OZH		25
+OZB		26
+OZB_HB	27
+OC		28
+OW		29
+SGNP	30
+SG 		31
+GEL		32

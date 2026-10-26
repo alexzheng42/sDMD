@@ -18,7 +18,6 @@
 #define FALSE     0
 #define INVALID  -111
 #define INFINIT   1E8
-#define NATOMTYPE 32
 #define BOLTZMANN 0.0019872041 //kcal / mol / K
 
 #define bondConnect             0b00001
@@ -26,21 +25,6 @@
 #define HBConnect               0b00100
 #define neighborConnect         0b01000
 #define overlapConnect          0b10000
-
-#define findduplicatedandadd(list1, list2, num, flag)  \
-flag=0; \
-num=1;    \
-while (list2[num]!=0) {   \
-if (list1==list2[num]) {   \
-flag=1; \
-break;  \
-} else { \
-num++; \
-}   \
-}   \
-if (flag==0) {  \
-list2[num]=list1; \
-}
 
 #define min3(num1, num2, num3)    \
 (((num1) < (num2)) ? (((num1) < (num3)) ? (num1) : (num3)) :    \
@@ -81,22 +65,12 @@ n1[1]*n2[1]+n1[2]*n2[2]+n1[3]*n2[3];
 #define POINT_TO_STRUCT(pointer, struct)  \
 pointer=&struct[0];
 
-#define INT_2CALLOC(name, size1, size2) \
-name=(int **)calloc(size1, sizeof(int *));   \
-name[0]=(int *)calloc(size1*size2, sizeof(int)); \
-for (int NN=1; NN<size1; NN++) name[NN]=name[0] + NN * size2;
+#define _CALLOC2(type, name, size1, size2)    \
+name=(type **)calloc(size1, sizeof(type *));   \
+name[0]=(type *)calloc(size1*size2, sizeof(type));  \
+for (int NN=1; NN<size1; NN++) name[NN]=name[0]+NN*size2;
 
-#define LONG_2CALLOC(name, size1, size2) \
-name=(long **)calloc(size1, sizeof(long *));   \
-name[0]=(long *)calloc(size1*size2, sizeof(long)); \
-for (int NN=1; NN<size1; NN++) name[NN]=name[0] + NN * size2;
-
-#define DOUBLE_2CALLOC(name, size1, size2)    \
-name=(double **)calloc(size1, sizeof(double *));   \
-name[0]=(double *)calloc(size1*size2, sizeof(double)); \
-for (int NN=1; NN<size1; NN++) name[NN]=name[0] + NN * size2;
-
-#define _2FREE(name)    \
+#define _FREE2(name)    \
 free(name[0]);  \
 free(name); \
 name = NULL;
@@ -113,6 +87,8 @@ enum EOperation {
     AnalyzeConMap,
     CalculateRG,
     CalculateRG2Obst,
+    CalculateDensity,
+    CalculatePSD,
     CalculateMSD,
     CalculateRMSD,
     CalculatePotMap,
@@ -137,6 +113,8 @@ enum EFileType {
     outRMSD,
     outPotMap,
     outCG2Obst,
+    outDensity,
+    outPSD,
     outREMD_T,
     outPotMap_T,
     outPMFMap_T,
@@ -146,13 +124,18 @@ enum EFileType {
 enum EEventType {
     Coli_Event,  //collision event
     Bond_Event,  //bond event
-    HB_Event,    //HB event
+      HB_Event,  //HB event
     HBNe_Event,  //HB neighbor event
     Ther_Event,  //thermostat event
     Wall_Event,  //wall event
-    PCC_Event,   //PBC and crossing event
+    Obst_Event,  //obstruction event
+    Tunl_Event,  //tunnel event
+    Chrg_Event,  //charge event
+    SphO_Event,  //column event
+     PCC_Event,  //PBC and crossing event
+    CGSu_Event,  //CG surface event
     Lagv_Event,  //Langevin event
-    TBD_Event,   //TBD event
+     TBD_Event,  //TBD event
     Cacl_Event,  //event needs to be cancelled
     Invd_Event   //invalid event, for initialization
 };
@@ -166,7 +149,7 @@ enum EInteractionType {
     TBDEscap,
     TBDHBForm,
     TBDHBBrik,
-    Invalid
+    Invalid_Inter
 };
 
 enum EHBEventType {
@@ -178,8 +161,8 @@ enum EHBEventType {
 
 struct AtomSeqStr {
     int atomNum;
-    int proteinNum;
-    int aminoacidNum;
+    int molNum;
+    int resNum;
 };
 
 struct StepPotenStr {
@@ -192,32 +175,43 @@ struct StepPotenStr {
 struct ConstraintStr {
     int connection;
     double dmin;
-    struct StepPotenStr *step;
     double dmax;
+    double e, accumulated;
+    struct StepPotenStr *step;
     struct ConstraintStr *next;
+};
+
+#define HB_CLASSNUM 3   // backbone-backbone, backbone-sidechain, sidechain-sidechain (as in sDMD)
+
+// SysInfo.dat format marker / version written by sDMD (DMD.h)
+#define SYSINFO_MAGIC   (-1)
+#define SYSINFO_VERSION 2
+
+struct HBPotentialStr
+{
+    int typeNum;
+    int *classOf;                 // class of each HB type (index 1..typeNum)
+    double scale[HB_CLASSNUM];
+    double barrier[HB_CLASSNUM];
 };
 
 struct HBStr {
     int bondConnection;
-    int neighbor;
+    int neighbor[3]; //at most two neighbors, [0] records the num
     char role;
     enum EHBEventType interactionType;
-};
-
-struct HBPotentialStr //B: Backbone, S: Sidechain
-{
-    double BB_r, BB_v;
-    double SS_r, SS_v;
-    double BS_r, BS_v;
 };
 
 struct HBNeighborStr{
     int neighborPartner[5];
     int partnerNum;
     int neighborStatus;
+    int removedAtom[5];
 };
 
 struct InteractionEventStr {
+    int flag;
+    int dim;
     int partner;
     long counter;
     long partnerCounter;
@@ -229,11 +223,12 @@ struct InteractionEventStr {
 
 struct PropertyStr {
     char name[8];
-    char extraProperty[2][16];
-    char nameofAA[8];
+    char extraProperty[10][16];
+    char resName[8];
+    char typeName[3][16]; //[0]: NULL, [1]: type1, [2]: type2
     int num;
-    int typeofAtom;
-	int typeofAA;
+    int typeofAtom[3]; //[0]: index, [1]: original, [2]: reacted
+    int typeofRes;
     double charge;
     double mass;
     double color[3];
@@ -242,10 +237,12 @@ struct PropertyStr {
     struct ConstraintStr *constr;
 };
 
+// same layout as sDMD's DynamicStrLegacy (the layout of WallInfo.dat / ObstInfo.dat)
 struct DynamicStr {
     int cellIndex[4];
     double coordinate[4];
     double velocity[4];
+    double lastUpdateTime;
     struct HBStr HB;
     struct HBNeighborStr HBNeighbor;
     struct InteractionEventStr event;
@@ -256,7 +253,7 @@ struct AtomStr {
     struct DynamicStr *dynamic;    //dynamic properties of the atom, such as coordinate, velocity ...
 };
 
-struct AAStr {
+struct ResidueStr {
     char nameofAA[5];
 	int type;
     int startAtomNum;
@@ -265,10 +262,18 @@ struct AAStr {
     double mass;
 };
 
+struct CGStr {
+    int start;
+    int end;
+    int type;
+};
+
 struct CGGovStr {
-	char type[2][16];
-	int mark;
-	int totalNum;
+    char type[2][16];
+    int mark;
+    int totalNum;
+    int *list;
+    struct CGStr *thisCG;
 };
 
 struct DisStr {
@@ -276,7 +281,21 @@ struct DisStr {
     int mark;
 };
 
-struct PepStr {
+
+struct DensityStr {
+    int mark;
+    int dim;
+    int pointNum;
+};
+
+
+struct PSDStr {
+    int mark;
+    int axis[4];
+};
+
+
+struct MolStr {
     int startAtomNum;
     int endAtomNum;
     int startAANum;
@@ -292,6 +311,12 @@ struct HBType {
     int SS;
     int other;
     int total;
+    int interBB;
+    int interBS;
+    int interSS;
+    int intraBB;
+    int intraBS;
+    int intraSS;
 };
 
 
@@ -362,6 +387,65 @@ struct FlowStr {
 };
 
 
+struct FFBeadStr {
+    char name[16];
+    int val[4];
+};
+
+
+struct FFBondStr {
+    char name[2][16];
+    double kb, b0;
+    double dmin, dmax, delta;
+};
+
+
+struct FFAngleStr {
+    char name[2][16];
+    double ktheta, theta0;
+    double kub, r0;
+    double minDeg, maxDeg;
+    double dmin, dmax, delta;
+    struct FFBeadStr interAtom;
+};
+
+
+struct DisPotStr {
+    double val, dis, pot;
+};
+
+struct DihedralDataStr {
+    int step;
+    double bond[3], angle[2];
+    char dataString[512];
+};
+
+
+struct FFDihedralStr {
+    char name[2][16];
+    double kphi, n, phi0;
+    struct FFBeadStr interAtom[2];
+    struct DihedralDataStr data;
+    struct DisPotStr *list;
+};
+
+
+struct FFLJStr {
+    char name[16];
+    double mass, charge, sigma, epsilon;
+};
+
+
+struct FFInfoStr {
+    struct FFBeadStr        *group;
+    struct FFBeadStr        *bead;
+    struct FFBondStr        **bond;
+    struct FFAngleStr       **angle;
+    struct FFDihedralStr    **dihedral;
+    struct FFLJStr          *LJ;
+};
+
+
 struct REMDStr {
     int mark;
     int numReplica;
@@ -379,12 +463,12 @@ struct FileListStr {
 
 
 struct SectionStr {
+    char methodType[20];
     long frameCount;
     double oldTime;
     double targetTime;
     double temp;
     double outputRate;
-    char methodType[20];
     struct WallStr wallObj;
     struct DynamicWallStr wallDyn;
     struct ObstructionStr obstObj;
@@ -411,15 +495,23 @@ struct RMSDReadStr {
     double vRMSD[2];
 };
 
+struct GroupStr {
+    int molNum;
+    int *list_Mol;
+    struct MolStr **molList;
+    int atomNum;
+    int *list_Atom;
+    struct AtomStr **atomList;
+};
+
 
 extern int atomnum;
-extern int numofprotein;
-extern int totalAminoAcids;
+extern int numofMol;
+extern int numofRes;
 extern int **connectionMap;
 extern int *celllist;
 extern int freshStart;
 extern int *analysisList;
-extern int nPP;
 
 extern double cutoffr;
 extern double boxOrigDim[4];
@@ -429,18 +521,19 @@ extern double cellSize[4];
 
 extern char path[1024];
 extern char names[NumofFileType][256];
-extern char targetPeptideNum[16];
 
 extern struct FileStr **files;
-extern struct AAStr *aminoacid;
-extern struct PepStr *protein;
+extern struct ResidueStr *residue;
+extern struct MolStr *molecule;
 extern struct CGGovStr CG;
 extern struct DisStr disInfo;
+extern struct DensityStr densInfo;
+extern struct PSDStr psdInfo;
 extern struct AtomStr *atom;
 extern struct HBType HBSum;
-extern struct ConstraintStr potentialPairCollision[NATOMTYPE + 1][NATOMTYPE + 1];
-extern struct ConstraintStr potentialPairHB[12][NATOMTYPE + 1][NATOMTYPE + 1];
-extern struct ConstraintStr potentialPairCG[NATOMTYPE + 1][NATOMTYPE + 1];
+extern struct ConstraintStr **potentialPairCollision;
+extern struct ConstraintStr **potentialPairCG;
+extern struct ConstraintStr ***potentialPairHB;
 extern struct HBPotentialStr HBPotential;
 extern struct REMDStr RE;
 extern struct FileListStr *fileList;
@@ -449,6 +542,8 @@ extern struct SectionStr *sectInfo;
 extern struct EnergyReadStr energy;
 extern struct HBReadStr hb;
 extern struct RMSDReadStr rmsd;
+extern struct FFInfoStr FFInfo;
+extern struct GroupStr group;
 
 void InitializeFiles(int row, int column);
 void SystemInformationInput(int id);
@@ -462,6 +557,8 @@ void ClusterInfo(int id);
 void EnergyInfo(int id);
 void RGInfo(int id);
 void DisInfo(int id);
+void DensityInfo(int id);
+void PSDInfo(int id);
 void RMSDInfo(int id);
 void PESurfaceInfo(int id);
 void PESurfaceInfoPerT(void);
@@ -472,6 +569,7 @@ void AssignFileList(int id);
 void FindTargetFile(char *oldName, char *fileListName, char *newName);
 void REMDPESurfaceCombine(void);
 void PrintStep(struct StepPotenStr *thisStep);
+void CreateGroup(void);
 int ReadLog(int id);
 int ReadGro(FILE *inputFile);
 int ReadConnectionMap(FILE *inputFile);
@@ -479,8 +577,12 @@ int WHAM(int argc, const char * argv[]);
 int CheckHBConnection(int thisAtomNum);
 int AtomModel(char *type);
 int AAModel(char *type);
+int HBModel(struct AtomStr *atom1, struct AtomStr *atom2);
+int HBNeighborHost(int host, int other);
 int ReadEnergyFile(FILE *EnergyInputFile, struct EnergyReadStr *thisE);
 int ReadHBFile(FILE *HBInputFile, struct HBReadStr *thisHB);
 int ReadRMSDFile(FILE *RMSDInputFile, struct RMSDReadStr *thisRMSD);
 int ReadREMDTempFile(FILE *REMDTempFile);
+int FindElemInList(int *list, int value, int start, int end, int add);
+int FindStrInList(char thisList[10][16], char *str, int add);
 double absvalue_vector(double * vector);

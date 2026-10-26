@@ -1,2 +1,14 @@
-#ignore .DS_Store
+# build products (rebuild with make)
+*.o
+*.gch
+src/sDMD
+src/sServer
+src/sREMD
+analysis/sAnalysis
+
+# REMD replica screen output (written to the folder sREMD is started from)
+outputData_*.txt
+
+# macOS metadata
 .DS_Store
+._*

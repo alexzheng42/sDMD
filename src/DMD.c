@@ -9,8 +9,8 @@
 
 //-----------------
 //directory
-char datadir[1024] = ".";
-char savedir[1024] = ".";
+char datadir[PATH_LEN] = ".";
+char savedir[PATH_LEN] = ".";
 //-----------------
 
 
@@ -18,9 +18,9 @@ char savedir[1024] = ".";
 //basic variables
 int atomnum;
 int **connectionMap;
-int chargeAA[9] = {0};
+int chargeRes[9] = {0};
 long int frame = 0;
-unsigned int seed;
+unsigned int seed = 0;
 double timestep, currenttime = 0;
 double oldcurrenttime = 0;
 double cutoffr;
@@ -31,23 +31,38 @@ double outputrate;
 double outputrecord = 0;
 double boxDimension[4]; //unit A
 struct AtomStr *atom;
-struct AAStr *aminoacid;
-struct PepStr *protein;
+struct ResidueStr *residue;
+struct MolStr *molecule;
 struct CGGovStr CG;
 struct CGMatrixStr CGMatrix;
 struct PreBondStr preBond = {.mark = 0,
                              .num  = 0,
                              .dis  = 0
 };
-char neworcontinue[20];
-char Methodtype[20];
-char temperatureType[20];
+struct FixedAtomStr fixedAtomInfo = {.mark = 0,
+                                     .num  = 0,
+                                     .list = NULL
+};
+char neworcontinue[32];
+
+
+
+char Methodtype[32];
+char FFLibrary[32]; // parameter folder Library_<FFLibrary>; FF_Library in parameter.txt, default Force_Field
+char temperatureType[32];
+//-----------------
+
+
+//-----------------
+//force field info
+struct FFInfoStr FFInfo;
 //-----------------
 
 
 //-----------------
 //system check
 long int countReCal = 0;
+long int countBackup = 0;
 long int collisioneventsum = 0;
 long int HBeventsum = 0;
 long int bondeventsum = 0;
@@ -63,16 +78,16 @@ long int warningsum = 0;
 
 
 //-----------------
-//protein sequence
-int numofprotein = 0;
-int totalAminoAcids = 0;
+//molecule sequence
+int numofMol = 0;
+int numofRes = 0;
 //-----------------
 
 
 //-----------------
 //subcell property
 int cellnum[4];
-int *celllist;
+int *celllist = NULL;
 double cellsize[4];
 //-----------------
 
@@ -86,9 +101,9 @@ int nthCheck, nthNode;
 
 //-----------------
 //potential pair
-struct ConstraintStr potentialPairCollision[NATOMTYPE + 1][NATOMTYPE + 1];
-struct ConstraintStr potentialPairHB[12][NATOMTYPE + 1][NATOMTYPE + 1];
-struct ConstraintStr potentialPairCG[NATOMTYPE + 1][NATOMTYPE + 1];
+struct ConstraintStr **potentialPairCollision;
+struct ConstraintStr **potentialPairCG;
+struct ConstraintStr ***potentialPairHB;
 struct HBPotentialStr HBPotential;
 
 
@@ -114,11 +129,8 @@ char timer[30];
 //-----------------
 //single-thread variable
 int renewList[128];
-struct AtomListStr atomList = {
-    .x = {0, 1, 0, 0, 0, 1, 1, 1, -1,  0,  0,  0, -1, -1, -1,  0,  0,  1, -1,  1, -1, -1, -1,  1,  1,  1, -1},
-    .y = {0, 0, 1, 0, 1, 0, 1, 1,  0, -1,  0, -1,  0, -1, -1, -1,  1,  0,  0, -1,  1, -1,  1, -1,  1, -1,  1},
-    .z = {0, 0, 0, 1, 1, 1, 0, 1,  0,  0, -1, -1, -1,  0, -1,  1, -1, -1,  1,  0,  0,  1, -1, -1, -1,  1,  1}
-};
+struct AtomListStr atomList; // stencil is filled by BuildStencil()
+int cellFactor = 0;          // cells per cutoff length; 0 = choose automatically
 
 
 //-----------------
@@ -147,10 +159,11 @@ struct ObstructionStr obstObj = {.mark = 0,
                                  .num  = 0};
 struct TunnelStr      tunlObj = {.mark = 0};
 struct SphObstStr  SphObstObj = {.mark = 0};
-
-char wallExist[20];
-char wallType[20];
 //-----------------
+
+
+//-----------------
+struct SurfaceStr surfInfo = {.mark = 0};
 
 
 //-----------------
@@ -187,7 +200,7 @@ int main(int argc, const char * argv[]) {
     clock_t st, et;
     double hours, mins, sec;
     double oldTime, oldTimeEvaluation, timeEvaluation; //based on 100 ps
-    char directory[200];
+    char directory[PATH_LEN];
     FILE *timeFile;
     
     st = clock();
@@ -210,16 +223,16 @@ int main(int argc, const char * argv[]) {
     printf("| Thermostat      %20s |\n", thermostatType);
 	printf("| ThermostatFreq  %20.2f |\n", thermoF);
     printf("| CGModel         %12s%3.3s, %3.3s |\n", " ", CG.type[0], CG.type[1]);
-    printf("| WallExist       %20s |\n", wallExist);
-    printf("| WallType        %20s |\n", wallType);
+    printf("| WallExist       %20s |\n", surfInfo.style);
+    printf("| WallType        %20s |\n", surfInfo.type);
     printf("| boxsize         %6.1f %6.1f %6.1f |\n", boxDimension[1], boxDimension[2], boxDimension[3]);
     printf("----------------------------------------\n");
-    printf("Please check the Log file for detail information!\n");
+    printf("Please check the Log file for detail information.\n");
     printf("\n");
     
     sprintf(directory, "%s/timeEvaluation.dat", savedir);
     if (strncmp("new", neworcontinue, 1) == 0 || fopen(directory,"r") == NULL) {
-        printf("Time evaluation is unavailable this time!\n");
+        printf("Time evaluation is unavailable this time.\n");
         oldTimeEvaluation = 0;
     } else {
         timeFile = fopen(directory, "rb");
@@ -251,7 +264,8 @@ int main(int argc, const char * argv[]) {
                        walleventsum        +
                        CGeventsum;
     
-    printf("ReCalculate times        = %li\n\n", countReCal);
+    printf("ReCalculate times        = %li\n", countReCal);
+    printf("Backup event times       = %li\n\n", countBackup);
     printf("collision times          = %li\n", collisioneventsum);
     printf("bond times               = %li\n", bondeventsum);
     printf("HB times                 = %li\n", HBeventsum);
@@ -262,7 +276,7 @@ int main(int argc, const char * argv[]) {
     printf("CG times                 = %li\n", CGeventsum);
     printf("percentage of thermostat = %.4f%%\n\n", (float) thermostateventsum / newtotaleventsum * 100);
     printf("total warning            = %li\n", warningsum);
-    
+        
     et = clock();    //record the ending time
     hours = floor((double) (et - st) / CLOCKS_PER_SEC / 3600);
     mins = floor(((double) (et - st) / CLOCKS_PER_SEC - hours * 3600) / 60);
@@ -273,7 +287,7 @@ int main(int argc, const char * argv[]) {
     timeFile = fopen(directory, "wb");
     sec += hours * 3600 + mins * 60;
     timeEvaluation = (sec + oldTimeEvaluation * oldTime / 100) / timestep * 100;
-    fwrite(&timeEvaluation, sizeof (double), 1, timeFile);
+    fwrite(&timeEvaluation, sizeof(double), 1, timeFile);
     fclose(timeFile);
     //========================================================================================
     

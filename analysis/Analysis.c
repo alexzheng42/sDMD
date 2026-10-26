@@ -9,12 +9,11 @@
 #include "Analysis.h"
 
 int atomnum;
-int numofprotein;
-int totalAminoAcids;
+int numofMol;
+int numofRes;
 int *celllist = NULL;
 int freshStart = 0;
 int *analysisList;
-int nPP = 0;
 
 double cutoffr;
 double boxOrigDim[4] = {0};
@@ -39,26 +38,32 @@ char names[NumofFileType][256] = {"SysInfo.dat",
                                   "RG.txt", 
                                   "RMSD.txt", 
                                   "PotMap.txt",
-                                  "CG2Obst.txt", 
+                                  "CG2Obst.txt",
+                                  "Density.txt",
+                                  "PSD.txt",
                                   "REMD_T.txt", 
                                   "PotMap_T.txt", 
                                   "PMFMap_T.txt"};
 char targetPeptideNum[16] = "";
 
 struct FileStr **files;
-struct AAStr *aminoacid;
-struct PepStr *protein;
+struct ResidueStr *residue;
+struct MolStr *molecule;
 struct CGGovStr CG;
 struct DisStr disInfo = {.mark = 0};
+struct DensityStr densInfo = {.mark = 0};
+struct PSDStr psdInfo = {.mark = 0};
 struct AtomStr *atom;
-struct ConstraintStr potentialPairCollision[NATOMTYPE + 1][NATOMTYPE + 1];
-struct ConstraintStr potentialPairHB[12][NATOMTYPE + 1][NATOMTYPE + 1];
-struct ConstraintStr potentialPairCG[NATOMTYPE + 1][NATOMTYPE + 1];
+struct ConstraintStr **potentialPairCollision;
+struct ConstraintStr **potentialPairCG;
+struct ConstraintStr ***potentialPairHB;
 struct HBPotentialStr HBPotential;
 struct REMDStr RE = {.mark = 0, .numReplica = -1};
+struct FFInfoStr FFInfo;
 struct FileListStr *fileList;
 struct FileListStr RMSDFile = {.count = 0};
 struct SectionStr *sectInfo;
+struct GroupStr group = {.atomNum = 0, .atomList = NULL};
 
 
 static void Initialization(int argc, const char *argv[]);
@@ -129,11 +134,45 @@ void Initialization(int argc, const char *argv[]) {
                 sprintf(names[inObst], "%s", argv[i + 1]);
             } else if (strcmp(argv[i], "-dis") == 0) {
                 sprintf(disInfo.type, "%s", argv[i + 1]);
+                if (strcmp(disInfo.type, "CG2Wall") != 0) {
+                    printf("!!ERROR!!: invalid style of distance calculation!\n");
+                    printf("           %s:%i\n", __FILE__, __LINE__);
+                    exit(EXIT_FAILURE);
+                }
                 disInfo.mark = 1;
                 analysisList[CalculateRG2Obst] = 1;
+            } else if (strcmp(argv[i], "-dens") == 0) {
+                if (strcmp(argv[i + 1], "x") == 0)
+                    densInfo.dim = 1;
+                else if (strcmp(argv[i + 1], "y") == 0)
+                    densInfo.dim = 2;
+                else if (strcmp(argv[i + 1], "z") == 0)
+                    densInfo.dim = 3;
+                else {
+                    printf("!!ERROR!!: invalid style of density calculation! must be 'x', 'y' or 'z'.\n");
+                    printf("           %s:%i\n", __FILE__, __LINE__);
+                    exit(EXIT_FAILURE);
+                }
+                densInfo.pointNum = atoi(argv[i + 2]);
+                densInfo.mark = 1;
+                analysisList[CalculateDensity] = 1;
+            } else if (strcmp(argv[i], "-PSD") == 0) {
+                psdInfo.axis[1] = atoi(argv[i + 1]);
+                psdInfo.axis[2] = atoi(argv[i + 2]);
+                psdInfo.axis[3] = atoi(argv[i + 3]);
+                psdInfo.mark = 1;
+                analysisList[CalculatePSD] = 1;
             } else if (strcmp(argv[i], "-nPP") == 0) {
-                sprintf(targetPeptideNum, "%s", argv[i + 1]);
-                nPP = atoi(argv[i + 1]);
+                group.molNum = atoi(argv[i + 1]);
+                group.list_Mol = (int *)calloc(group.molNum + 1, sizeof(int));
+                for (int j = 1; j <= group.molNum; j++) {
+                    if (i + j + 1 >= argc || argv[i + j + 1][0] == '-') {
+                        printf("!!ERROR!!: Please provide enough molecule indices for the group!\n\n");
+                        goto help;
+                    } else {
+                        group.list_Mol[j] = atoi(argv[i + j + 1]);
+                    }
+                }
             } else if (strcmp(argv[i], "-sum") == 0 ) {
                 freshStart = 1;
             } else if (strcmp(argv[i], "-REMD") == 0) {
@@ -252,6 +291,14 @@ void DoAnalysis(int argc, const char *argv[]) {
                     
                     case CalculateRG2Obst:
                         DisInfo(i);
+                        break;
+                    
+                    case CalculateDensity:
+                        DensityInfo(i);
+                        break;
+                    
+                    case CalculatePSD:
+                        PSDInfo(i);
                         break;
 
                     case CalculateMSD:

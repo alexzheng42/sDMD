@@ -8,7 +8,6 @@
 
 #include "Analysis.h"
 
-static int beginP, endP, offSet, thisAtomNum;
 static double mass;
 
 static void InitializeVariables(void);
@@ -29,19 +28,10 @@ void RGInfo(int id) {
 }
 
 void InitializeVariables(void) {
-    beginP = 1;
-    endP = numofprotein;
-    thisAtomNum = atomnum;
-    offSet = 0;
     mass = 0;
     
-    if (nPP) {
-        beginP = endP = nPP;
-        thisAtomNum = protein[nPP].endAtomNum - protein[nPP].startAtomNum + 1;
-        offSet = protein[nPP].startAtomNum - 1;
-    }
-    
-    for (int n = 1 + offSet; n <= thisAtomNum + offSet; n ++) {
+    for (int m = 1; m <= group.atomNum; m ++) {
+        int n = group.list_Atom[m];
         mass += atom[n].property->mass;
     }
 }
@@ -82,7 +72,8 @@ void CalRGMono(int id) //IUPAC Definition
             RG = 0;
             sect = &sectInfo[sectNum];
             FindCOMSingle(COM);
-            for (int n = 1 + offSet; n <= thisAtomNum + offSet; n ++) {
+            for (int m = 1; m <= group.atomNum; m ++) {
+                int n = group.list_Atom[m];
                 for (int i = 1; i <= 3; i ++) {
                     RG += (COM[i] - atom[n].dynamic->coordinate[i]) * (COM[i] - atom[n].dynamic->coordinate[i]) * atom[n].property->mass;
                 }
@@ -103,7 +94,8 @@ void CalRGMono(int id) //IUPAC Definition
 void FindCOMSingle(double *COM) {
     COM[1] = COM[2] = COM[3] = 0;
 
-    for (int n = 1 + offSet; n <= thisAtomNum + offSet; n ++) {
+    for (int m = 1; m <= group.atomNum; m ++) {
+        int n = group.list_Atom[m];
         for (int i = 1; i <= 3; i ++) {
             COM[i] += atom[n].dynamic->coordinate[i] * atom[n].property->mass;
         }
