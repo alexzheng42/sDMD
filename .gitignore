@@ -12,3 +12,9 @@ outputData_*.txt
 # macOS metadata
 .DS_Store
 ._*
+
+# demo runs: copied executables and generated input folders
+demo/*/sDMD
+demo/*/sREMD
+demo/*/sServer
+demo/*/input/

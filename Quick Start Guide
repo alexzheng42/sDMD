@@ -49,20 +49,20 @@ File List:
 				energy related results.
 			|-	HBInfo.txt
 				hydrogen bond related results.
-			|-	HBNum.pdb
-				plot of alpha hydrogen bond number vs simulation time.
-			|-	PE.pdb
+			|-	HBNum.pdf
+				plot of the hydrogen bond numbers (alpha-helix, beta, total) vs simulation time.
+			|-	PE.pdf
 				plot of potential energy vs simulation time.
-			|-	Plot*.txt
-				scripts for "gnuplot" to plot the results.
+			|-	plot.py
+				Python (matplotlib) script to plot the results; analysis.bash runs it.
 			|-	ref_*.gro
 				reference structures of the poly-alanine to perform RMSD calculations.
-			|-	RG.pdb
+			|-	RG.pdf
 				plot of radius of gyration vs simulation time.
 			|-	RG.txt
 				radius of gyration results.
-			|-	RMSD.pdb
-				plot of RMSD with respect to the native structure of the poly-alanine vs simulation time.
+			|-	RMSD.pdf
+				plot of RMSD with respect to the alpha-helix and beta-hairpin references vs simulation time.
 			|-	RMSD.txt
 				RMSD related results.
 		|-	output (folder containing the dumping data)
@@ -80,6 +80,8 @@ File List:
 				data file for the time-cost prediction of the next simulation.
 		|-	ala10.gro
 			coordinate input file of a poly-alanine in its native structure.
+		|-	analysis.bash
+			bash script to analyze the simulation and plot the results.
 		|-	fold.bash
 			bash script to perform the entire folding simulation.
 		|-	parameter.txt
@@ -92,23 +94,27 @@ File List:
 				average potential energy and heat capacity vs simualtion temperature.
 			|-	Energy*.txt
 				energy related results of each replica.
-			|-	FreeEnergy.txt
-				potential of mean force at different temperature vs reaction coordinate.
-			|-	FT.pdb
-				plot of the heat capacity (reduced) of the poly-alanine vs simulation temperature.
+			|-	FreeEnergy_RC.txt
+				WHAM free-energy output vs reaction coordinate (not used for the plot; see FreeEnergy.pdf).
+			|-	FreeEnergy.pdf
+				plot of the free energy (-RT ln P, from Probability_RC.txt) vs RMSD to the alpha-helix at each temperature.
+			|-	FT.pdf
+				plot of the heat capacity (reduced) and average potential energy of the poly-alanine vs simulation temperature.
 			|-	HBInfo*.txt
 				hydrogen bond related results of each replica.
-			|-	PESurface.pdb
+			|-	HB_T.pdf
+				plot of the average alpha-helix and total hydrogen bond numbers vs simulation temperature.
+			|-	PESurface.pdf
 				plot of the combined potential energy surface with respect to the reaction coordinates.
-			|-	Plot*.txt
-				scripts for "gnuplot" to plot the results.
-			|-	PMFMap_T*.txt
-				potential of mean force surface with respect to the reaction coordinates of each temperature.
+			|-	plot.py
+				Python (matplotlib) script to plot the results; analysis.bash runs it.
 			|-	PotMap_T*.txt
 				potential energy surface with respect to the reaction coordinates of each temperature.
 			|-	PotMap*.txt
 				potential energy surface with respect to the reaction coordinates of each replica.
-			|-	Probability.txt
+			|-	Probability_E.txt
+				probability distributions of the potential energy at different temperature.
+			|-	Probability_RC.txt
 				probability distributions of the reaction coordinate values at different temperature.
 			|-	ref_*.gro
 				reference structures of the poly-alanine to perform RMSD calculations.
@@ -133,6 +139,8 @@ File List:
 			coordinate input file of the native poly-alanine.
 		|-	parameter.txt
 			configuration file to perform the simulation.
+		|-	analysis.bash
+			bash script to analyze the simulation and plot the results.
 		|-	REMD.bash
 			bash script to perform the REMD simulation.
 		|-	REMDConfig.txt
