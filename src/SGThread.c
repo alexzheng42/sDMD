@@ -57,6 +57,7 @@ void Prepare(void) {
         Predict(renewList, &atomList);
         free(renewList);
     } else if (strcmp("continue", neworcontinue) == 0) {
+        RebaseTime();
         outputrecord = currenttime + outputrate;
     } else {
         printf("!!ERROR!!: the simulation configuration is invalid!\n");
@@ -119,8 +120,9 @@ void SingleThreadRun(void (*afterEvent)(void), void (*beforeFree)(void)) {
             if (renewList[0] == 2 && !FindStrInList(partner->property->extraProperty, "_CONS", 0))
                 partner->dynamic->event.counter ++;
             
-            // Reset loop-prevention counters upon successful event execution
-            error_count = 0;
+            // Reset loop-prevention counters upon successful event execution;
+            // a run of executed events that never advance the time is still a stall
+            if (thisList->timeInr >= 1E-14) error_count = 0;
             hazard_count = 0;
             warning_count = 0;
             last_warningsum = warningsum;
@@ -161,6 +163,8 @@ void SingleThreadRun(void (*afterEvent)(void), void (*beforeFree)(void)) {
                 outputrecord += outputrate;
             }
 
+            if (unlikely(currenttime >= TIME_BASE_UNIT)) RebaseTime();
+
             if (afterEvent) afterEvent();
         } else {
 #ifdef DEBUG_PRINTF
@@ -191,6 +195,12 @@ void SingleThreadRun(void (*afterEvent)(void), void (*beforeFree)(void)) {
             last_warningsum = warningsum;
         }
 
+        if (unlikely(error_count > 1000000)) {
+            printf("!!ERROR!!: the time has not advanced for %i events at t = %.6lf; the simulation is stuck.\n", error_count, REAL_TIME(currenttime));
+            printf("           %s:%i\n", __FILE__, __LINE__);
+            exit(EXIT_FAILURE);
+        }
+
         if (warningsum > 1000 && error_count > 10) {
             printf("!!ERROR!!: warnings (%li) exceeded 1000 and errors exceeded 10 — simulation appears stuck.\n", warningsum);
             printf("           %s:%i\n", __FILE__, __LINE__);
@@ -202,6 +212,32 @@ void SingleThreadRun(void (*afterEvent)(void), void (*beforeFree)(void)) {
     if (beforeFree) beforeFree();
     FreeVariables();
     return;
+}
+
+// Event times are absolute, so their precision drops as the run gets longer: past
+// t = 2^23 events land off their step boundary by more than ZERO and the run stalls
+// in zero-time events. So the time origin moves forward by whole TIME_BASE_UNITs
+// (exact in floating point, and the event order is unchanged); the real time is
+// REAL_TIME(currenttime) = timeBaseCount * TIME_BASE_UNIT + currenttime.
+void RebaseTime(void) {
+    if (currenttime < TIME_BASE_UNIT) return;
+    long long units = (long long)(currenttime / TIME_BASE_UNIT);
+    double shift = units * TIME_BASE_UNIT;
+
+    UpdateAllAtoms(currenttime); // so that lastUpdateTime shifts exactly as well
+    for (int i = 1; i <= atomnum; i++) {
+        if (atom[i].dynamic->event.time < INFINIT) atom[i].dynamic->event.time -= shift;
+        atom[i].dynamic->lastUpdateTime -= shift;
+    }
+    ShiftBackupEvents(shift);
+    if (flow.force.timeRec) {
+        for (int i = 1; i <= atomnum; i++) flow.force.timeRec[i] -= shift;
+    }
+    currenttime    -= shift;
+    oldcurrenttime -= shift;
+    timestep       -= shift;
+    outputrecord   -= shift;
+    timeBaseCount  += units;
 }
 
 void Predict(int *renewList, struct AtomListStr *thisList) {

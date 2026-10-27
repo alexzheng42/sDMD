@@ -384,14 +384,14 @@ void ReadBreakPoint(FILE *input_file) {
     double oldoutputrate;
     char oldMethodtype[20];
     int legacy = 1;
+    int version = 0;
 
     //-------------------------
     // General Variables
     fread(&atomnum, sizeof(int), 1, input_file);
     if (atomnum == SAVED_DATA_MAGIC) { // current format: marker, version, then the data
-        int version;
         fread(&version, sizeof(int), 1, input_file);
-        if (version != SAVED_DATA_VERSION) {
+        if (version != SAVED_DATA_VERSION && version != 2) {
             printf("!!ERROR!!: unknown savedData format version %i! %s:%i\n", version, __FILE__, __LINE__);
             exit(EXIT_FAILURE);
         }
@@ -482,6 +482,12 @@ void ReadBreakPoint(FILE *input_file) {
     srand(seed);
 
     fread(&REMDInfo, sizeof(struct REMDStr), 1, input_file);
+
+    // version 3 stores times relative to the time origin; older files store absolute times
+    timeBaseCount = 0;
+    if (version >= 3) fread(&timeBaseCount, sizeof(long long), 1, input_file);
+    timestep -= timeBaseCount * TIME_BASE_UNIT; // the target time in parameter.txt is absolute
+
     if (REMDInfo.flag)
         targetTemperature = REMDInfo.REMD_Temperature.T;
 
@@ -2180,8 +2186,8 @@ void ReadWall(void) {
             if (strcmp(wallDyn.mark, "expand") == 0)
                 wallDyn.sign = 1;
 
-            if (currenttime - wallDyn.curTime > 1) {
-                wallDyn.curTime = (long)currenttime + 1;
+            if (REAL_TIME(currenttime) - wallDyn.curTime > 1) {
+                wallDyn.curTime = (long)REAL_TIME(currenttime) + 1;
             }
 
             if (!(wallDyn.origBoxDim[1] && wallDyn.origBoxDim[2] && wallDyn.origBoxDim[3])) {

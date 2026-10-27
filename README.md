@@ -124,6 +124,7 @@ This version is a heavily optimized release of sDMD. The main changes are as fol
 - **Choice of parameter folder.** The new `FF_Library` option in *parameter.txt* selects which library folder to read.
 - **Safer data files.** The binary files *SysInfo.dat* and *savedData.dat* now start with a format version, so newer programs can still read older files. The analysis program was brought up to date with all simulation output.
 - **Reproducible runs.** `-seed N` fixes the random number seed.
+- **Long runs no longer stall.** Event times used to be stored as absolute times, which lose precision as time grows; runs stopped moving at about 8.4 million time units. Stored times are now counted from a moving origin, so runs of any length work. Output files still show the real time. *savedData.dat* has a new format version (3); files from earlier versions can still be continued.
 
 
 

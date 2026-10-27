@@ -126,9 +126,10 @@ void Initialization(int argc, const char *argv[]) {
             } else if (strcmp(argv[i], "-log") == 0) {
                 sprintf(names[inLog], "%s", argv[i + 1]);
             } else if (strcmp(argv[i], "-ref") == 0) {
-                while (strncmp(argv[i + RMSDFile.count + 1], "-", 1) != 0) {
+                while (i + RMSDFile.count + 1 < argc && strncmp(argv[i + RMSDFile.count + 1], "-", 1) != 0 &&
+                       RMSDFile.count < (int)(sizeof(RMSDFile.list) / sizeof(RMSDFile.list[0]))) {
                     RMSDFile.count ++;
-                    sprintf(RMSDFile.list[RMSDFile.count - 1], "%s", argv[i + RMSDFile.count]);
+                    snprintf(RMSDFile.list[RMSDFile.count - 1], sizeof(RMSDFile.list[0]), "%s", argv[i + RMSDFile.count]);
                 }
             } else if (strcmp(argv[i], "-obs") == 0) {
                 sprintf(names[inObst], "%s", argv[i + 1]);

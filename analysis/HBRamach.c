@@ -183,7 +183,9 @@ void HBInfo(int id) {
                         }
 					}
 
-					if (CheckAAHBStyle(&atom[i], &atom[connectAtom]) == 1) {
+					// helix/beta types are counted once per HB, from the backbone H
+					if (CheckAAHBStyle(&atom[i], &atom[connectAtom]) == 1 &&
+						strcmp(atom[i].property->name, "H") == 0) {
 						CheckHelixHB(i, connectAtom, phi, psi);
 						CheckBetaHB(i, connectAtom, phi, psi);
 
@@ -546,18 +548,18 @@ repeat:
 
 
 int CheckAAHBStyle(struct AtomStr *atom_i, struct AtomStr *atom_j) {
-    if ((strcmp(atom_i->property->name, "H") == 0 && strcmp(atom_j->property->name, "O") != 0) ||
-        (strcmp(atom_i->property->name, "O") == 0 && strcmp(atom_j->property->name, "H") != 0)) {
+    // backbone HB atoms are named H (amide H) and O (carbonyl O)
+    int bb_i = (strcmp(atom_i->property->name, "H") == 0 || strcmp(atom_i->property->name, "O") == 0);
+    int bb_j = (strcmp(atom_j->property->name, "H") == 0 || strcmp(atom_j->property->name, "O") == 0);
+
+    if (bb_i && bb_j) {
         return 1; //BB
-    } else if (strcmp(atom_i->property->name, "H") == 0 ||
-               strcmp(atom_i->property->name, "O") == 0) {
+    } else if (bb_i || bb_j) {
         return 2; //BS
     } else if (strcmp(atom_i->property->name, "SG") == 0 &&
-               strcmp(atom_i->property->name, "SG") == 0) {
+               strcmp(atom_j->property->name, "SG") == 0) {
         return 4; //SG-SG
     } else {
         return 3; //SS
     }
-    
-    return 0;
 }

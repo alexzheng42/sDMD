@@ -1067,6 +1067,13 @@ void InitBackupEvents(void) {
                      flow.mark == 3 || SphObstObj.mark || CG.mark);
 }
 
+void ShiftBackupEvents(double shift) {
+    if (backupEvents == NULL) return;
+    for (int i = 1; i <= atomnum; i++)
+        for (int k = 0; k < backupEvents[i].num; k++)
+            backupEvents[i].event[k].time -= shift;
+}
+
 void ClearBackupEvents(int atomNum) {
     if (backupEvents) backupEvents[atomNum].num = 0;
 }

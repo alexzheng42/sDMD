@@ -447,8 +447,8 @@ void SaveLog(struct FileStr *file) {
         fprintf(Logfile, "\n");
     }
     
-    fprintf(Logfile, "OldTime             = %-5.2lf\n", oldcurrenttime);
-    fprintf(Logfile, "TargetTime          = %-5.2lf\n", timestep);
+    fprintf(Logfile, "OldTime             = %-5.2lf\n", REAL_TIME(oldcurrenttime));
+    fprintf(Logfile, "TargetTime          = %-5.2lf\n", REAL_TIME(timestep));
     fprintf(Logfile, "TargetTemperature   = %-5.2lf\n", targetTemperature);
     fprintf(Logfile, "OutputRate          = %-5.2lf\n", outputrate);
     fprintf(Logfile, "CutOffR             = %-5.2lf\n", cutoffr);
@@ -564,7 +564,7 @@ void SaveHB(struct FileStr *file) {
     }
     FILE *outputFile = file->file;
     
-    fprintf(outputFile, "%5.2lf%10i%10i\n", currenttime, HBnumformed, alphaHBformed);
+    fprintf(outputFile, "%5.2lf%10i%10i\n", REAL_TIME(currenttime), HBnumformed, alphaHBformed);
     fflush(outputFile);
     
     return;
@@ -579,7 +579,7 @@ void SaveTemp(struct FileStr *file) {
     FILE *outputFile = file->file;
     
     instTemperature = CalSysTem();
-    fprintf(outputFile, "%5.2lf    %10.4lf\n", currenttime, instTemperature);
+    fprintf(outputFile, "%5.2lf    %10.4lf\n", REAL_TIME(currenttime), instTemperature);
     fflush(outputFile);
     
     return;
@@ -679,6 +679,9 @@ void SaveDAT(struct FileStr *file) {
     
     //record the current REMD data
     fwrite(&REMDInfo, sizeof(struct REMDStr), 1, continuedata);
+
+    //time origin (version 3): the times above are relative to it
+    fwrite(&timeBaseCount, sizeof(long long), 1, continuedata);
     
     fclose(continuedata);
     
@@ -760,7 +763,7 @@ void SaveConnectionMap(struct FileStr *file) {
     }
     FILE *output = file->file;
     
-    fprintf(output, "Frame=%.2lf\n", currenttime);
+    fprintf(output, "Frame=%.2lf\n", REAL_TIME(currenttime));
     for (int i = 1; i <= atomnum; i ++) {
         for (int n = 1; n <= atomnum; n ++) {
             if (connectionMap[i][n] > 0) {
@@ -779,7 +782,7 @@ void SaveKin(struct FileStr *file) {
     }
     FILE *output = file->file;
     
-    fprintf(output, "%5.2lf    %10.4lf\n", currenttime, CalKinetE());
+    fprintf(output, "%5.2lf    %10.4lf\n", REAL_TIME(currenttime), CalKinetE());
     fflush(output);
     return;
 }
@@ -791,7 +794,7 @@ void SavePot(struct FileStr *file) {
     }
     FILE *output = file->file;
     
-    fprintf(output, "%5.2lf    %10.4lf\n", currenttime, CalPotenE());
+    fprintf(output, "%5.2lf    %10.4lf\n", REAL_TIME(currenttime), CalPotenE());
     fflush(output);
     return;
 }
@@ -804,7 +807,7 @@ void SaveRE(struct FileStr *file) {
     
 	if (REMDInfo.REMD_Temperature.T > 0) { //make sure the current temperature is valid
 		FILE* output = file->file;
-		fprintf(output, "%5.2f %8.4lf %2i\n", currenttime, REMDInfo.REMD_Temperature.T, REMDInfo.REMD_Temperature.num);
+		fprintf(output, "%5.2f %8.4lf %2i\n", REAL_TIME(currenttime), REMDInfo.REMD_Temperature.T, REMDInfo.REMD_Temperature.num);
 		fflush(output);
 	}
 

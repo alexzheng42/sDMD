@@ -22,6 +22,7 @@ int chargeRes[9] = {0};
 long int frame = 0;
 unsigned int seed = 0;
 double timestep, currenttime = 0;
+long long timeBaseCount = 0;
 double oldcurrenttime = 0;
 double cutoffr;
 double instTemperature, targetTemperature, oldTemperature = 0;
@@ -209,13 +210,13 @@ int main(int argc, const char * argv[]) {
     
     //========================================================================================
     //check parameter
-    oldTime = currenttime;
+    oldTime = REAL_TIME(currenttime);
     printf("\n");
     printf("\n");
     printf("----------------------------------------\n");
     printf("| Simulation configurations:           |\n");
-    printf("| currenttime     %20.2f |\n", currenttime);
-    printf("| timestep        %20.2f |\n", timestep); //timestep -> total time step to run
+    printf("| currenttime     %20.2f |\n", REAL_TIME(currenttime));
+    printf("| timestep        %20.2f |\n", REAL_TIME(timestep)); //timestep -> total time step to run
     printf("| targetT         %20.2f |\n", targetTemperature);
     printf("| OutputRate      %20.2f |\n", outputrate);
     printf("| CutOffRadius    %20.2f |\n", cutoffr);
@@ -286,7 +287,7 @@ int main(int argc, const char * argv[]) {
     
     timeFile = fopen(directory, "wb");
     sec += hours * 3600 + mins * 60;
-    timeEvaluation = (sec + oldTimeEvaluation * oldTime / 100) / timestep * 100;
+    timeEvaluation = (sec + oldTimeEvaluation * oldTime / 100) / REAL_TIME(timestep) * 100;
     fwrite(&timeEvaluation, sizeof(double), 1, timeFile);
     fclose(timeFile);
     //========================================================================================

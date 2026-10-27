@@ -1007,10 +1007,15 @@ void ReadConfigFile() {
     char directory[1024], buffer[1024];
     FILE *inConfigFile;
     
-    sprintf(directory, "%sinput/REMDConfig.txt", path);
-    inConfigFile = fopen(directory, "r");
+    // look next to the data, in <path>input/ (older demo layout), or in the input folder beside <path>
+    const char *place[] = {"", "input/", "../input/"};
+    inConfigFile = NULL;
+    for (int i = 0; i < 3 && inConfigFile == NULL; i ++) {
+        snprintf(directory, sizeof(directory), "%s%sREMDConfig.txt", path, place[i]);
+        inConfigFile = fopen(directory, "r");
+    }
     if (inConfigFile == NULL) {
-        printf("!!ERROR!!: the configuration file %s does not exist! please check your directory!\n", directory);
+        printf("!!ERROR!!: cannot find REMDConfig.txt in %s, %sinput/ or %s../input/! please check your directory!\n", path, path, path);
         exit(EXIT_FAILURE);
     }
     

@@ -23,7 +23,7 @@ void ReplicaExchange(double *E, struct REMDTempStr *T, char *serverName, int *po
 static double nextExchange;
 
 static void REMDExchange(void) {
-    if (currenttime < nextExchange) return;
+    if (REAL_TIME(currenttime) < nextExchange) return;
     UpdateAllAtoms(currenttime);
     double potenEnergy = CalPotenE();
     ReplicaExchange(&potenEnergy, &REMDInfo.REMD_Temperature, REMDInfo.REMD_ServerName, &REMDInfo.REMD_PortNum);
@@ -42,7 +42,7 @@ static void REMDFinish(void) {
 void REMD(void) {
     Prepare();
     int rate = REMDInfo.REMD_OutputRate;
-    nextExchange = ((int)(currenttime / rate) + 1) * rate;
+    nextExchange = ((long long)(REAL_TIME(currenttime) / rate) + 1) * (double)rate;
     SingleThreadRun(REMDExchange, REMDFinish);
 }
 

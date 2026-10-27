@@ -493,11 +493,12 @@ void WallEvent(struct AtomStr *target) {
 
 
 void DoWallDyn(void) {
-    if (currenttime >= wallDyn.curTime) {
+    double realTime = REAL_TIME(currenttime); // wallDyn.curTime is in real time
+    if (realTime >= wallDyn.curTime) {
         if (strcmp(wallDyn.mark, "pulse") == 0) {
             if ((wallDyn.origBoxDim[2] - boxDimension[2] >= wallDyn.size) ||
                 (wallDyn.origBoxDim[2] == boxDimension[2]) ||
-                (fabs(boxDimension[2] + (int)(currenttime / wallDyn.rate + 1) * wallDyn.size - (currenttime - 1) * wallDyn.step - wallDyn.origBoxDim[2]) <= wallDyn.step && 
+                (fabs(boxDimension[2] + (int)(realTime / wallDyn.rate + 1) * wallDyn.size - (realTime - 1) * wallDyn.step - wallDyn.origBoxDim[2]) <= wallDyn.step && 
                 wallDyn.touch >= 5) //balance the compressing and expanding time
                 ) {
                 wallDyn.sign *= -1;

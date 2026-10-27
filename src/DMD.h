@@ -258,7 +258,7 @@ struct ConstraintStr {
 // savedData.dat starts with this marker and a format version. Files written before the
 // multi-partner HB layout start directly with the atom number and are read with the legacy layout.
 #define SAVED_DATA_MAGIC   (-1)
-#define SAVED_DATA_VERSION 2
+#define SAVED_DATA_VERSION 3 // 3: times relative to the time origin, timeBaseCount at the end
 
 // SysInfo.dat (read by sAnalysis) starts with this marker and a format version; version 2 writes
 // every list with an explicit count. Older files start directly with the atom number.
@@ -626,6 +626,10 @@ extern int chargeRes[9];
 extern long int frame;
 extern unsigned int seed;
 extern double timestep, currenttime;
+// Time origin: all stored times are relative to timeBaseCount * TIME_BASE_UNIT (see RebaseTime)
+#define TIME_BASE_UNIT 1024.0
+extern long long timeBaseCount;
+#define REAL_TIME(t) ((t) + timeBaseCount * TIME_BASE_UNIT)
 extern double oldcurrenttime;
 extern double cutoffr;
 extern double instTemperature, targetTemperature, oldTemperature;
@@ -825,6 +829,7 @@ void ChargeTime(struct AtomStr *target);
 void SphObstTime(struct AtomStr *target);
 int JobAssign(struct AtomStr* atom_i, struct AtomStr* atom_j, struct InteractionEventStr* event, enum EEventType type);
 void InitBackupEvents(void);
+void ShiftBackupEvents(double shift);
 void ClearBackupEvents(int atomNum);
 int TakeBackupEvent(struct AtomStr *target, struct AtomListStr *thisList);
 //---------------------------------------------
@@ -836,6 +841,7 @@ int TakeBackupEvent(struct AtomStr *target, struct AtomListStr *thisList);
 void Prepare(void);
 void FreeVariables(void);
 void Predict(int* renewList, struct AtomListStr* thisList);
+void RebaseTime(void);
 void AssignJob(struct AtomStr** target, struct AtomStr** partner, int* renewList, struct AtomListStr* thisList);
 void DoEvent(struct AtomListStr *thisList);
 void DoWallDyn(void);
