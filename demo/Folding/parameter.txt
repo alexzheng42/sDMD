@@ -1,5 +1,5 @@
 Continue?          new
-Time               5000
+Time               20000
 Temp               0.90
 Dump_Rate          10
 CutOff_R           9.0

@@ -1,0 +1,37 @@
+#Log file at 2026_10_28_00_38_00
+System:
+Molecule Num         = 1
+Molecule Seq         = 
+                      ALA  ALA  ALA  ALA  ALA  ALA  ALA  ALA  ALA  ALA
+OldTime             = 159990.01
+TargetTime          = 180000.00
+TargetTemperature   = 0.50 
+OutputRate          = 10.00
+CutOffR             = 9.00 
+Method              = Ding
+ThermostatType      = Andersen
+ThermostatParameter = 6.000
+CGModel             = no, no
+SurfExist           = no
+SurfType            = no
+WallDyn             = no
+WallDynSize         = 0.00 
+WallDynRate         = 0.00 
+OrigBoxSize         = CurtBoxSize
+CurtBoxSize         = 150.00  150.00  150.00  
+FlowType            = 0    
+                      No flow.
+Obstruct            = 0    
+                      No obstruction.
+Tunnel              = 0    
+                      No tunnel.
+ColumnObstacles     = 0    
+                      No column.
+RandomSeed          = 1793161686
+REMDPortNum         = -1
+REMDTemperature     = -1.00
+REMDTempSeq         = -1
+REMDOutputRate      = 1000
+REMDServerName      = 
+REMDExtraName       = 
+

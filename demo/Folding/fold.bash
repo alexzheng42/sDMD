@@ -1,5 +1,5 @@
 #!/bin/bash
-# Folding demo: ALA10 cooled stepwise from T* = 0.90 to 0.40 (11 runs, 205000 time units).
+# Folding demo: ALA10 cooled stepwise from T* = 0.90 to 0.40 (11 runs of 20000 time units, 220000 in total).
 # Run from this folder after building sDMD in ../../src.
 
 set -e
@@ -8,7 +8,7 @@ mkdir -p input output
 cp parameter.txt ala10.gro input/
 [ -e input/Library_Ding ] || ln -s ../../../input/Library_Ding input/Library_Ding
 
-pTime=(5000 25000 45000 65000 85000 105000 125000 145000 165000 185000 205000)
+pTime=(20000 40000 60000 80000 100000 120000 140000 160000 180000 200000 220000)
 pTemp=(0.90  0.85  0.80  0.75  0.70   0.65   0.60   0.55   0.50   0.45   0.40)
 
 echo "Now processing ..."

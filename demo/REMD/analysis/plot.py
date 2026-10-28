@@ -6,7 +6,7 @@ Writes
   FT.pdf          heat capacity and mean potential energy vs temperature (WHAM)
   HB_T.pdf        mean alpha-helix and total hydrogen bonds per temperature
   FreeEnergy.pdf  free energy -RT ln P vs RMSD to the alpha-helix at each temperature (WHAM)
-  PESurface.pdf   mean potential energy on the (RMSD alpha-helix, RMSD beta-hairpin) map
+  PESurface.pdf   3D surface of the mean potential energy over (RMSD alpha-helix, RMSD beta-hairpin)
 """
 import glob
 import os
@@ -127,26 +127,31 @@ style(ax)
 fig.savefig("FreeEnergy.pdf")
 
 # --- Potential-energy surface -------------------------------------------------
+# 3D surface of the mean potential energy over the two RMSDs, as in the original
+# gnuplot figure: the 20 x 20 map is smoothed with a Gaussian weighted average
+# (gnuplot "dgrid3d gauss 0.1,0.15"); bins that were never visited count as 0.
 _, d = load("CombinedPotMap.txt")
-x, y, pe, count = d[:, 0], d[:, 1], d[:, 2], d[:, 3]
+x, y, pe = d[:, 0], d[:, 1], d[:, 2]
 xs, ys = np.unique(x), np.unique(y)
-grid = np.full((len(ys), len(xs)), np.nan)
-for xi, yi, p, c in zip(x, y, pe, count):
-    if c > 0:
-        grid[np.searchsorted(ys, yi), np.searchsorted(xs, xi)] = p
-dx, dy = xs[1] - xs[0], ys[1] - ys[0]
-edgesX = np.append(xs - dx / 2, xs[-1] + dx / 2)
-edgesY = np.append(ys - dy / 2, ys[-1] + dy / 2)
-fig, ax = plt.subplots(figsize=(6, 5), constrained_layout=True)
-mesh = ax.pcolormesh(edgesX, edgesY, grid, cmap="Blues_r", shading="flat")
-cb = fig.colorbar(mesh, ax=ax, pad=0.02)
-cb.set_label("Mean potential energy (kcal/mol)")
-used = np.argwhere(~np.isnan(grid))
-ax.set_xlim(0, edgesX[used[:, 1].max() + 1])
-ax.set_ylim(0, edgesY[used[:, 0].max() + 1])
+gx, gy = np.meshgrid(xs, ys)
+w = np.exp(-((gx[..., None] - x) / 0.1) ** 2 - ((gy[..., None] - y) / 0.15) ** 2)
+gz = (w * pe).sum(-1) / w.sum(-1)
+fig = plt.figure(figsize=(7, 5.5), constrained_layout=True)
+ax = fig.add_subplot(projection="3d")
+floor = gz.min() - 0.6 * (gz.max() - gz.min())
+surf = ax.plot_surface(gx, gy, gz, cmap="plasma", rstride=1, cstride=1, linewidth=0.3,
+                edgecolor=(1, 1, 1, 0.35), antialiased=True)
+ax.contour(gx, gy, gz, levels=10, zdir="z", offset=floor, cmap="plasma", linewidths=1)
+ax.set_zlim(floor, max(0, gz.max()))
+ax.view_init(elev=30, azim=225)
 ax.set_xlabel("RMSD to α-helix (nm)")
 ax.set_ylabel("RMSD to β-hairpin (nm)")
-ax.set_facecolor("white")
+ax.set_zlabel("")
+cb = fig.colorbar(surf, ax=ax, shrink=0.6, pad=0.08)
+cb.set_label("Mean potential energy (kcal/mol)")
+for a in (ax.xaxis, ax.yaxis, ax.zaxis):
+    a.pane.set_facecolor("white")
+    a._axinfo["grid"]["color"] = GRID
 fig.savefig("PESurface.pdf")
 
 print("Wrote FT.pdf, HB_T.pdf, FreeEnergy.pdf, PESurface.pdf")
